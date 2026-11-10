@@ -6323,3 +6323,121 @@
   gap: 8px;
   padding-top: 4px;
 }
+
+/* ── 공통코드 화면(`codes/codes-screen.tsx`) ─────────────────────────────────────────────────────────────
+
+   관리자 칸의 꼴(목록 | 상세 · 표 · 줄 «…»)을 그대로 쓴다 — 여기는 상세 머리 · 사용처 목록만. 긴 영문 이름 · 코드값은 아무 데서나 꺾는다. */
+
+/* 목록 | 상세 를 관리자 칸(900)보다 넓은 창까지 위아래로 둔다 — 상세의 항목 표(칸 여섯)가 목록 곁의 좁은 칸에서는 표 꼴 문턱(900) 바로 위에서
+   넘쳤다(창 900: 뼈대 +14px — `build-test/codes-screen.test.ts`). 1100 이면 사이드바 · 목록을 빼고도 칸 여섯이 선다. */
+@media (max-width: 1099px) {
+  .wb-shell-codes-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+.wb-shell-codes-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.wb-shell-codes-title {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-codes-subtitle {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-codes-key {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+/* 사용 수 — 누르면 사용처를 그 항목으로 좁힌다. 글처럼 보이는 단추다. */
+.wb-shell-codes-uses {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--wb-shell-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.wb-shell-codes-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+
+.wb-shell-codes-usage-item {
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-codes-usage-link {
+  color: var(--wb-shell-accent);
+}
+
+/* 속성 패널의 «공통코드» 칸(`panels/code-binding.tsx`). */
+.wb-shell-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wb-shell-code-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 끊긴 참조 · 표에 없는 고름 — 캔버스의 점선 외곽(`canvas/canvas.tsx` 의 `CODE_MARK_CSS`)과 같은 주황이다. */
+.wb-shell-code-broken {
+  color: #b54708;
+}
+
+.wb-shell-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-shell-code-usage {
+  color: var(--wb-shell-accent);
+  font-size: 12px;
+}
+
+.wb-shell-code-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.wb-shell-code-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-code-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

@@ -120,6 +120,7 @@ const NODE_FIELDS: Record<string, string> = {
   visibility: `\`{ mode: "only" | "except", states: [...] }\` — show the node only in (or hide it in) those view states and their descendants. \`"${DEFAULT_VIEW_STATE}"\` is the base screen. Omitted: visible in every state.`,
   marker: 'Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.',
   interactions: 'What happens on user events (see Interactions).',
+  code: "`{ group, item?, selected? }` — bind the node to the project's common code table by group key and code value. Choice widgets (`Select`, `CheckboxGroup`, `RadioGroup`) take `group` and pick values in `selected`; text components take `group` + `item` and show that item's name. Keep the bound text in props too — it is the fallback when the reference breaks.",
   children: 'Child nodes in the body zone. Only components that declare a `body` zone take them.',
   zones:
     'Named child zones: `{ <zone name>: [nodes] }`. Only the zones a component declares (see the catalog); a missing key is an empty zone. Patch paths: `…/zones/<zone name>/<index>` (add a first node with `…/zones/<zone name>` and value `[node]`, or `…/zones` with `{ <zone name>: [node] }` when the node has no `zones`).',
@@ -175,6 +176,22 @@ const TOOL_TEXT: Record<string, ToolText> = {
   validate: {
     summary: 'Run the lint rules. Findings are a normal result, not an error. Naming rules come from `.wirebound.json`.',
     args: { path: 'Optional page path; without it the whole project is checked.' },
+  },
+  list_codes: {
+    summary:
+      'The project common code table (groups → items: group key, code value, name, active) and how many nodes use each group and item. Bound nodes in `get_page` carry `nodes[].code` with the resolved names.',
+    args: {},
+  },
+  code_usage: {
+    summary: 'Nodes in pages, layouts and modules that point at a common code group (or one item). Count before deleting.',
+    args: { group: 'Group key from `list_codes`, e.g. `ORDER_STATUS`.', item: 'Optional code value; only nodes pointing at that item.' },
+  },
+  edit_codes: {
+    summary:
+      'Change the common code table: add, rename, reorder, (de)activate and delete groups and items. Ops are sent in order and stop at the first rejection; the table has no history, so `applied` says how many already landed. Group keys and code values cannot change after creation; nodes pointing at a deleted entry keep a broken reference.',
+    args: {
+      ops: 'Table edits: `{ op: "add-group" | "update-group" | "delete-group" | "add-item" | "update-item" | "delete-item", group, item?, name?, sortOrder?, active? }` — the tool description lists which fields each op takes.',
+    },
   },
 }
 

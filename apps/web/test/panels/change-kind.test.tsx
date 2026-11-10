@@ -8,7 +8,7 @@
  * 대역이 그대로 돈다. `onopen` 을 안 불러 편집이 REST(`patchOps`)로 나간다.
  */
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { lockConflictOfOps, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import { lockConflictOfOps, type CodeGroup, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult } from '../../src/api/types'
@@ -20,6 +20,7 @@ import type { NodeLockView, ServerFrame } from '../../src/realtime/protocol'
 import { HEAD_SEQ, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
 import { installPointerEvents } from '../pointer-events'
 import '../../src/catalog-setup'
+import { CODE_UNBOUND_NOTICE } from '../../src/panels/structure-toolbar'
 import { isOff, queryRowAction, rowAction, rowReason, structureRowName } from './tree-row'
 
 beforeAll(installPointerEvents)
@@ -38,6 +39,14 @@ class FakeSocket implements RealtimeSocket {
   }
 }
 
+const INPUT: WbNode = {
+  id: 'n-in',
+  type: 'Input',
+  props: { placeholder: '고르세요', invalid: true, kind: 'number' },
+  marker: 2,
+  alias: '이름 칸',
+}
+
 /**
  * ```
  * n-root (Page)
@@ -46,7 +55,7 @@ class FakeSocket implements RealtimeSocket {
  *    └ n-af (Affix)
  * ```
  */
-function doc(): PageDocument {
+function doc(input: WbNode = INPUT): PageDocument {
   return pageDoc({
     id: 'n-root',
     type: 'Page',
@@ -55,10 +64,7 @@ function doc(): PageDocument {
         id: 'n-f',
         type: 'Field',
         props: { label: '이름' },
-        children: [
-          { id: 'n-in', type: 'Input', props: { placeholder: '고르세요', invalid: true, kind: 'number' }, marker: 2, alias: '이름 칸' },
-          { id: 'n-af', type: 'Affix', props: { text: '~' } },
-        ],
+        children: [input, { id: 'n-af', type: 'Affix', props: { text: '~' } }],
       },
     ],
   })
@@ -71,13 +77,13 @@ interface Board {
   lock: (locks: NodeLockView[]) => void
 }
 
-async function board(options: { role?: 'viewer' } = {}): Promise<Board> {
+async function board(options: { role?: 'viewer'; piece?: WbNode; codes?: CodeGroup[] } = {}): Promise<Board> {
   const sockets: FakeSocket[] = []
   const calls: PatchOp[][] = []
   const status: number[] = []
   let live: NodeLockView[] = []
   let seq = HEAD_SEQ
-  let held = doc()
+  let held = doc(options.piece)
 
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     calls.push(body.ops)
@@ -119,12 +125,13 @@ async function board(options: { role?: 'viewer' } = {}): Promise<Board> {
       cancel: () => {},
     },
   }
-  await openPage(doc(), {
+  await openPage(doc(options.piece), {
     realtime: setup,
     apiOverrides: {
       patchOps,
       getPage,
       listComments: async () => [],
+      ...(options.codes === undefined ? {} : { listCodes: async () => options.codes!, codeUsageCounts: async () => ({}) }),
       ...(options.role === 'viewer'
         ? {
             getProject: async () => ({
@@ -257,5 +264,41 @@ describe('잠금 · 권한', () => {
     await waitFor(() => expect(queryRowAction(structureRegion(), '모듈로 저장…', row('Input'))).not.toBeNull())
     expect(queryRowAction(structureRegion(), CHANGE, row('Input'))).toBeNull()
     expect(srv.calls).toEqual([])
+  })
+})
+
+describe('공통코드에 묶인 조각의 종류 바꾸기', () => {
+  const CODES: CodeGroup[] = [{ key: 'G', name: '그룹', items: [{ value: 'A', name: '새 가', active: true }] }]
+  const BOUND: WbNode = {
+    id: 'n-in',
+    type: 'Select',
+    props: { options: [{ label: '옛 가', selected: true }] },
+    code: { group: 'G', selected: ['A'] },
+  }
+  const info = (): string | null => document.body.querySelector('.wb-shell-info-notice')?.textContent ?? null
+
+  /** 표가 실렸다 — 트리 줄의 요약이 표의 이름이다. 안 기다리면 표 없이 풀어 대체 글이 남는다. */
+  async function boundBoard(): Promise<Board> {
+    const srv = await board({ piece: BOUND, codes: CODES })
+    await waitFor(() => expect(row('Select').textContent).toContain('새 가'))
+    return srv
+  }
+
+  it('못 받는 종류로 바꾸면 같은 편집이 묶음을 풀고 한 줄을 알린다', async () => {
+    const srv = await boundBoard()
+    fireEvent.click(rowAction(structureRegion(), CHANGE, row('Select')))
+    fireEvent.click(within(dialog()).getByRole('button', { name: '여러 줄 입력' }))
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(piece(srv.held())).toEqual({ id: 'n-in', type: 'TextArea' })
+    expect(info()).toBe(CODE_UNBOUND_NOTICE)
+  })
+
+  it('같은 묶음 꼴로 바꾸면 참조가 그대로이고 알리지 않는다', async () => {
+    const srv = await boundBoard()
+    fireEvent.click(rowAction(structureRegion(), CHANGE, row('Select')))
+    fireEvent.click(within(dialog()).getByRole('button', { name: '체크박스' }))
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    expect(piece(srv.held()).code).toEqual({ group: 'G', selected: ['A'] })
+    expect(info()).toBeNull()
   })
 })

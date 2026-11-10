@@ -197,6 +197,17 @@ const 모듈하나 = async (
   ).id,
 })
 
+/** 공통코드 쓰기가 대상 그룹 `S` · 항목 `A` 를 만든다 — `모듈하나` 와 같은 까닭으로 행을 넣는다. */
+const 코드하나 = async (ctx: TestContext, projectId: string): Promise<Record<string, string>> => {
+  const group = await ctx.db
+    .insertInto('code_groups')
+    .values({ project_id: projectId, key: 'S', name: '상태', sort_order: 0 })
+    .returning('id')
+    .executeTakeFirstOrThrow()
+  await ctx.db.insertInto('code_items').values({ group_id: group.id, value: 'A', name: '가', sort_order: 0 }).execute()
+  return { key: 'S', value: 'A' }
+}
+
 /**
  * ':id'가 필요한 그림 읽기가 대상 그림을 만든다 — `모듈하나` 와 같은 까닭으로 API(`POST …/assets`)가 아니라 행을 넣는다.
  */
@@ -520,6 +531,71 @@ const CASES: Case[] = [
     url: '/api/projects/:projectId/modules/:moduleId',
     allowed: ['owner', 'editor'],
     setup: 모듈하나,
+  },
+  {
+    // 공통코드 — 읽기 viewer · 쓰기 editor(`routes/codes.ts` 머리말 — 표는 화면 글의 원천이라 페이지 편집과 같은 역할).
+    label: '공통코드 표',
+    method: 'GET',
+    url: '/api/projects/:projectId/codes',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: '공통코드 사용처',
+    method: 'GET',
+    url: '/api/projects/:projectId/codes/usage',
+    query: 'group=S',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: '공통코드 사용 수',
+    method: 'GET',
+    url: '/api/projects/:projectId/codes/usage-counts',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: '공통코드 그룹 만들기',
+    method: 'POST',
+    url: '/api/projects/:projectId/codes',
+    payload: { key: 'NEW', name: '새 그룹' },
+    allowed: ['owner', 'editor'],
+  },
+  {
+    label: '공통코드 그룹 고치기',
+    method: 'PATCH',
+    url: '/api/projects/:projectId/codes/:key',
+    payload: { name: '바꿈' },
+    allowed: ['owner', 'editor'],
+    setup: 코드하나,
+  },
+  {
+    label: '공통코드 그룹 지우기',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/codes/:key',
+    allowed: ['owner', 'editor'],
+    setup: 코드하나,
+  },
+  {
+    label: '공통코드 항목 만들기',
+    method: 'POST',
+    url: '/api/projects/:projectId/codes/:key/items',
+    payload: { value: 'NEW', name: '새 항목' },
+    allowed: ['owner', 'editor'],
+    setup: 코드하나,
+  },
+  {
+    label: '공통코드 항목 고치기',
+    method: 'PATCH',
+    url: '/api/projects/:projectId/codes/:key/items/:value',
+    payload: { active: false },
+    allowed: ['owner', 'editor'],
+    setup: 코드하나,
+  },
+  {
+    label: '공통코드 항목 지우기',
+    method: 'DELETE',
+    url: '/api/projects/:projectId/codes/:key/items/:value',
+    allowed: ['owner', 'editor'],
+    setup: 코드하나,
   },
   {
     // 그림 — 정본 「그림」 · `routes/assets.ts` 머리말. 올리기 · 가져오기는 editor(페이지 편집을 돕는 바이트), 읽기 · 목록은 viewer.

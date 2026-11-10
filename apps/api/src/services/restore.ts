@@ -95,6 +95,7 @@
  */
 import type { DbHandle } from '../db/tx'
 import { withTransaction } from '../db/tx'
+import { replaceCodeTable } from '../repos/codes'
 import { deleteComment, insertCommentWithId, writeCommentBody } from '../repos/comments'
 import { deleteMenuNodeRow, insertMenuNodeWithId, writeMenuNodePlacement } from '../repos/menu'
 import { deletePageRow, insertPageWithId, writePagePlacement } from '../repos/pages'
@@ -139,6 +140,8 @@ export interface RestoreResult {
   droppedThemeTokens: string[]
   /** 이 복원이 지운 페이지(판에 없던 것) — 라우트가 커밋 뒤 그 잠금을 놓는다(`ws/lock.ts`의 `releaseLocksOnPages`). */
   deletedPageIds: string[]
+  /** 판 4 가 공통코드 표를 그 판으로 덮었다 — 라우트가 커밋 뒤 `codes-changed` 를 보낸다. 판 3 이하면 `false`(표를 안 건드렸다). */
+  codesRestored: boolean
 }
 
 export type RestoreOutcome =
@@ -333,6 +336,7 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
   let theme: ProjectThemeBinding | null = null
   const actorLabel = restoreActorLabel(target.tag)
   const deletedPageIds: string[] = []
+  let codesRestored = false
 
   for (const step of steps) {
     switch (step.kind) {
@@ -422,8 +426,14 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
       case 'set-theme':
         theme = await restoreProjectTheme(trx, input.projectId, step.theme)
         break
+      case 'replace-codes':
+        // 표에 revision 이 없어 patch 가 아니라 행 교체다. 코드 쓰기는 1단계의 프로젝트 행 잠금 뒤에 서므로(`routes/codes.ts` «잠금 순서») 코드
+        // 행을 따로 잠그지 않는다.
+        await replaceCodeTable(trx, input.projectId, step.codes)
+        codesRestored = true
+        break
     }
   }
 
-  return { summary, safety: { id: safety.id, tag: safety.tag }, theme, droppedThemeTokens, deletedPageIds }
+  return { summary, safety: { id: safety.id, tag: safety.tag }, theme, droppedThemeTokens, deletedPageIds, codesRestored }
 }

@@ -190,6 +190,23 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       .where('project_id', '=', projectId)
       .orderBy('sha256')
       .execute(),
+    // 공통코드 표 — 그룹 · 항목의 키 · 이름 · 차례 · 사용 여부(시각 칸은 빼고 — 견주는 것은 쓰기가 남긴 값이다).
+    codes: await db
+      .selectFrom('code_groups')
+      .leftJoin('code_items', 'code_items.group_id', 'code_groups.id')
+      .select([
+        'code_groups.key',
+        'code_groups.name',
+        'code_groups.sort_order',
+        'code_items.value',
+        'code_items.name as item_name',
+        'code_items.sort_order as item_order',
+        'code_items.active',
+      ])
+      .where('code_groups.project_id', '=', projectId)
+      .orderBy('code_groups.key')
+      .orderBy('code_items.value')
+      .execute(),
   }
 }
 
@@ -2504,6 +2521,19 @@ async function projectFixture(ctx: RealApiContext, bobRole: BobRole): Promise<Pr
   const fx = await fixture(ctx, bobRole)
   const spareMenu = await createMenuNode(ctx, fx.alice.cookie, fx.projectId, { title: '지울 메뉴' })
   const invitee = await signup(ctx)
+  // 공통코드 쓰기의 판 — 그룹 `KIND` 하나 · 항목 `A` 하나(고치고 지울 것).
+  for (const [url, payload] of [
+    ['', { key: 'KIND', name: '구분' }],
+    ['/KIND/items', { value: 'A', name: '가' }],
+  ] as const) {
+    const made = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/projects/${fx.projectId}/codes${url}`,
+      cookies: fx.alice.cookie,
+      payload,
+    })
+    if (made.statusCode !== 201) throw new Error(`공통코드 픽스처 실패: ${made.body}`)
+  }
   return {
     ...fx,
     spareMenuId: spareMenu.id,
@@ -2531,7 +2561,32 @@ const IMPORT_FILE = {
   comments: [],
 }
 
+/**
+ * 공통코드 쓰기 여섯 — «프로젝트 행 `FOR NO KEY UPDATE`(`lockProjectTree`) → 코드 행 → 재확인»(`routes/codes.ts` 머리말). 메뉴 쓰기와 같은 첫 잠금이라
+ * 복원 · 트리 잠금 둘 다 뒤에 선다.
+ */
+const CODE_PROBES: ProjectProbe[] = (
+  [
+    ['POST /api/projects/:projectId/codes', '공통코드 그룹 만들기', 'POST', '', { key: 'NEW', name: '새 그룹' }, 201],
+    ['PATCH /api/projects/:projectId/codes/:key', '공통코드 그룹 고치기', 'PATCH', '/KIND', { name: '밥의 이름' }, 200],
+    ['DELETE /api/projects/:projectId/codes/:key', '공통코드 그룹 지우기', 'DELETE', '/KIND', undefined, 204],
+    ['POST /api/projects/:projectId/codes/:key/items', '공통코드 항목 만들기', 'POST', '/KIND/items', { value: 'B', name: '나' }, 201],
+    ['PATCH /api/projects/:projectId/codes/:key/items/:value', '공통코드 항목 고치기', 'PATCH', '/KIND/items/A', { active: false }, 200],
+    ['DELETE /api/projects/:projectId/codes/:key/items/:value', '공통코드 항목 지우기', 'DELETE', '/KIND/items/A', undefined, 204],
+  ] as const
+).map(([route, label, method, path, payload, okStatus]) => ({
+  route,
+  label,
+  bobRole: 'editor' as const,
+  demotion: 'role' as const,
+  holders: ['restore', 'tree'] as const,
+  fire: (ctx: RealApiContext, fx: ProjectFx) =>
+    fireRest(ctx, fx, method, `/api/projects/${fx.projectId}/codes${path}`, payload === undefined ? undefined : { ...payload }),
+  okStatus,
+}))
+
 const PROJECT_PROBES: ProjectProbe[] = [
+  ...CODE_PROBES,
   {
     route: 'POST /api/projects/:projectId/menu',
     label: '메뉴 생성',

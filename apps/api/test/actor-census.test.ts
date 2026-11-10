@@ -855,6 +855,8 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'snapshots',
     'modules',
     'personal_modules',
+    'code_groups',
+    'code_items',
     'api_tokens',
     'theme_packages',
     'asset_blobs',

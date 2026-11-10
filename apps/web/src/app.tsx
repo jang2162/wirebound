@@ -20,6 +20,7 @@ import { ResetRoute } from './routes/reset'
 import { ProjectListRoute } from './routes/project-list'
 import { RedirectWhenAuthenticated, RequireAuth } from './routes/require-auth'
 import { SettingsRoute } from './routes/settings'
+import { CodesRoute } from './routes/codes'
 import { SessionProvider } from './session/session-context'
 
 export function App(): ReactElement {
@@ -127,6 +128,8 @@ export function App(): ReactElement {
             <Route path="/projects/:projectId/pages/:pageId" element={<EditorShellRoute />} />
             {/* **설정은 셸 밖 라우트다** — 근거는 `routes/settings.tsx` 머리말. */}
             <Route path="/projects/:projectId/settings" element={<SettingsRoute />} />
+            {/* **공통코드도 셸 밖 라우트다** — 근거는 `routes/codes.tsx` 머리말. */}
+            <Route path="/projects/:projectId/codes" element={<CodesRoute />} />
             {/* **스냅샷에는 주소가 없다** — 셸 밖 라우트가 아니라 **셸 머리의 팝오버**다
                 (`shell/snapshots-panel.tsx` 머리말의 표가 라우트로 둘 근거 둘과 그것이 서지 않는 까닭을 짝지어 적고 있다).
                 요지: 설계서 「설계서 화면 구조」는 머리에 무엇이 오는지 말하지 않고, 스냅샷 목록은 링크로 건네는

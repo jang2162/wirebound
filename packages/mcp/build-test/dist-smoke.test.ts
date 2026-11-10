@@ -205,12 +205,21 @@ describe('빌드된 wireb-mcp', () => {
 })
 
 describe('진짜 클라이언트가 붙어 도구를 부른다', () => {
-  it('핸드셰이크가 서고 설계서 「MCP 도구」의 다섯이 보인다', async () => {
+  it('핸드셰이크가 서고 설계서 「MCP 도구」의 여덟이 보인다', async () => {
     payload = snapshotPayload()
     const client = await connect()
     try {
       const listed = await client.listTools()
-      expect(listed.tools.map((tool) => tool.name).sort()).toEqual(['add_comment', 'get_page', 'list_pages', 'patch_page', 'validate'])
+      expect(listed.tools.map((tool) => tool.name).sort()).toEqual([
+        'add_comment',
+        'code_usage',
+        'edit_codes',
+        'get_page',
+        'list_codes',
+        'list_pages',
+        'patch_page',
+        'validate',
+      ])
       // 인자 스키마가 프로토콜을 건너 그대로 왔는가.
       const get = listed.tools.find((tool) => tool.name === 'get_page')!
       expect((get.inputSchema as { required?: string[] }).required).toEqual(['path'])

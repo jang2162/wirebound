@@ -215,6 +215,33 @@ describe('내려받기 응답 머리 — 화면 이미지의 수', () => {
   })
 })
 
+describe('공통코드 — 슬라이드의 노드 이름', () => {
+  /** 표를 PPTX 로 넘긴다(`ExportPptxOptions.codes`) — 화면 이미지(번들 페이지)가 그린 이름과 오른쪽 칸의 이름이 같아야 한다. */
+  it('묶인 노드를 표의 이름으로 부른다', async () => {
+    await withApi(async (ctx) => {
+      const user = await signup(ctx)
+      const project = await createProject(ctx, user.cookie, { name: '설계서 codes-pptx', slug: 'codes-pptx' })
+      const menu = await createMenuNode(ctx, user.cookie, project.id, { title: '관리자' })
+      const page = await createPage(ctx, user.cookie, project.id, menu.id, { title: '대시보드' })
+      const post = (url: string, payload: Record<string, unknown>) =>
+        ctx.app.inject({ method: 'POST', url: `/api/projects/${project.id}/codes${url}`, cookies: user.cookie, payload })
+      expect((await post('', { key: 'GRADE', name: '등급' })).statusCode).toBe(201)
+      expect((await post('/GRADE/items', { value: 'VIP', name: '새 이름' })).statusCode).toBe(201)
+      await putSchema(ctx, user.cookie, project.id, page.id, {
+        version: 5,
+        root: {
+          id: 'n_d',
+          type: 'Page',
+          children: [{ id: 'n_db', type: 'Button', props: { label: '옛 이름' }, code: { group: 'GRADE', item: 'VIP' }, marker: 1 }],
+        },
+      })
+      const xml = slideText(await download(ctx, { cookie: user.cookie, projectId: project.id, titles: [] }), 1)
+      expect(xml).toContain('① 새 이름 버튼')
+      expect(xml).not.toContain('옛 이름')
+    })
+  })
+})
+
 describe('화면 이미지 — 전부 성공', () => {
   it('페이지마다 매체 파트가 하나씩 실리고 바이트가 그대로다', async () => {
     const renderer = allOk()

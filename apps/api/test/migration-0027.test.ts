@@ -6,7 +6,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto'
 import { Migrator, NO_MIGRATIONS, sql } from 'kysely'
-import { readWbtheme, type ThemeManifest } from '@wirebound/themes'
+import { readWbtheme, type SnapshotPayload, type ThemeManifest } from '@wirebound/themes'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createDb, createPool } from '../src/db/client'
 import { migrationProvider } from '../src/db/migrations/index'
@@ -14,7 +14,6 @@ import type { DbHandle } from '../src/db/tx'
 import { insertSnapshot } from '../src/repos/snapshots'
 import { insertThemePackage } from '../src/repos/theme-packages'
 import { restoreSnapshot } from '../src/services/restore'
-import { captureSnapshot } from '../src/services/snapshot-capture'
 import { TEST_DATABASE_URL } from './helpers'
 import { manifestOf, packed } from './theme-fixtures'
 
@@ -185,21 +184,36 @@ describe('0027 — 걷은 시스템 테마', () => {
       db,
     )
     const projectId = await project('system-saas-marketing', '1.0.0', { 'commerce.only': '#123456' }, 0)
-    const captured = await captureSnapshot(db, projectId)
-    if (captured.kind !== 'captured') throw new Error('캡처 실패')
-    expect(captured.payload.theme).toEqual({ themeId: 'system-saas-marketing', version: '1.0.0', tokens: { 'commerce.only': '#123456' } })
+    /**
+     * **그때의 캡처는 판 3 payload 다** — 지금 캡처(`captureSnapshot`)는 판 4(공통코드 표 — `0036`)라 `0025` 판 DB 에서 표가 없어 못 선다. 옮기기 전
+     * 서버가 찍었을 꼴을 손으로 짓는다(빈 프로젝트의 캡처와 같은 칸 · 테마 바인딩). 복원은 지금 판 DB 에서 한다 — 복원이 찍는 안전망도 지금
+     * 캡처다. `0028` 뒤 마이그레이션은 테마 바인딩을 안 건드린다.
+     */
+    const before: SnapshotPayload = {
+      payloadVersion: 3,
+      capturedAt: new Date().toISOString(),
+      menu: [],
+      pages: [],
+      layouts: [],
+      comments: [],
+      theme: { themeId: 'system-saas-marketing', version: '1.0.0', tokens: { 'commerce.only': '#123456' } },
+    }
     const snapshot = await insertSnapshot(db, {
       projectId,
       tag: '옮기기 전',
       description: null,
-      payload: captured.payload,
+      payload: before,
       createdBy: actorId,
     })
 
     await migrateTo('0027-retire-system-themes')
     expect((await bindingOf(projectId)).theme_id).toBe('system-admin')
+    const latest = await new Migrator({ db, provider: migrationProvider }).migrateToLatest()
+    if (latest.error !== undefined) throw latest.error
 
     const outcome = await restoreSnapshot(db, { projectId, snapshotId: snapshot.id, actorId })
+    // 다음 케이스의 `beforeEach` 가 빈 DB 까지 내린다 — 스냅샷이 남으면 `0029` 의 `down` 이 거절한다(안전망까지 지운다).
+    await sql`delete from snapshots`.execute(db)
     expect(outcome.kind).toBe('restored')
     expect(await bindingOf(projectId)).toEqual({
       theme_id: 'system-saas-marketing',

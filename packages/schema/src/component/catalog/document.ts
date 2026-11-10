@@ -4,6 +4,7 @@ import { SUMMARY_TEXT_MAX, axisWord, clipped, joined, oneLine } from '../summary
 
 export const TextDef = defineComponent({
   type: 'Text',
+  code: { kind: 'label', prop: 'content' },
   label: '텍스트',
   description: '제목·본문 같은 글. 역할이 크기를 정한다.',
   group: 'document',
@@ -76,6 +77,7 @@ function placeholderColor() {
 
 export const PlaceholderDef = defineComponent({
   type: 'Placeholder',
+  code: { kind: 'label', prop: 'label' },
   // **`영역`이 아닌 것에 근거가 있다.** 이 컴포넌트의 `label` 기본값이 `'미정 영역'`이라
   // 이름을 `영역`으로 두면 상호작용 문장이 *"미정 영역 영역"*이 된다(`describe.ts`가 이
   // 이름을 그대로 쓴다). 짧게 «고치지» 마라.

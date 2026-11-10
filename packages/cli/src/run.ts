@@ -24,6 +24,7 @@
  * `test/args.test.ts`가 두 마디 명세로 그것을 잰다.
  */
 import { parseArgs, type ParseArgsConfig } from 'node:util'
+import { readActive, runCodesDelete, runCodesList, runCodesSetGroup, runCodesSetItem, runCodesUsage } from './commands/codes'
 import { runExport } from './commands/export'
 import { runInit } from './commands/init'
 import { runLint } from './commands/lint'
@@ -120,6 +121,46 @@ export const COMMANDS: CommandSpec[] = [
       json: { type: 'boolean', default: false },
     },
     run: (io, values, positionals) => runPageGet(io, positionals[0], { json: values.json === true }),
+  },
+  {
+    words: ['codes', 'list'],
+    summary: 'wireb codes list [--json]                     공통코드 표(그룹 → 항목)와 쓰는 노드 수',
+    options: { json: { type: 'boolean', default: false } },
+    run: (io, values) => runCodesList(io, { json: values.json === true }),
+  },
+  {
+    words: ['codes', 'usage'],
+    summary: 'wireb codes usage <키> [코드값] [--json]      그 그룹 · 항목을 쓰는 페이지 · 레이아웃 · 모듈의 노드',
+    options: { json: { type: 'boolean', default: false } },
+    run: (io, values, positionals) => runCodesUsage(io, positionals[0], positionals[1], { json: values.json === true }),
+  },
+  {
+    words: ['codes', 'set-group'],
+    summary: 'wireb codes set-group <키> [--name <이름>] [--order <n>]   그룹을 만들거나(이름 필수) 고친다',
+    options: { name: { type: 'string' }, order: { type: 'string' } },
+    run: (io, values, positionals) => runCodesSetGroup(io, positionals[0], { name: asString(values.name), order: asString(values.order) }),
+  },
+  {
+    words: ['codes', 'set-item'],
+    summary: 'wireb codes set-item <키> <코드값> [--name <이름>] [--order <n>] [--active|--inactive]   항목을 만들거나 고친다',
+    options: {
+      name: { type: 'string' },
+      order: { type: 'string' },
+      active: { type: 'boolean', default: false },
+      inactive: { type: 'boolean', default: false },
+    },
+    run: (io, values, positionals) =>
+      runCodesSetItem(io, positionals[0], positionals[1], {
+        name: asString(values.name),
+        order: asString(values.order),
+        active: readActive(values.active === true, values.inactive === true),
+      }),
+  },
+  {
+    words: ['codes', 'delete'],
+    summary: 'wireb codes delete <키> [코드값]              그룹(항목째) · 항목을 지운다 — 가리키던 노드는 끊긴 참조로 남는다',
+    options: {},
+    run: (io, _values, positionals) => runCodesDelete(io, positionals[0], positionals[1]),
   },
 ]
 

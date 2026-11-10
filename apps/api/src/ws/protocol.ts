@@ -200,6 +200,12 @@ export type ServerFrame =
    */
   | { type: 'comments-changed'; projectId: string; pageId: string }
   /**
+   * **프로젝트의 공통코드 표가 바뀌었다 — 표를 다시 읽어라**(`GET …/codes`). 그룹 · 항목을 만들고 · 고치고 · 지우는 쓰기와 표를 덮는 복원이 커밋 뒤
+   * 하나씩 보낸다(`ws/notify.ts`의 `notifyCodesChanged`). 본문 없음 · 낸 연결은 뺀다(`comments-changed`와 같은 판정 — 낸 화면은 답 뒤에 스스로
+   * 다시 읽는다). 복원은 빼지 않는다.
+   */
+  | { type: 'codes-changed'; projectId: string }
+  /**
    * **프로젝트의 테마가 바뀌었다** — 바인딩(`id@version`)이나 토큰 값. 받는 캔버스는 번들이 바뀌었으면 다시 싣고, 토큰만 바뀌었으면
    * CSS 변수 · `useToken` 값만 바꾼다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「실시간」). 값을 통째로 싣는다 —
    * 토큰은 작고(상한 16 KB — `routes/project-theme.ts`) 받는 쪽이 다시 읽지 않고 바로 칠한다. 놓친 탭은 `GET /projects/:id` 의

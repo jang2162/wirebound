@@ -38,6 +38,8 @@ import { zoneList } from '../zones'
 import type { ValidationCode, ValidationIssue } from '../validate'
 import { unknownVisibilityStates, validatePage } from '../validate'
 import { stateDescendants } from '../visibility'
+import { indexCodes, type CodeIndex } from '../codes-resolve'
+import { codeIssues } from './codes'
 import { lintIssue, relayLintIssue, type LintIssue } from './issue'
 import type { LintConfig, LintPage, LintProject } from './input'
 import type { RelayRuleId } from './rules'
@@ -98,6 +100,7 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   // 저장 경계만 낸다(`checkViewStateRemoval` — 편집 전후를 본다). lint 는 저장된 문서 하나를 보므로 이 코드를 받지 않는다 — 표의 칸은
   // `Record`가 요구해 둔다.
   'state-cases-left': 'document-invalid',
+  'invalid-code-ref': 'document-invalid',
 }
 
 /**
@@ -113,9 +116,10 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
   const targets = new Set(project.pages.map((page) => pageTargetKey(page.target)))
   const kinds = targetKinds(project)
   const commented = commentedNodes(project)
+  const codes = project.codes === undefined ? null : indexCodes(project.codes)
 
   for (const page of project.pages) {
-    issues.push(...lintPage(page, targets, kinds, commented.get(page.id) ?? new Set()))
+    issues.push(...lintPage(page, targets, kinds, commented.get(page.id) ?? new Set(), codes))
   }
 
   return issues
@@ -141,6 +145,7 @@ function lintPage(
   targets: ReadonlySet<string>,
   kinds: ReadonlyMap<string, ReadonlySet<PageKind>>,
   commented: ReadonlySet<string>,
+  codes: CodeIndex | null,
 ): LintIssue[] {
   const where = { pageId: page.id }
 
@@ -215,6 +220,8 @@ function lintPage(
     issues.push(...pageTargetIssues(node, path, where, targets, kinds))
     // 화면 페이지의 팝업 닫기
     if (pageKindOf(page.document) !== 'popup') issues.push(...closeOutsidePopup(node, path, where))
+    // 공통코드 — 표를 받았을 때만.
+    if (codes !== null) issues.push(...codeIssues(node, path, where, codes))
   }
 
   return issues

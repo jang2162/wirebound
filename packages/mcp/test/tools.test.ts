@@ -4,7 +4,7 @@
  *
  * 이 파일이 드는 것 셋:
  *
- * 1. 표가 「MCP 도구」의 **다섯을 빠짐없이** 덮는다 — 쓰기 둘도 표에 있다.
+ * 1. 표가 「MCP 도구」의 **여덟을 빠짐없이** 덮는다 — 쓰기 둘도 표에 있다.
  * 2. **없는 것** — `validate`가 `LintConfig`를 안 받고 어느 도구도 `projectId`를 안 받는다
  *    (`tools.ts`의 머리말).
  * 3. 인자 검사가 **표에서 나온다** — 도구마다 손으로 짠 검사가 아니다.
@@ -33,10 +33,19 @@ describe('도구 표가 설계서 「MCP 도구」를 센다', () => {
 
   it('설계 문서에서 도구 줄을 실제로 읽는다', () => {
     // 파서가 어긋나면 **빈 집합에서 아래가 조용히 통과한다.**
-    expect(spec.map((tool) => tool.name)).toEqual(['list_pages', 'get_page', 'patch_page', 'add_comment', 'validate'])
+    expect(spec.map((tool) => tool.name)).toEqual([
+      'list_pages',
+      'get_page',
+      'patch_page',
+      'add_comment',
+      'validate',
+      'list_codes',
+      'code_usage',
+      'edit_codes',
+    ])
   })
 
-  it('「MCP 도구」의 다섯을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
+  it('「MCP 도구」의 여덟을 빠짐없이 덮는다 — 이름도 용도도 문서에서 온다', () => {
     // **수를 여기 적지 않는다.** 문서가 든 줄이 곧 기대값이고 **순서까지 같다.**
     expect(TOOLS.map((tool) => ({ name: tool.name, use: tool.spec }))).toEqual(spec.map((tool) => ({ name: tool.name, use: tool.use })))
   })
@@ -83,8 +92,13 @@ const ALLOWED_ARGS: readonly { name: string; why: string }[] = [
     why: '설계서 「MCP 도구」가 "baseSeq 필수"라고 적었다. 도구가 스스로 읽으면 에이전트가 읽은 문서 위에 얹는다는 보증이 사라진다',
   },
   {
+    name: 'group',
+    why: '공통코드 그룹 키(code_usage). 세션이 만드는 값이 아니라 list_codes 가 낸 groups[].key 다',
+  },
+  { name: 'item', why: '공통코드 코드값(code_usage). list_codes 가 낸 groups[].items[].value 다' },
+  {
     name: 'ops',
-    why: '그것이 patch_page 의 존재 이유다. **검증하는 자리는 서버다**(설계서 「MCP 도구」의 "사람 편집과 동일 경로") — 도구가 자기 검증을 더하면 두 벌이 된다',
+    why: '그것이 patch_page 의 존재 이유다. **검증하는 자리는 서버다**(설계서 「MCP 도구」의 "사람 편집과 동일 경로") — 도구가 자기 검증을 더하면 두 벌이 된다. edit_codes 의 표 쓰기 목록이기도 하다 — 원소 꼴만 보내기 전에 읽고(readCodeEdit) 키 꼴 · 상한은 서버가 본다',
   },
   { name: 'nodeId', why: '어느 노드에 말을 붙일지는 에이전트의 판단이다. get_page 가 낸 nodes[].id 가 그 값이다' },
   { name: 'body', why: '코멘트 본문. 길이 상한은 서버가 든다(COMMENT_BODY_MAX_LENGTH)' },
@@ -131,12 +145,15 @@ describe('인자 스키마에 **없는 것**이 판정이다', () => {
     }
   })
 
-  it('다섯이 받는 것 — 모양을 고정한다', () => {
+  it('여덟이 받는 것 — 모양을 고정한다', () => {
     expect(Object.keys(findTool('list_pages')!.inputSchema.properties)).toEqual([])
     expect(Object.keys(findTool('get_page')!.inputSchema.properties)).toEqual(['path'])
     expect(Object.keys(findTool('patch_page')!.inputSchema.properties)).toEqual(['path', 'baseSeq', 'ops'])
     expect(Object.keys(findTool('add_comment')!.inputSchema.properties)).toEqual(['path', 'nodeId', 'body'])
     expect(Object.keys(findTool('validate')!.inputSchema.properties)).toEqual(['path'])
+    expect(Object.keys(findTool('list_codes')!.inputSchema.properties)).toEqual([])
+    expect(Object.keys(findTool('code_usage')!.inputSchema.properties)).toEqual(['group', 'item'])
+    expect(Object.keys(findTool('edit_codes')!.inputSchema.properties)).toEqual(['ops'])
   })
 
   it('get_page는 경로가 필수이고 validate는 아니다', () => {

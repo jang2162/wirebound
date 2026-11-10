@@ -101,6 +101,8 @@ export function useRealtime(
   onThemeChanged?: (frame: Extract<ServerFrame, { type: 'theme-changed' }>) => void,
   /** 메뉴 · 페이지 트리가 그 번호의 판으로 바뀌었다(`menu-changed`). `onThemeChanged`와 같은 배치다(ref 로 쥔다). */
   onMenuChanged?: (rev: number) => void,
+  /** 공통코드 표를 다시 읽을 때(`codes-changed` · 다시 붙음 — 끊긴 동안의 프레임은 사라졌다). 받는 것은 셸의 표다(`codes/project-codes.tsx`). */
+  onCodesChanged?: () => void,
 ): void {
   const store = useEditorStoreInstance()
   const setup = useRealtimeSetup()
@@ -112,6 +114,8 @@ export function useRealtime(
   themeChanged.current = onThemeChanged
   const menuChanged = useRef(onMenuChanged)
   menuChanged.current = onMenuChanged
+  const codesChanged = useRef(onCodesChanged)
+  codesChanged.current = onCodesChanged
 
   useEffect(() => {
     if (!setup || !projectId) return
@@ -185,6 +189,9 @@ export function useRealtime(
           case 'menu-changed':
             menuChanged.current?.(frame.rev)
             break
+          case 'codes-changed':
+            codesChanged.current?.()
+            break
           case 'locks':
             // **프로젝트 전체의 목록이다.** 어느 페이지의 것인지는 스토어가 `openPageId`로
             // 거른다(`lockedBy`) — 여기서 거르면 페이지를 옮길 때 목록이 낡는다.
@@ -234,6 +241,8 @@ export function useRealtime(
             onResync?.()
             // 끊긴 동안의 `comments-changed`도 사라졌다 — 열린 목록을 다시 읽힌다.
             setup.comments?.emit()
+            // `codes-changed`도 — 표를 다시 읽는다.
+            codesChanged.current?.()
           }
           opened = true
           return

@@ -40,6 +40,8 @@
  */
 import {
   DEFAULT_VIEW_STATE,
+  type CodeGroup,
+  type CodeIndex,
   viewStateName,
   viewStateOrder,
   type InteractionSentence,
@@ -72,8 +74,16 @@ export interface ShellNavItem {
   popup?: boolean
 }
 
+/** 좌측 트리의 «공통코드» 줄 — 표가 있는 번들에만 선다. */
+export interface ShellCodesNav {
+  href: string
+  current: boolean
+}
+
 export interface ShellInput {
   nav: readonly ShellNavItem[]
+  /** 표가 있으면 «공통코드» 장으로 가는 줄. 없으면 그 절이 없다 — 표 없는 번들의 바이트가 그대로다. */
+  codesNav?: ShellCodesNav
   /**
    * 「페이지 JSON」 봉투의 `page.description`. **없으면 빈 상태를 말한다** — 탭 자체는
    * 「설계서 화면 구조」가 든다.
@@ -82,6 +92,8 @@ export interface ShellInput {
   comments: readonly CommentEntry[]
   /** 문장화의 재료. 셸이 문서를 받아 스스로 문장을 만든다 — 호출자가 두 번 순회하지 않는다. */
   page: PageDocument
+  /** 공통코드 표 — 문장이 묶인 노드를 표의 이름으로 부른다(코멘트 칸의 이름과 같은 표). */
+  codes?: CodeIndex
   /** `<body>` 끝에 얹을 `<script>` 들. `shellScripts`가 만든다. */
   scripts: ReactNode
 }
@@ -158,30 +170,114 @@ function panelId(tab: TabId): string {
   return `wb-export-panel-${tab}`
 }
 
+/** 좌측 트리 — 페이지 줄들과(표가 있으면) «공통코드» 줄. */
+function Nav(props: { items: readonly ShellNavItem[]; codes: ShellCodesNav | undefined }): ReactElement {
+  return (
+    <nav className="wb-export-nav" aria-label="페이지">
+      <p className="wb-export-nav-heading">페이지</p>
+      <ul className="wb-export-nav-list">
+        {props.items.map((item) => (
+          <li key={item.href} className="wb-export-nav-item">
+            <a className="wb-export-nav-link" href={item.href} aria-current={item.current ? 'page' : undefined}>
+              {item.popup === true && (
+                <span className="wb-export-nav-kind" aria-hidden="true">
+                  팝업
+                </span>
+              )}
+              {item.title}
+              {item.popup === true && <span className="wb-export-hidden"> — 팝업</span>}
+            </a>
+          </li>
+        ))}
+      </ul>
+      {props.codes !== undefined && (
+        <>
+          <p className="wb-export-nav-heading wb-export-nav-heading-next">{CODES_HEADING}</p>
+          <ul className="wb-export-nav-list">
+            <li className="wb-export-nav-item">
+              <a className="wb-export-nav-link" href={props.codes.href} aria-current={props.codes.current ? 'page' : undefined}>
+                {CODES_HEADING}
+              </a>
+            </li>
+          </ul>
+        </>
+      )}
+    </nav>
+  )
+}
+
+/** «공통코드» 절 · 장의 이름. */
+const CODES_HEADING = '공통코드'
+
+/** «공통코드» 장의 그룹 하나 — 항목 표와 그 그룹을 쓰는 페이지. */
+export interface CodesChapterGroup {
+  group: CodeGroup
+  /** 그 그룹(항목 포함)을 가리키는 노드가 있는 페이지 — 번들 차례. `nodes` 는 그 페이지의 노드 수. */
+  usage: { title: string; href: string; nodes: number }[]
+}
+
+/**
+ * «공통코드» 장의 `<body>` — 좌측 트리 + 그룹마다 항목 표(코드값 · 이름 · 사용 여부)와 쓰는 페이지. 장은 개발자가 코드값을 옮겨 적는
+ * 자리라 그룹 키 · 코드값을 그대로 싣는다(목업에는 안 그린다). 사용 안 함 항목도 싣는다 — 표 그대로다.
+ */
+export function codesBody(input: { nav: readonly ShellNavItem[]; codesHref: string; groups: readonly CodesChapterGroup[] }): ReactElement {
+  return (
+    <div className="wb-export wb-export-chapter">
+      <Nav items={input.nav} codes={{ href: input.codesHref, current: true }} />
+      <main className="wb-export-codes">
+        <h1 className="wb-export-codes-title">{CODES_HEADING}</h1>
+        {input.groups.map(({ group, usage }) => (
+          <section key={group.key} className="wb-export-codes-group" aria-label={group.name}>
+            <h2 className="wb-export-codes-name">
+              {group.name} <code className="wb-export-codes-key">{group.key}</code>
+            </h2>
+            <table className="wb-export-codes-table">
+              <thead>
+                <tr>
+                  <th scope="col">코드값</th>
+                  <th scope="col">이름</th>
+                  <th scope="col">사용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.items.map((item) => (
+                  <tr key={item.value}>
+                    <td>
+                      <code>{item.value}</code>
+                    </td>
+                    <td>{item.name}</td>
+                    <td>{item.active ? '사용' : '사용 안 함'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {group.items.length === 0 && <p className="wb-export-codes-empty">항목이 없습니다</p>}
+            <h3 className="wb-export-codes-sub">쓰는 곳</h3>
+            {usage.length === 0 ? (
+              <p className="wb-export-codes-empty">이 그룹을 쓰는 페이지가 없습니다</p>
+            ) : (
+              <ul className="wb-export-codes-usage">
+                {usage.map((hit) => (
+                  <li key={hit.href}>
+                    <a href={hit.href}>{hit.title}</a> — 노드 {hit.nodes}개
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
+      </main>
+    </div>
+  )
+}
+
 /** `<body>` 안 전부. */
 export function shellBody(input: ShellInput): ReactElement {
-  const sentences = pageSentences(input.page)
+  const sentences = pageSentences(input.page, input.codes)
   return (
     <>
       <div className="wb-export">
-        <nav className="wb-export-nav" aria-label="페이지">
-          <p className="wb-export-nav-heading">페이지</p>
-          <ul className="wb-export-nav-list">
-            {input.nav.map((item) => (
-              <li key={item.href} className="wb-export-nav-item">
-                <a className="wb-export-nav-link" href={item.href} aria-current={item.current ? 'page' : undefined}>
-                  {item.popup === true && (
-                    <span className="wb-export-nav-kind" aria-hidden="true">
-                      팝업
-                    </span>
-                  )}
-                  {item.title}
-                  {item.popup === true && <span className="wb-export-hidden"> — 팝업</span>}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <Nav items={input.nav} codes={input.codesNav} />
         <main className="wb-export-mockup">
           <StatePicker viewStates={input.page.viewStates} />
           <div className="wb-export-canvas" />

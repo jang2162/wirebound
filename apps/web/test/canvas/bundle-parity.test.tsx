@@ -28,10 +28,11 @@
  * 캔버스는 프로젝트가 고정한 판의 번들을 싣는다 — 기본 하네스는 `system-admin@0.1.0` 에 `ADMIN_FIXTURE` 를 준다(`test/theme-loader.ts`).
  * 번들에 **같은 테마 정의**를 넘겨 견준다 — 캔버스가 뷰 경로에 무엇을 더하거나 빼면 여기서 죽는다.
  */
-import { broadFixture, describeTree } from '@wirebound/exporter/test-support'
+import { broadFixture, describeTree, FIXTURE_CODES } from '@wirebound/exporter/test-support'
 import { mountExportDocument } from '@wirebound/exporter/browser'
-import type { PageDocument } from '@wirebound/schema'
+import { indexCodes, type PageDocument } from '@wirebound/schema'
 import { act } from 'react'
+import { waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { ADMIN_FIXTURE } from '../admin-theme'
 import { canvasDocument, openPage } from '../editor-harness'
@@ -52,7 +53,16 @@ function bundleDocumentRoot(document_: PageDocument): Element {
   canvas.className = 'wb-export-canvas'
   document.body.appendChild(canvas)
   act(() => {
-    mountExportDocument(canvas, { document: document_, theme: ADMIN_FIXTURE, tokens: {}, window, hrefs: {}, markers: [], status: null })
+    mountExportDocument(canvas, {
+      document: document_,
+      theme: ADMIN_FIXTURE,
+      tokens: {},
+      window,
+      hrefs: {},
+      markers: [],
+      status: null,
+      codes: indexCodes(FIXTURE_CODES),
+    })
   })
   const root = canvas.firstElementChild
   if (root === null) throw new Error('번들에 문서가 없습니다')
@@ -64,7 +74,9 @@ const FIXTURES: [label: string, make: () => PageDocument][] = [['넓게 덮는 �
 describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   it.each(FIXTURES)('%s', async (_label, make) => {
     const document_ = make()
-    await openPage(document_)
+    // 두 쪽에 같은 공통코드 표 — 픽스처의 묶인 칩이 표의 이름으로 선다(캔버스는 셸의 공급자가 `listCodes` 로 읽는다).
+    await openPage(document_, { apiOverrides: { listCodes: async () => structuredClone([...FIXTURE_CODES]) } })
+    await waitFor(() => expect(canvasDocumentRoot().textContent).toContain('설문 응답'))
 
     expect(describeTree(bundleDocumentRoot(document_))).toEqual(describeTree(canvasDocumentRoot()))
   })

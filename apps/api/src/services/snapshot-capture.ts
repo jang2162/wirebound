@@ -53,6 +53,7 @@
  * 둘 다 참이지만 뒤쪽이 더 강한 진술이고, 지문이 증명하는 구간의 **닫는 끝**이다.
  */
 import type { DbHandle } from '../db/tx'
+import { readCodeTable } from '../repos/codes'
 import { listProjectComments } from '../repos/comments'
 import { listLayouts } from '../repos/layouts'
 import { listMenuNodes } from '../repos/menu'
@@ -95,6 +96,7 @@ export async function captureSnapshot(db: DbHandle, projectId: string, hooks?: C
   const layouts = await listLayouts(db, projectId)
   const comments = await listProjectComments(db, projectId)
   const binding = await findProjectTheme(db, projectId)
+  const codes = await readCodeTable(db, projectId)
 
   const after = await readCaptureFingerprint(db, projectId)
   if (after.fingerprint !== before.fingerprint) return { kind: 'fingerprint-mismatch' }
@@ -143,6 +145,8 @@ export async function captureSnapshot(db: DbHandle, projectId: string, hooks?: C
       binding?.themeId == null || binding.version == null
         ? null
         : { themeId: binding.themeId, version: binding.version, tokens: binding.tokens },
+    // 판 4 — 공통코드 표(`@wirebound/themes`의 `snapshot/payload.ts` 「공통코드 표 — 판 4」 절).
+    codes,
   }
 
   // **규격을 지나게 한다.** 통과하지 못하면 그것은 이 파일의 버그이므로 조용히 저장하지

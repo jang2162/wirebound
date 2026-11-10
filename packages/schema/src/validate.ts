@@ -1,3 +1,5 @@
+import { ONE_SELECTED_MESSAGE } from './component/catalog/input'
+import { picksOneChoice } from './component/code-binding'
 import { BODY_ZONE, placementsOf, type ComponentDef, type ComponentPlace } from './component/define'
 import { checkNodeAction, isPageTargetAction, isTargetlessAction } from './interaction/check'
 import { getComponent } from './component/registry'
@@ -64,6 +66,12 @@ export type ValidationCode =
    * 파이프라인)가 편집 전후로 `checkViewStateRemoval`을 부른다. 편집 전부터 목록 밖이던 가리킴은 여기 안 온다(lint 의 `view-state-unknown`).
    */
   | 'state-cases-left'
+  /**
+   * 공통코드 참조(`WbNode.code`)가 그 타입의 선언(`ComponentDef.code`)과 안 맞는다 — 받지 않는 타입 · 선택 위젯의 `item` · 대표 글 타입의 `item`
+   * 없음이나 `selected` · 하나 고르는 타입의 `selected` 둘 이상 · 겹친 값. 경로는 `…/code`. **표에 있는지는 여기서 안 본다** — 검증은 표를
+   * 모른다(lint 의 `broken-code-ref`). 표에서 항목을 지워도 문서는 저장된다.
+   */
+  | 'invalid-code-ref'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -122,6 +130,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'invalid-interaction-target': 'warning',
   'invalid-interaction-prop': 'warning',
   'state-cases-left': 'error',
+  'invalid-code-ref': 'error',
 }
 
 export interface ValidationIssue {
@@ -456,6 +465,7 @@ function validateTree(root: WbNode, rootTypes: readonly string[]): ValidationIss
     }
 
     issues.push(...checkZones(def, node, path))
+    issues.push(...checkCodeRef(def, node, path))
     const places = placementsOf(def)
     if (places.length > 0 && !places.some((place) => parent !== null && parent.type === place.type && zone === place.zone)) {
       issues.push(makeIssue('misplaced-component', node.id, path, `${def.label}은 ${placementName(places)} 안에만 놓을 수 있습니다`))
@@ -477,6 +487,25 @@ function validateTree(root: WbNode, rootTypes: readonly string[]): ValidationIss
   }
 
   return issues
+}
+
+/** 노드의 공통코드 참조가 그 타입의 선언과 맞는가(`invalid-code-ref`). 봉투가 이미 키 · 값의 꼴을 봤다. */
+function checkCodeRef(def: ComponentDef, node: WbNode, path: string): ValidationIssue[] {
+  const ref = node.code
+  if (ref === undefined) return []
+  const issue = (message: string) => [makeIssue('invalid-code-ref', node.id, `${path}/code`, `${message}${aliasNote(node)}`)]
+  const binding = def.code
+  if (binding === undefined) return issue(`${def.label}은 공통코드에 묶을 수 없습니다`)
+  if (binding.kind === 'choices') {
+    if (ref.item !== undefined) return issue(`${def.label}은 그룹에 묶습니다 — 항목(item)을 둘 수 없습니다`)
+    const selected = ref.selected ?? []
+    if (new Set(selected).size !== selected.length) return issue('고른 코드값이 겹칩니다')
+    if (picksOneChoice(def) && selected.length > 1) return issue(`${def.label}은 ${ONE_SELECTED_MESSAGE}`)
+    return []
+  }
+  if (ref.item === undefined) return issue(`${def.label}은 항목 하나에 묶습니다 — 항목(item)이 없습니다`)
+  if (ref.selected !== undefined) return issue(`${def.label}은 고른 값(selected)을 둘 수 없습니다`)
+  return []
 }
 
 /**

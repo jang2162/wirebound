@@ -165,6 +165,7 @@ export const TabsDef = defineComponent({
 /** 탭 하나 — 뿌리 요소는 탭 머리(`label`)이고 몸통은 부모 `Tabs`의 뷰가 패널 칸에 둔다(`bodyHost: 'parent'`). `Tabs`의 몸통에만 선다. */
 export const TabPanelDef = defineComponent({
   type: 'TabPanel',
+  code: { kind: 'label', prop: 'label' },
   label: '탭 패널',
   description: '탭 하나. 이름은 탭 머리에, 내용은 그 탭의 패널에 선다.',
   group: 'structure',

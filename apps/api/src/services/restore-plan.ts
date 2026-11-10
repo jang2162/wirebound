@@ -28,6 +28,7 @@
  * | 8 | `write-page-schema` | 페이지 행이 있어야 `applyEdit`이 잠글 수 있다 |
  * | 9 | `create-comment` | `comments.page_id` FK — 페이지가 먼저다 |
  * | 10 | `update-comment` | — |
+ * | 12 | `replace-codes` | 공통코드 표를 통째로 그 판으로 덮는다 — 페이지를 안 참조해(노드가 키 · 값으로 가리킨다) 자리는 어디여도 되고 맨 끝에 둔다. **판 4 이상 payload 의 `codes` 로만 넣는다** — 판 3 이하는 표를 안 건드린다. 같아도 넣는다(`set-theme` 와 같은 판정 — 받는 쪽은 `codes-changed` 로 다시 읽는다) |
  * | 11 | `set-theme` | 프로젝트 행의 바인딩 칸만 쓴다 — 어느 자리여도 되고 맨 끝에 둔다. **판 3 이상 payload 의 `theme` 로만 넣는다** — 판 2 이하는 `theme` 가 있어도(손댄 payload) 바인딩을 안 건드린다. 값이 지금과 같아도 넣는다 — 복원은 늘 `theme_rev` 를 올리고 `theme-changed` 를 보낸다 |
  *
  * **4·5가 6보다 앞인 것이 이 표에서 가장 안 보이는 자리다.** *"지우는 것을 먼저"*라는
@@ -72,6 +73,7 @@ import {
   excuseStandingNestedPages,
   partitionIssues,
   validatePage,
+  type CodeTable,
   type PageDocument,
   type ValidationIssue,
 } from '@wirebound/schema'
@@ -101,6 +103,9 @@ export interface RestoreCurrentState {
 /** 바인딩(`theme`)을 싣기 시작한 payload 판. */
 const THEME_PAYLOAD_VERSION = 3
 
+/** 공통코드 표를 담기 시작한 판 — 이보다 앞선 판은 표를 안 건드린다(`@wirebound/themes`의 `snapshot/payload.ts` 「공통코드 표 — 판 4」). */
+const CODES_PAYLOAD_VERSION = 4
+
 export type RestoreStep =
   // `pageId`를 함께 든다 — `deleteComment`가 `(pageId, commentId)`로 지운다(남의 페이지의
   // 코멘트 id를 실은 요청이 통하지 않게 하는 그 repo의 계약).
@@ -115,6 +120,7 @@ export type RestoreStep =
   | { kind: 'create-comment'; comment: SnapshotComment }
   | { kind: 'update-comment'; comment: SnapshotComment }
   | { kind: 'set-theme'; theme: SnapshotTheme }
+  | { kind: 'replace-codes'; codes: CodeTable }
 
 /**
  * 무엇이 얼마나 바뀌는가. **응답이 이것을 그대로 싣는다**(*"바뀐 수와 그대로인 수를
@@ -379,6 +385,10 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
   // ── 11단계. 테마 바인딩(판 3). 패키지가 이 서버에 있는지 · 토큰이 그 판의 manifest 를 지나는지는 패키지를 읽어야 하는 DB 질문이라
   // `restore.ts`가 본다(작성자 확인과 같은 자리). 판을 함께 보는 까닭: 판 2 payload 에 `theme` 를 넣으면(손댄 DB) 판 2 복원이 바인딩을 썼다.
   if (payload.payloadVersion >= THEME_PAYLOAD_VERSION && payload.theme != null) steps.push({ kind: 'set-theme', theme: payload.theme })
+
+  // ── 12단계. 공통코드 표(판 4).
+  if (payload.payloadVersion >= CODES_PAYLOAD_VERSION && payload.codes !== undefined)
+    steps.push({ kind: 'replace-codes', codes: payload.codes })
 
   return { kind: 'plan', plan: { steps, summary } }
 }

@@ -9,7 +9,7 @@
  * 한 잡에 여러 장을 담을 때 장마다 제 디렉터리(`b1/` · `r2/` …)에 둔다 — 번들의 링크가 상대 경로라 장마다 다른 테마 · 시트가 섞이지 않는다.
  */
 import { exportBundle, type BundleTheme } from '@wirebound/exporter'
-import type { PageDocument } from '@wirebound/schema'
+import type { CodeTable, PageDocument } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { readWbtheme } from '@wirebound/themes'
 import { unzlibSync } from 'fflate'
@@ -25,11 +25,16 @@ export interface Entry {
 
 let serial = 0
 
-/** 번들 한 장 — `exportBundle` 이 낸 파일 그대로를 제 디렉터리에 둔다. */
-export function bundled(title: string, document: PageDocument, theme: BundleTheme | null = null): Entry {
+/** 번들 한 장 — `exportBundle` 이 낸 파일 그대로를 제 디렉터리에 둔다. `codes` 는 프로젝트의 공통코드 표(`ExportBundleOptions.codes`). */
+export function bundled(title: string, document: PageDocument, theme: BundleTheme | null = null, codes?: CodeTable): Entry {
   serial += 1
   const dir = `b${serial}`
-  const bundle = exportBundle({ pages: [{ title, document }], runtimeJs: readExportRuntime(), theme })
+  const bundle = exportBundle({
+    pages: [{ title, document }],
+    runtimeJs: readExportRuntime(),
+    theme,
+    ...(codes === undefined ? {} : { codes }),
+  })
   return {
     title,
     path: `${dir}/${bundle.pagePaths[0]!}`,

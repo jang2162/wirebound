@@ -116,6 +116,11 @@ export type ServerFrame =
    */
   | { type: 'comments-changed'; projectId: string; pageId: string }
   /**
+   * **프로젝트의 공통코드 표가 바뀌었다 — 표를 다시 읽어라**(서버 `ws/protocol.ts`의 그 갈래). 본문은 안 온다. 받는 자리는 셸의 표다
+   * (`codes/project-codes.tsx` 의 `reload`).
+   */
+  | { type: 'codes-changed'; projectId: string }
+  /**
    * **프로젝트의 테마 바인딩 · 토큰이 바뀌었다**(서버 `ws/protocol.ts`의 그 갈래). 받는 자리는 셸의 프로젝트 테마다(`theme/project-theme.tsx`
    * 의 `applyFrame` — 판이 같으면 토큰만 바꾸고, 다르면 다시 읽어 번들을 싣는다).
    */
@@ -316,6 +321,8 @@ export function parseServerFrame(raw: string): ServerFrame | null {
         : null
     case 'membership-changed':
       return str(value.projectId) ? { type: 'membership-changed', projectId: value.projectId } : null
+    case 'codes-changed':
+      return str(value.projectId) ? { type: 'codes-changed', projectId: value.projectId } : null
     case 'comments-changed':
       return str(value.projectId) && str(value.pageId)
         ? { type: 'comments-changed', projectId: value.projectId, pageId: value.pageId }

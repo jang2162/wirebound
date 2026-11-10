@@ -56,6 +56,7 @@ function syntheticRows(pages: number, nodes: number): ExportRows {
     theme: null,
     themeWarning: null,
     images: [],
+    codes: [],
     pages: Array.from({ length: pages }, (_, p) => ({
       id: `p${p}`,
       projectId: 'x',

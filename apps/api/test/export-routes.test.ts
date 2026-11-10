@@ -271,6 +271,26 @@ describe('GET /:projectId/export', () => {
   })
 
   /**
+   * **내려받기(워커가 조립한다)도 공통코드 표를 싣는다** — 같은 스레드의 `exportProjectBundle` 만 재면 메인이 워커로 표를 안 넘긴 판이 초록이다
+   * (행을 메시지로 쪼개 보낸다 — `export-worker.ts` 의 `feed`).
+   */
+  it('공통코드 표가 있으면 내려받은 zip 에 «공통코드» 장과 페이지 데이터의 표가 있다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, 'codes-zip')
+      const post = (url: string, payload: Record<string, unknown>) =>
+        ctx.app.inject({ method: 'POST', url: `/api/projects/${fixture.projectId}/codes${url}`, cookies: fixture.cookie, payload })
+      expect((await post('', { key: 'GRADE', name: '등급' })).statusCode).toBe(201)
+      expect((await post('/GRADE/items', { value: 'VIP', name: '우수' })).statusCode).toBe(201)
+      const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export`, cookies: fixture.cookie })
+      expect(res.statusCode).toBe(200)
+      const files = unzipSync(new Uint8Array(res.rawPayload))
+      const chapter = files['wirebound-export-codes-zip/codes.html']
+      expect(chapter === undefined ? '' : strFromU8(chapter)).toContain('<td>우수</td>')
+      expect(strFromU8(files['wirebound-export-codes-zip/index.html']!)).toContain('"codes":[{"key":"GRADE"')
+    })
+  })
+
+  /**
    * **zip 엔트리 → 그 파일의 내용**. 이름과 내용이 어긋나도 눈으로는
    * 그럴듯하므로, 페이지 셋을 넣고 **자리마다** 견준다.
    */

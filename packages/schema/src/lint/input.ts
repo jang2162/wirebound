@@ -20,6 +20,7 @@
  * 그래서 필드는 **lint가 실제로 읽는 것만** 둔다. `sortOrder`·`headSeq`·`schemaVersion`·
  * `createdAt`은 어느 규칙도 보지 않으므로 없다 — 넣으면 호출자가 못 채울 때 못 부른다.
  */
+import type { CodeTable } from '../codes'
 import type { PageDocument } from '../node'
 
 /** 메뉴 노드 하나. 트리로 접지 않고 **평평하게** 받는다 — 스냅샷 payload와 같은 모양이다. */
@@ -56,6 +57,8 @@ export interface LintProject {
   menu: readonly LintMenuNode[]
   pages: readonly LintPage[]
   comments: readonly LintComment[]
+  /** 공통코드 표. 없으면 공통코드 규칙(`broken-code-ref` 등 다섯)이 안 돈다 — 표를 못 받은 소비자가 모든 참조를 «끊겼다» 고 말하지 않게. */
+  codes?: CodeTable
 }
 
 /**

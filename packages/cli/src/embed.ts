@@ -51,6 +51,18 @@ export {
 } from './read/page'
 export { countErrors, lintReport, type LintNoSuchPath, type LintOutcome, type LintReport } from './read/lint'
 export { prepareCatalog } from './read/catalog'
+export {
+  applyCodeEdits,
+  fetchCodeTable,
+  fetchCodeUsage,
+  readCodeEdit,
+  CODE_EDIT_OPS,
+  type CodeEdit,
+  type CodeEditOutcome,
+  type CodeTableListing,
+  type CodeUsageCounts,
+  type CodeUsageHit,
+} from './codes'
 
 /**
  * 위 함수들이 **돌려주는** 순수 타입을 함께 내준다.

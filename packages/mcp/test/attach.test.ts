@@ -122,4 +122,7 @@ const READ_ARGS: Record<string, Record<string, unknown>> = {
   patch_page: { path: '관리자/회원/목록', baseSeq: 0, ops: [{ op: 'remove', path: '/root/children/1' }] },
   add_comment: { path: '관리자/회원/목록', nodeId: 'list', body: '정렬 기준이 없습니다' },
   validate: {},
+  list_codes: {},
+  code_usage: { group: 'KIND' },
+  edit_codes: { ops: [{ op: 'add-group', group: 'NEW', name: '새 그룹' }] },
 }

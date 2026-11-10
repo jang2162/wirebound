@@ -104,7 +104,9 @@ export function snapshotToLintInput(payload: SnapshotPayload, config?: LintConfi
     nodeId: comment.nodeId,
   }))
 
-  return { input: { project: { menu, pages, comments }, config }, notes }
+  // 판 4 의 공통코드 표 — 판 3 이하는 표가 없어 공통코드 규칙이 안 돈다(`LintProject.codes`).
+  const project = { menu, pages, comments, ...(payload.codes === undefined ? {} : { codes: payload.codes }) }
+  return { input: { project, config }, notes }
 }
 
 /**

@@ -58,7 +58,7 @@
  * 부른다. 빈 상태의 말과 탭 이름도 `../labels`가 소유한다. `test/pptx-parity.test.tsx`가
  * 값으로, `test/duplicate-census.test.ts`가 소스로 그것을 지킨다.
  */
-import type { PageDocument } from '@wirebound/schema'
+import { indexCodes, type CodeTable, type PageDocument } from '@wirebound/schema'
 import { commentEntries, type BundleComment, type CommentEntry } from '../bundle/comments'
 import {
   EMPTY_COMMENTS,
@@ -112,6 +112,8 @@ export interface PptxScreen {
 export interface ExportPptxOptions {
   /** **순서가 곧 슬라이드 순서다.** */
   pages: readonly PptxPage[]
+  /** 프로젝트의 공통코드 표 — 코멘트 · 상호작용 문장이 묶인 노드를 표의 이름으로 부른다(화면 이미지가 그린 이름이다). */
+  codes?: CodeTable
 }
 
 export interface ExportedPptx {
@@ -151,10 +153,11 @@ export function exportPptx(options: ExportPptxOptions): ExportedPptx {
   // **문장화보다 먼저다**(위 머리말). 멱등이라 호출자가 등록한 것을 덮지 않는다.
   installRegistries()
 
+  const codes = options.codes === undefined ? undefined : indexCodes(options.codes)
   const screenless: string[] = []
   const slides: SlideSource[] = pages.map((page, index) => {
-    const entries = commentEntries(page.document, page.comments ?? [])
-    const sentences = pageSentences(page.document).map((sentence) => sentence.text)
+    const entries = commentEntries(page.document, page.comments ?? [], codes)
+    const sentences = pageSentences(page.document, codes).map((sentence) => sentence.text)
     const screen = page.screen ?? null
     if (screen === null) screenless.push(page.title)
 

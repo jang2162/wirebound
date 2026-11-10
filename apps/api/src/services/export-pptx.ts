@@ -126,6 +126,7 @@ export async function buildProjectPptx(rows: ExportRows, screenSource: PptxScree
 
   const { parts, screenless } = exportPptx({
     pages: pages.map((page, index) => ({ ...page, screen: screens[index] ?? null })),
+    codes: rows.codes,
   })
 
   const failed = new Set(failures.map((failure) => failure.title))

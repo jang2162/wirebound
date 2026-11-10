@@ -132,7 +132,15 @@ export interface ComponentDef {
    * 자리가 본다(`catalog/index.ts` 의 `assertPresets`). MCP · REST 는 받지 않는다 — 에디터의 넣는 길(`createNode(type, nextId, preset)`)의 장치다.
    */
   presets?: readonly ComponentPreset[]
+  /** 공통코드에 묶이는 꼴 — 없으면 `WbNode.code` 를 받지 않는다(`validate.ts`의 `invalid-code-ref`). */
+  code?: CodeBinding
 }
+
+/**
+ * 공통코드에 묶이는 꼴(`ComponentDef.code`). `choices` — 선택지를 그룹의 항목에서 받는다(`options` prop 이 대체 글이다). `label` — 항목 하나의
+ * 이름을 대표 글 prop 하나에 그린다. 기준은 «코드 이름이 찍힐 만한 대표 글 하나가 있는 타입»이다(정본 설계서 「컴포넌트 카탈로그」).
+ */
+export type CodeBinding = { kind: 'choices' } | { kind: 'label'; prop: string }
 
 /** 프리셋 하나(`ComponentDef.presets`). `key` 는 그 타입 안에서 겹치지 않고 구역 이름과 같은 꼴이다. `label` · `description` 은 카드의 글이다. */
 export interface ComponentPreset {
@@ -249,6 +257,10 @@ export function defineComponent(def: ComponentDef): ComponentDef {
   }
 
   const known = propKeys(def.props)
+  // 묶인 글을 그릴 prop 이 없으면 렌더러가 표의 이름을 어디에도 못 싣고, 대체 글도 없다.
+  if (def.code?.kind === 'label' && !known.has(def.code.prop))
+    throw new Error(`${type}: code 의 prop 이 스키마에 없습니다: ${def.code.prop}`)
+  if (def.code?.kind === 'choices' && !known.has('options')) throw new Error(`${type}: code 가 choices 인데 options prop 이 없습니다`)
   for (const field of def.editor) {
     if (!known.has(field.prop)) {
       throw new Error(`${type}: editor가 스키마에 없는 prop을 가리킵니다: ${field.prop}`)

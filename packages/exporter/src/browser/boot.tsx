@@ -14,7 +14,7 @@
  * 못 고르므로 여기서 먼저 기본으로 접는다.
  */
 import { NO_THEME } from '@wirebound/renderer'
-import { DEFAULT_VIEW_STATE, type PageDocument } from '@wirebound/schema'
+import { DEFAULT_VIEW_STATE, indexCodes, type PageDocument } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
@@ -94,6 +94,7 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       markers: data.markers,
       images: data.images ?? {},
       popups: data.popups ?? {},
+      ...(data.codes === undefined ? {} : { codes: indexCodes(data.codes) }),
       status,
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),

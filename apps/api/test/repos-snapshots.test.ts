@@ -46,8 +46,8 @@ describe('payload 규격', () => {
    * *"payload에 담기는 것은 다섯(메뉴 · 페이지 · 레이아웃 · 코멘트 · 테마 바인딩)이고 겹layer는 없다."* **분모를 손으로 적지
    * 않는다**: 규격의 shape에서 자원 이름을 뽑아 센다(`SNAPSHOT_RESOURCES`).
    */
-  it('자원은 다섯이고 겹layer가 없다', () => {
-    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['comments', 'layouts', 'menu', 'pages', 'theme'])
+  it('자원은 여섯이고 겹layer가 없다', () => {
+    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['codes', 'comments', 'layouts', 'menu', 'pages', 'theme'])
   })
 
   it('선언되지 않은 절(겹layer 등)은 그 자체로 거부된다', () => {
@@ -435,13 +435,13 @@ describe('readCaptureFingerprint', () => {
    * **지문이 덮는 테이블은 payload가 담는 자원과 하나씩 맞물린다.** 하나라도 빠지면 그
    * 자원의 변화가 수집 도중에 일어나도 지문이 침묵한다.
    */
-  it('빈 프로젝트라도 네 테이블과 테마 바인딩을 전부 낸다', async () => {
+  it('빈 프로젝트라도 네 테이블과 테마 바인딩 · 공통코드 표를 전부 낸다', async () => {
     await withApi(async (ctx) => {
       const { project } = await fixture(ctx)
 
       const parsed = JSON.parse((await readCaptureFingerprint(ctx.db, project.id)).fingerprint) as Record<string, unknown>
 
-      expect(Object.keys(parsed).sort()).toEqual(['comments', 'layouts', 'menu_nodes', 'pages', 'theme'])
+      expect(Object.keys(parsed).sort()).toEqual(['codes', 'comments', 'layouts', 'menu_nodes', 'pages', 'theme'])
     })
   })
 })

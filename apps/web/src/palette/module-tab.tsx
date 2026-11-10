@@ -74,6 +74,8 @@ import { openDocumentNow, useEditorStoreInstance } from '../store/use-editor-sto
 import { useCardDoubleClick } from './card-double-click'
 import { moduleDroppedNotice, moduleInsertOps } from './module-insert'
 import { paletteAddTarget } from './palette-add'
+import { useProjectCodes } from '../codes/project-codes'
+import { brokenCodesNotice, countBrokenCodes } from '../codes/broken-codes'
 
 /** 개인 모듈이 없을 때의 안내 한 줄. */
 export const NO_PERSONAL_MODULES = "구조 트리에서 노드를 골라 '모듈로 저장'에서 '개인 모듈'을 고르면 여기에 섭니다"
@@ -247,8 +249,9 @@ function useModuleInsert(input: {
   const api = useApi()
   const store = useEditorStoreInstance()
   const { commitOps } = useEditCommit({ projectId: input.projectId, pageId: input.pageId ?? '' })
-  const live = useRef({ commitOps, input })
-  live.current = { commitOps, input }
+  const codes = useProjectCodes().index
+  const live = useRef({ commitOps, input, codes })
+  live.current = { commitOps, input, codes }
   const busy = useRef(false)
 
   return useCallback(
@@ -321,7 +324,14 @@ function useModuleInsert(input: {
         const placed = (): void => {
           const last = edit.selectIds[edit.selectIds.length - 1]
           if (last !== undefined) store.selectPlaced(edit.selectIds, last)
-          const dropped = [moduleDroppedNotice(edit), claimed?.notice ?? ''].filter((line) => line !== '').join(' ')
+          const dropped = [
+            moduleDroppedNotice(edit),
+            claimed?.notice ?? '',
+            // 표에 없는 키를 든 노드도 거절 없이 들어간다(`codes/broken-codes.ts`).
+            brokenCodesNotice(countBrokenCodes(nodes, live.current.codes)),
+          ]
+            .filter((line) => line !== '')
+            .join(' ')
           if (dropped !== '') store.setInfoNotice(dropped)
         }
         if (!live.current.commitOps(edit.ops, { after: placed })) return false

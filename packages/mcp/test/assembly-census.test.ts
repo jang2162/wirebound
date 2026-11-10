@@ -94,6 +94,10 @@ const ALLOWED_EMBED: readonly { name: string; why: string }[] = [
   { name: 'callApi', why: '쓰기 둘이 REST 를 직접 부른다. wireb 에 명령을 안 만든다(설계서 「CLI」의 명령 목록에 그 줄이 없다)' },
   { name: 'parseJson', why: '〃 — 응답 본문을 읽는 자리도 packages/cli 의 것을 쓴다' },
   { name: 'CliError', why: '409·423 을 status 로 가른다. 문장에서 숫자를 되파면 서버가 문장을 바꾸는 날 조용히 틀린다' },
+  { name: 'fetchCodeTable', why: 'list_codes — wireb codes list 와 같은 함수(표 + 사용 수)' },
+  { name: 'fetchCodeUsage', why: 'code_usage — wireb codes usage 와 같은 함수' },
+  { name: 'applyCodeEdits', why: 'edit_codes — 차례로 보내고 첫 거절에서 멈추는 한 벌' },
+  { name: 'readCodeEdit', why: 'edit_codes — ops 원소의 꼴을 보내기 전에 읽는다(키 꼴 · 상한은 서버)' },
 ]
 
 describe('조립이 두 벌이 되는 길을 막는다', () => {

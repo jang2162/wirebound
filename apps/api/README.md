@@ -411,6 +411,15 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/modules` | POST | **editor** | `{ name, nodes: WbNode[] }` | 201 `{ module }`. `nodes` 는 1개 이상 — 넣으면 고른 자리의 형제가 될 것이다. `marker` 와 **묶음 밖 노드를 겨냥하는 액션은 저장하며 걷는다**. 이름 1~60자 밖 · 노드 0개 · 노드 봉투 위반 · 선언되지 않은 키 · NUL · 짝 없는 서로게이트(이름 · 노드)는 400, `Page` 가 든 노드는 422 `nested-page`. **이름 중복은 오류가 아니다** |
 | `/api/projects/:projectId/modules/:moduleId` | PATCH | **editor** | `{ name }` | 200 `{ module }` — **이름만 바꾼다**(내용을 바꾸려면 새로 저장하고 옛것을 지운다). 이름 규칙은 저장과 같다. 없는 id · 남의 프로젝트의 id 는 404 |
 | `/api/projects/:projectId/modules/:moduleId` | DELETE | **editor** | — | 204. 없는 id · 남의 프로젝트의 id 는 404, uuid 가 아닌 id 는 400 |
+| `/api/projects/:projectId/codes` | GET | viewer | — | 200 `{ groups: [{ key, name, items: [{ value, name, active }] }] }` — 공통코드 표(아래 "공통코드"). 그룹 · 항목 모두 차례대로 |
+| `/api/projects/:projectId/codes` | POST | **editor** | `{ key, name }` | 201 `{ group }`. 키 꼴(`^[A-Z][A-Z0-9_]{0,39}$`) · 이름 1~60자 · 받지 않는 글자는 400, 겹친 키는 409(`issues[].code` `code-key-taken`), 프로젝트당 500 개 넘으면 400 |
+| `/api/projects/:projectId/codes/:key` | PATCH | **editor** | `{ name?, sortOrder? }`(하나 이상) | 200 `{ group }`. **`key` 는 못 바꾼다** — 본문에 실으면 400. `sortOrder` 는 0 부터의 자리(넘치면 끝). 없는 그룹 404 |
+| `/api/projects/:projectId/codes/:key` | DELETE | **editor** | — | 204 — 항목째 지운다. 노드의 참조는 끊긴 참조로 남는다. 없는 그룹 404 |
+| `/api/projects/:projectId/codes/:key/items` | POST | **editor** | `{ value, name, active? }` | 201 `{ item }`. 코드값 1~40자 · 받지 않는 글자는 400, 겹친 값 409 `code-key-taken`, 그룹당 200 개 넘으면 400, 없는 그룹 404 |
+| `/api/projects/:projectId/codes/:key/items/:value` | PATCH | **editor** | `{ name?, sortOrder?, active? }`(하나 이상) | 200 `{ item }`. **`value` 는 못 바꾼다**(본문에 실으면 400). 없는 그룹 · 항목 404 |
+| `/api/projects/:projectId/codes/:key/items/:value` | DELETE | **editor** | — | 204. 없는 그룹 · 항목 404 |
+| `/api/projects/:projectId/codes/usage` | GET | viewer | 질의 `group`(필수) · `item` | 200 `{ usage: [{ kind: 'page' \| 'layout' \| 'module', id, title, nodes: [{ nodeId, name }] }] }` — 그 그룹(· 항목)을 가리키는 노드. 숨은 상태의 노드 · 구역 안 노드도 센다. 개인 모듈은 안 센다 |
+| `/api/projects/:projectId/codes/usage-counts` | GET | viewer | — | 200 `{ counts: { [key]: { group, items: { [value]: n } } } }` — 그룹 목록이 한 번에 받는 사용 수 |
 | `/api/projects/:projectId/assets` | POST | **editor**(세션 · 그 프로젝트의 토큰) | 본문 = 그림 바이트 그대로(multipart 아님 · `Content-Type` 은 안 믿는다) · 머리 `X-Asset-Name`(파일 이름 · `encodeURIComponent` · 선택) | 201 `{ id, name, mime, size, width, height, createdAt }` — `id` 는 바이트의 sha256. **이미 이 프로젝트에 있으면 200 · 같은 답**(한도를 안 센다). 413 `too-large` · 415 `unsupported-media` · 422(`issues[].code` `asset-dimensions`) · 409 `asset-quota` — 아래 "그림" |
 | `/api/projects/:projectId/assets` | GET | viewer | — | 200 `{ assets: [위와 같은 모양], usedBytes, limitBytes, fileLimitBytes }` — 최근 것 먼저 |
 | `/api/projects/:projectId/assets/:id` | GET | viewer(세션 · 토큰) | — | 200 그림 바이트(머리는 아래 "그림"). **이 프로젝트의 소유 행이 없으면 404** — 남의 프로젝트 그림의 해시 · 없는 해시가 같은 답이다 |
@@ -1451,6 +1460,18 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
   의 `readExportImages`). PPTX 는 그 번들을 찍는다.
 - **MCP · CLI 에는 그림 도구가 없다** — 이미 올린 그림의 id 를 `patch_page` 로 적을 수 있다.
 
+### 공통코드
+
+프로젝트마다 표 하나(그룹 → 항목). 노드는 DB id 가 아니라 **그룹 키 · 코드값**으로 가리킨다(`WbNode.code` — 정본 설계서 「페이지 스키마 노드」).
+그래서 **`key` · `value` 는 만든 뒤 못 바꾼다** — 바꾸려면 새 항목을 만들고 다시 묶는다(사용처 목록이 그 작업 목록이다). 이름 · 차례 · 사용
+여부는 자유롭게 고친다. 이력이 없다 — revision · 되돌리기가 없고 스냅샷만 표를 담는다. 소프트 잠금 대상이 아니다(나중 쓰기가 이긴다).
+
+- **잠금 순서** — 쓰기는 «프로젝트 행 `FOR NO KEY UPDATE` → 코드 행 → 재확인»(`routes/codes.ts` 머리말). 같은 프로젝트의 코드 쓰기가 한 줄로 서고,
+  복원 · 프로젝트 삭제 뒤에 선다.
+- **실시간** — 쓰기는 커밋 뒤 `codes-changed`(아래 "실시간")를 보낸다. 아무것도 안 바꾼 거절(404 · 409)은 안 보낸다.
+- **사용처는 서버가 센다** — 걷는 함수는 `@wirebound/schema` 의 `codeUsage` · `codeUsageCounts` 하나다(CLI · MCP · 번들이 같은 셈을 낸다).
+  사용처 응답의 노드 이름(`nodes[].name`)은 표의 이름으로 부른 것이다 — 끊긴 참조의 노드는 prop 의 대체 글.
+
 ### 모듈 응답 형태
 
 모듈은 **넣는 노드 묶음**이고 소유자가 둘이다(설계서 「모듈」) — **프로젝트 모듈**(`/api/projects/:projectId/modules` — 프로젝트가 소유하고
@@ -1645,6 +1666,7 @@ COMMIT 앞에 받아 둔 xid 의 `pg_xact_status`다(쓰기마다 왕복 하나�
 | `restored` | 스냅샷 복원이 성공했을 때(답을 잃은 복원이 한도 뒤에 커밋되면 그때 — `menu-changed` · 잠금 놓기 · `theme-changed`와 함께 늦게), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `snapshotId` · `safetySnapshotId` · (요청이 실어 왔으면) `clientRestoreId` |
 | `theme-changed` | 테마 바인딩 저장 · 판 3 복원이 커밋됐을 때, **낸 사람의 연결까지** 룸 전체에 | `projectId` · `themeId` · `version` · `tokens` · `rev` — 받는 쪽은 자기가 든 `rev` 보다 크지 않으면 버린다 |
 | `menu-changed` | 메뉴 · 페이지 트리를 바꾸는 쓰기가 커밋됐을 때(아래 «트리 쓰기»), **낸 사람의 연결까지** 룸 전체에 | `projectId` · `rev`(그 쓰기가 올린 메뉴 트리 판 번호) — 트리는 안 싣는다. 받는 쪽은 자기가 든 트리의 `rev` 보다 크면 `GET …/tree`로 다시 받는다 |
+| `codes-changed` | 공통코드 표를 바꾸는 쓰기가 커밋됐을 때, **낸 연결을 빼고** 룸 전체에 | `projectId` — 본문은 안 싣는다. 받는 쪽은 `GET …/codes` 로 다시 읽고 캔버스를 다시 그린다 |
 | `comments-changed` | 코멘트를 달고 · 고치고 · 지우는 쓰기가 커밋됐을 때, **낸 연결을 빼고** 룸 전체에(같은 멱등 키의 재생은 빼지 않는다 — 앞 요청이 답을 잃었으면 그 신호는 아무 연결에도 안 갔다) | `projectId` · `pageId` — 본문은 안 싣는다. 받는 쪽은 그 페이지의 목록을 열어 두었으면 `GET …/comments`로 다시 읽는다. 번호의 변화는 `page-changed`가 따로 나른다 · 재번호는 행을 안 바꿔 이것을 안 낸다 |
 | `patch-ack` | `patch` 프레임이 성공했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `seq` · `revisionId` · `inverse` · `warnings` |
 | `patch-error` | `patch` 프레임이 실패했을 때, **낸 사람에게만** | `projectId` · `pageId` · `clientOpId` · `status` · `code` · `message` · `issues` — **REST 에러 봉투와 같은 값이다** |

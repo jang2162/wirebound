@@ -4,6 +4,7 @@ import { oneLine } from '../summary'
 
 export const ButtonDef = defineComponent({
   type: 'Button',
+  code: { kind: 'label', prop: 'label' },
   // **이름은 설계서 「자동 문장화」의 예에서 빌려 왔다**(*"검색 버튼 클릭 시"*) — 상호작용 문장이 이 이름으로
   // 노드를 부르므로 규격의 낱말과 어긋나면 문장과 규격이 갈린다.
   label: '버튼',
@@ -26,6 +27,7 @@ export const ButtonDef = defineComponent({
 
 export const LinkDef = defineComponent({
   type: 'Link',
+  code: { kind: 'label', prop: 'label' },
   label: '링크',
   description: '다른 화면으로 이동하는 글자 링크.',
   group: 'action',

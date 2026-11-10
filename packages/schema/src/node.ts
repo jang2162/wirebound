@@ -42,6 +42,11 @@ export interface WbNode {
   visibility?: NodeVisibility
   marker?: number
   interactions?: Interaction[]
+  /**
+   * 공통코드 참조 — 그룹 키 · 코드값으로 표의 항목을 가리킨다(정본 설계서 「페이지 스키마 노드」). 받는 타입과 꼴은 카탈로그의
+   * `ComponentDef.code` 가 정하고 `validate.ts` 가 본다(`invalid-code-ref`). 묶인 동안에도 prop 의 글은 남는다 — 참조가 끊겼을 때의 대체 글이다.
+   */
+  code?: CodeRef
   /** 몸통 구역(`body`)의 자식 — 카탈로그가 몸통을 선언한 타입만 갖는다. */
   children?: WbNode[]
   /**
@@ -49,6 +54,16 @@ export interface WbNode {
    * 없다(`zones.ts` 머리말). 읽는 자리는 `childLists` 하나를 지난다.
    */
   zones?: Record<string, WbNode[]>
+}
+
+/**
+ * 노드의 공통코드 참조. 선택 위젯(`choices`)은 `group` 만 들고 목업에서 고른 것을 `selected`(코드값 — 하나 고르는 타입은 0 ~ 1 개)에 든다 — 이름이
+ * 바뀌어도 고름이 안 풀리게 값으로 가리킨다. 대표 글 타입(`label`)은 `group` + `item` 이다. 모양은 봉투(`envelope.ts`의 `CodeRefSchema`)가 본다.
+ */
+export interface CodeRef {
+  group: string
+  item?: string
+  selected?: string[]
 }
 
 /**

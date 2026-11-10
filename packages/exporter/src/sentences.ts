@@ -28,12 +28,12 @@
  * **번들과 PPTX가 같은 설계서를 다르게 말한다.** `test/duplicate-census.test.ts`가
  * 부르는 자리를 세어 그 길을 막는다.
  */
-import { listInteractionSentences, type InteractionSentence, type PageDocument } from '@wirebound/schema'
+import { listInteractionSentences, type CodeIndex, type InteractionSentence, type PageDocument } from '@wirebound/schema'
 import { nodesOnly } from './nodes'
 
-/** 이 페이지의 상호작용 문장들. **문서 순서다.** */
-export function pageSentences(page: PageDocument): InteractionSentence[] {
+/** 이 페이지의 상호작용 문장들. **문서 순서다.** `codes` 를 주면 묶인 노드를 표의 이름으로 부른다 — 목업이 그리는 이름이다. */
+export function pageSentences(page: PageDocument, codes?: CodeIndex): InteractionSentence[] {
   const tree = nodesOnly(page.root)
   if (tree === null) return []
-  return listInteractionSentences({ ...page, root: tree })
+  return listInteractionSentences({ ...page, root: tree }, codes)
 }

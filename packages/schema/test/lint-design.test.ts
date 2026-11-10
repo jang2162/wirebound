@@ -596,6 +596,31 @@ describe('표를 덮는다 (D6)', () => {
             },
           }),
           page({ id: 'pg4', title: '팝업', target: 'page:관리자/회원/팝업', document: { version: 5, root: { id: nid(), type: 'Popup' } } }),
+          // 공통코드 다섯 — 끊긴 항목 · 고른 값이 없음 · 사용 안 함 · 31 개 · 0 개.
+          page({
+            id: 'pg5',
+            title: '코드',
+            target: 'page:관리자/회원/코드',
+            document: doc([
+              node('Affix', { code: { group: 'S', item: 'GONE' } }),
+              node('Affix', { code: { group: 'S', item: 'OFF' } }),
+              node('CheckboxGroup', { code: { group: 'S', selected: ['GONE'] } }),
+              node('CheckboxGroup', { code: { group: 'MANY' } }),
+              node('CheckboxGroup', { code: { group: 'EMPTY' } }),
+            ]),
+          }),
+        ],
+        codes: [
+          {
+            key: 'S',
+            name: '상태',
+            items: [
+              { value: 'OFF', name: '꺼짐', active: false },
+              { value: 'ON', name: '켬', active: true },
+            ],
+          },
+          { key: 'MANY', name: '많음', items: Array.from({ length: 31 }, (_, i) => ({ value: `V${i}`, name: `이름${i}`, active: true })) },
+          { key: 'EMPTY', name: '빔', items: [] },
         ],
       }),
       { naming: { page: '^[가-힣 ]+$' } },

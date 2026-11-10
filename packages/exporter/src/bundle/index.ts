@@ -42,7 +42,16 @@
  * 아니다**(페이지도 둘만 적혀 있다).
  */
 import { isPopupDocument, renderDocument, type NodeRenderError } from '@wirebound/renderer'
-import { imageIdsIn, installCatalog, isPageTargetAction, pageTargetKey, type PageDocument } from '@wirebound/schema'
+import {
+  codeUsage,
+  imageIdsIn,
+  indexCodes,
+  installCatalog,
+  isPageTargetAction,
+  pageTargetKey,
+  type CodeTable,
+  type PageDocument,
+} from '@wirebound/schema'
 import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
 import { tokensCss } from '@wirebound/themes'
 import { eachNode } from '../nodes'
@@ -52,7 +61,7 @@ import { scriptJson } from '../script-json'
 import { commentEntries, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
 import { SHELL_CSS, SHELL_CSS_PATH } from './shell-css'
-import { shellBody, shellHead, shellScripts, type ShellNavItem } from './shell'
+import { codesBody, shellBody, shellHead, shellScripts, type CodesChapterGroup, type ShellNavItem } from './shell'
 
 /** 번들에 실을 페이지 하나. */
 export interface BundlePage {
@@ -115,6 +124,11 @@ export interface ExportBundleOptions {
    * 페이지가 들었는데 여기 없는 id 는 런타임이 «그림을 불러올 수 없음» 으로 그린다.
    */
   images?: readonly BundleImage[]
+  /**
+   * 프로젝트의 공통코드 표. 그룹이 하나라도 있으면 페이지 데이터에 실려 묶인 노드가 표의 이름으로 서고(`ExportPageData.codes`), 뿌리의
+   * `codes.html` 에 «공통코드» 장(그룹마다 항목 표 + 쓰는 페이지)이 서며 좌측 트리가 그 장을 가리킨다. 비었거나 없으면 셋 다 없다.
+   */
+  codes?: CodeTable
 }
 
 /** 번들에 실을 그림 하나. */
@@ -148,6 +162,8 @@ export interface ExportedBundle {
 }
 
 const INDEX_PATH = 'index.html'
+/** «공통코드» 장 — 페이지가 아니라 좌측 트리의 따로 선 줄이다. 페이지 파일은 `pages/` 아래라 이름이 겹치지 않는다. */
+export const CODES_PATH = 'codes.html'
 const PAGES_DIRECTORY = 'pages'
 const VIEWS_CSS_PATH = 'assets/views.css'
 const TOKENS_CSS_PATH = 'assets/tokens.css'
@@ -193,12 +209,14 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     structuralErrors(page.document).map((error) => ({ path: paths[index]!, title: page.title, error })),
   )
 
+  const codes = (options.codes ?? []).length > 0 ? options.codes! : null
   const files: BundleFile[] = [
-    { path: INDEX_PATH, content: pageHtml(options, paths, targets, popupDocs, 0, INDEX_PATH, lang) },
+    { path: INDEX_PATH, content: pageHtml(options, paths, targets, popupDocs, 0, INDEX_PATH, lang, codes) },
     ...pages.map((_page, index) => ({
       path: paths[index]!,
-      content: pageHtml(options, paths, targets, popupDocs, index, paths[index]!, lang),
+      content: pageHtml(options, paths, targets, popupDocs, index, paths[index]!, lang, codes),
     })),
+    ...(codes === null ? [] : [{ path: CODES_PATH, content: codesHtml(options, paths, codes, lang) }]),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
     { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
     { path: RUNTIME_JS_PATH, content: options.runtimeJs },
@@ -321,15 +339,12 @@ function pageHtml(
   index: number,
   at: string,
   lang: string,
+  codes: CodeTable | null,
 ): string {
   const page = options.pages[index]!
-  const nav: ShellNavItem[] = options.pages.map((item, position) => ({
-    title: item.title,
-    href: bundleHref(at, paths[position]!),
-    current: position === index,
-    popup: isPopupDocument(item.document),
-  }))
-  const comments = commentEntries(page.document, page.comments ?? [])
+  const nav = navItems(options, paths, at, index)
+  const codeIndex = codes === null ? undefined : indexCodes(codes)
+  const comments = commentEntries(page.document, page.comments ?? [], codeIndex)
   const markers: ExportMarker[] = []
   for (const entry of comments) {
     if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
@@ -348,6 +363,7 @@ function pageHtml(
     markers,
     ...(Object.keys(images).length === 0 ? {} : { images }),
     ...(Object.keys(popups).length === 0 ? {} : { popups }),
+    ...(codes === null ? {} : { codes }),
   }
   return renderHtmlDocument({
     lang,
@@ -361,9 +377,11 @@ function pageHtml(
     ]),
     body: shellBody({
       nav,
+      ...(codes === null ? {} : { codesNav: { href: bundleHref(at, CODES_PATH), current: false } }),
       description: page.description ?? null,
       comments,
       page: page.document,
+      ...(codeIndex === undefined ? {} : { codes: codeIndex }),
       scripts: shellScripts({
         dataJson: scriptJson(data),
         runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
@@ -372,6 +390,47 @@ function pageHtml(
     }),
   })
 }
+
+/** 좌측 트리의 페이지 줄들 — `current` 가 `-1` 이면 어느 페이지도 지금이 아니다(«공통코드» 장). */
+function navItems(options: ExportBundleOptions, paths: readonly string[], at: string, current: number): ShellNavItem[] {
+  return options.pages.map((item, position) => ({
+    title: item.title,
+    href: bundleHref(at, paths[position]!),
+    current: position === current,
+    popup: isPopupDocument(item.document),
+  }))
+}
+
+/**
+ * «공통코드» 장 — 그룹마다 항목 표와 그 그룹을 쓰는 페이지(링크). 사용처는 `codeUsage`(서버 · 화면과 같은 한 벌)를 번들의 페이지에 돌린다 — 번들에는
+ * 레이아웃 · 모듈이 없어 페이지만 센다. 런타임이 없는 정적 글이다(스크립트가 꺼져도 읽힌다).
+ */
+function codesHtml(options: ExportBundleOptions, paths: readonly string[], codes: CodeTable, lang: string): string {
+  const sources = options.pages.map(({ title, document: page }, index) => ({
+    kind: 'page' as const,
+    id: String(index),
+    title,
+    nodes: [page.root],
+  }))
+  const groups: CodesChapterGroup[] = codes.map((group) => ({
+    group,
+    // 장은 노드 수만 싣는다 — 이름을 안 읽어 표를 넘기지 않는다.
+    usage: codeUsage(sources, group.key).map((hit) => ({
+      title: hit.title,
+      href: bundleHref(CODES_PATH, paths[Number(hit.id)]!),
+      nodes: hit.nodes.length,
+    })),
+  }))
+  return renderHtmlDocument({
+    lang,
+    title: CODES_TITLE,
+    head: shellHead([{ href: bundleHref(CODES_PATH, SHELL_CSS_PATH) }]),
+    body: codesBody({ nav: navItems(options, paths, CODES_PATH, -1), codesHref: bundleHref(CODES_PATH, CODES_PATH), groups }),
+  })
+}
+
+/** «공통코드» 장의 `<title>` · 머리 · 좌측 트리 줄의 이름. */
+export const CODES_TITLE = '공통코드'
 
 /**
  * **`BundleComment`만 다시 낸다.** `BundlePage`가 그 타입을 들므로 호출자가 그것 없이는

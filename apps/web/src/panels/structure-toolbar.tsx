@@ -17,7 +17,8 @@
  */
 import { zoneList, type NodeLock, type WbNode } from '@wirebound/schema'
 import { useEditCommit } from '../edit/use-edit-commit'
-import { changeKindOps, kindTargets } from '../edit/change-kind'
+import { useProjectCodes } from '../codes/project-codes'
+import { changeKindOps, changeKindUnbindsCode, kindTargets } from '../edit/change-kind'
 import { buildCellsOps, buildCellsReads, buildCellsRefusal, splitRowOps, splitRowRefusal } from '../edit/grid-row-actions'
 import { aliasOps, moveNodeOps, removeNodeOps } from '../edit/ops'
 import { reselectAfterReject } from '../edit/reselect-after-reject'
@@ -40,6 +41,9 @@ import { structureWhy, type StructureReasonInput, type StructureWhy } from './to
  * 인스턴스가 하나다 — 둘이어도 «in-flight는 항상 하나»는 지켜지지만(펌프 가드가 스토어에 있다) 같은 화면에서
  * 굳이 둘을 만들 이유가 없다.
  */
+/** 종류 바꾸기가 공통코드 묶음을 풀었을 때의 한 줄(정보 통지) — 묶인 채 못 가는 종류로 바꾸면 같은 편집이 푼다. */
+export const CODE_UNBOUND_NOTICE = '공통코드 묶음을 풀었습니다'
+
 export interface StructureCommands {
   abilities: StructureAbilities
   /**
@@ -144,6 +148,7 @@ export function useStructureCommands(props: {
   // 문서는 `useOpenDocument`로 받는다 — 스토어의 문서가 **지금 주소의 것**일 때만 본다
   // (`store/use-editor-store.tsx`가 그 대조를 갖는 유일한 자리다).
   const document = useOpenDocument(props.pageId)
+  const codes = useProjectCodes().index
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   // 훅은 조건부로 부를 수 없으므로 페이지가 없어도 부른다. `pageId`가 없으면 `''`를
@@ -380,14 +385,16 @@ export function useStructureCommands(props: {
     kindLocked,
     changeKind: (nodeId, toType) => {
       if (document === null) return
-      const ops = changeKindOps(document, nodeId, toType)
+      const ops = changeKindOps(document, nodeId, toType, codes)
       if (ops === null) return
       const blocker = store.editBlockedBy(ops)
       if (blocker !== null) {
         store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
         return
       }
-      commitOps(ops)
+      const node = findNodeSafely(document.root, nodeId)
+      // 새 종류가 공통코드 참조를 못 받으면 같은 묶음이 풀었다(`edit/change-kind.ts`) — 말없이 풀지 않는다.
+      if (commitOps(ops) && node !== undefined && changeKindUnbindsCode(node, toType)) store.setInfoNotice(CODE_UNBOUND_NOTICE)
     },
     splitRowLocked: aliasLocked || splitRefusal !== null || selectedNode?.type !== 'GridRow',
     buildCellsLocked: aliasLocked || cellsRefusal !== null || cellsLock !== null || selectedNode?.type !== 'GridRow',

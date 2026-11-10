@@ -408,4 +408,85 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* «공통코드» 장 — 표가 있는 번들에만 서는 요소(좌측 트리의 둘째 절 · codes.html)를 겨눈다. */
+
+.wb-export-nav-heading-next {
+  margin-top: 1.25rem;
+}
+
+/* ------------------------------------------------------ «공통코드» 장 */
+
+/* 장은 우측 탭이 없다 — 트리 | 본문 두 칸이다. */
+.wb-export-chapter {
+  grid-template-columns: 16rem minmax(0, 1fr);
+}
+
+.wb-export-codes {
+  overflow: auto;
+  padding: 1.5rem 2rem;
+  min-width: 0;
+  background: #ffffff;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-size: 0.875rem;
+  color: #1f2430;
+  line-height: 1.6;
+}
+
+.wb-export-codes-title {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.wb-export-codes-group {
+  margin: 0 0 2rem;
+}
+
+.wb-export-codes-name {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.wb-export-codes-key,
+.wb-export-codes-table code {
+  font-size: 0.8125rem;
+  color: #4b5563;
+  overflow-wrap: anywhere;
+}
+
+.wb-export-codes-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.wb-export-codes-table th,
+.wb-export-codes-table td {
+  padding: 0.375rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.wb-export-codes-table th {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.wb-export-codes-sub {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.wb-export-codes-usage {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.wb-export-codes-empty {
+  margin: 0.25rem 0;
+  color: #6b7280;
+}
 `

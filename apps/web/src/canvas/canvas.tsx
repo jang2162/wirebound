@@ -74,6 +74,7 @@ import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-g
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
+import { useProjectCodes } from '../codes/project-codes'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
@@ -108,7 +109,13 @@ interface MarkerBox {
 const NO_MARKERS: MarkerBox[] = []
 
 /** SDK 기본 뷰의 CSS — 테마 시트보다 **먼저** 와야 같은 특이도에서 테마가 이긴다. 판과 무관해 한 번만 짓는다. */
-const BASE_SHEET: CanvasSheet = { id: 'base', css: defaultViewsCss() }
+/**
+ * **끊긴 공통코드 참조의 표지** — 렌더러가 단 `data-wb-code-broken`(테마 어휘가 아니다 · `packages/renderer` 의 `CodeBrokenAttrs`)에 점선 외곽을 긋는다.
+ * 테마가 겨냥하지 않는 속성이라 셸이 기본 시트에 얹어 그린다 — 테마 · 토큰 시트보다 앞이어도 그 속성을 덮는 규칙이 없다. 외곽선이라 자리를 안 바꾼다.
+ */
+const CODE_MARK_CSS = '[data-wb-code-broken] { outline: 2px dashed #b54708; outline-offset: 2px; }'
+
+const BASE_SHEET: CanvasSheet = { id: 'base', css: `${defaultViewsCss()}\n${CODE_MARK_CSS}` }
 
 /**
  * 캔버스 iframe 머리의 시트 — `base`(SDK 기본 뷰) → `theme`(그 판의 `theme.css` — `<link>` 라 자산 경로가 파일 주소 기준으로 풀린다) →
@@ -325,6 +332,7 @@ export function Canvas(props: {
    */
   const api = useApi()
   const popupStack = usePopupStack()
+  const codes = useProjectCodes()
   useLayoutEffect(() => {
     popupStack.clear()
   }, [runtimeKey, popupStack.clear])
@@ -669,7 +677,15 @@ export function Canvas(props: {
                   projectId={props.projectId}
                 />
               </KeepDropPlace>
-              {mode === 'view' && <PopupLayer stack={popupStack} theme={definition} area={popupArea} onEvent={onPopupEvent} />}
+              {mode === 'view' && (
+                <PopupLayer
+                  stack={popupStack}
+                  theme={definition}
+                  area={popupArea}
+                  onEvent={onPopupEvent}
+                  {...(codes.index === undefined ? {} : { codes: codes.index })}
+                />
+              )}
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -827,6 +843,7 @@ function CanvasDocument(props: {
    * 렌더마다 새 배열이므로 StrictMode의 이중 렌더에서도 누적되지 않는다.
    */
   const errors: NodeRenderError[] = []
+  const codes = useProjectCodes().index
   const tree = renderDocument(props.doc, {
     theme: props.theme,
     viewState: props.viewState,
@@ -838,6 +855,8 @@ function CanvasDocument(props: {
     ...(props.emptyZones === undefined || props.emptyZones === null ? {} : { emptyZones: props.emptyZones }),
     ...(props.reveal === undefined ? {} : { reveal: props.reveal }),
     assetUrl: (id) => projectAssetUrl(props.projectId, id),
+    // 공통코드에 묶인 노드는 셸의 표로 — 표가 없으면(읽기 전 · 실패) prop 의 글이다(`codes/project-codes.tsx`).
+    ...(codes === undefined ? {} : { codes }),
   })
 
   return (

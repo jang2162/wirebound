@@ -171,6 +171,7 @@ function chosen(props: Record<string, unknown>): string | null {
 
 export const InputDef = defineComponent({
   type: 'Input',
+  code: { kind: 'label', prop: 'value' },
   label: '입력',
   description: '글 · 숫자 · 비밀번호를 받는 한 줄 입력 칸.',
   group: 'input',
@@ -225,6 +226,7 @@ export const TextAreaDef = defineComponent({
 
 export const SelectDef = defineComponent({
   type: 'Select',
+  code: { kind: 'choices' },
   label: '셀렉트',
   description: '펼쳐서 항목 하나를 고르는 칸.',
   group: 'input',
@@ -298,6 +300,7 @@ export const TimeInputDef = defineComponent({
 // 테마 변형 `checkbox` · `chip`(체크 칩 묶음)은 테마 manifest 가 선언한다 — 자료 모양이 같고 다른 것은 모양뿐이다(설계 Q1).
 export const CheckboxGroupDef = defineComponent({
   type: 'CheckboxGroup',
+  code: { kind: 'choices' },
   label: '체크박스',
   description: '항목을 여럿 고르는 체크 묶음. 하나면 단일 체크다.',
   group: 'input',
@@ -317,6 +320,7 @@ export const CheckboxGroupDef = defineComponent({
 // 테마 변형 `radio` · `segment`(붙은 칸 — 고른 칸이 채워진다)는 테마 manifest 가 선언한다(설계 Q1). 고른 항목 0 개도 받는다(세그먼트의 «미선택»).
 export const RadioGroupDef = defineComponent({
   type: 'RadioGroup',
+  code: { kind: 'choices' },
   label: '라디오 묶음',
   description: '항목 하나를 고르는 묶음. 테마에 따라 세그먼트로 선다.',
   group: 'input',
@@ -335,6 +339,7 @@ export const RadioGroupDef = defineComponent({
 
 export const ChipDef = defineComponent({
   type: 'Chip',
+  code: { kind: 'label', prop: 'label' },
   label: '칩',
   description: '고른 값을 보이는 작은 꼬리표. 지우기 표지를 달 수 있다.',
   group: 'input',
@@ -355,6 +360,7 @@ export const ChipDef = defineComponent({
 
 export const AffixDef = defineComponent({
   type: 'Affix',
+  code: { kind: 'label', prop: 'text' },
   label: '사이 글자',
   description: '조각 사이의 짧은 글(~ · 부터 · % · 안내 글).',
   group: 'input',

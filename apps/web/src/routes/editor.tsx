@@ -26,7 +26,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
+import { findNode } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -73,6 +74,7 @@ import { projectAbilities } from '../projects/project-actions'
 import { SessionNotices, useLogout } from '../session/session-menu'
 import { useSessionUser } from '../session/session-context'
 import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
+import { ProjectCodesProvider, useProjectCodes } from '../codes/project-codes'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
   EditorStore,
@@ -84,7 +86,7 @@ import {
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK } from '../store/loss-notice'
-import { EditorStoreProvider, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { EditorStoreProvider, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
@@ -525,14 +527,17 @@ export function EditorShellRoute(): ReactElement {
       <CanvasDocumentProvider>
         {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널이 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
-          {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
-          <PlacementRegionsProvider>
-            {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
+          {/* **공통코드 표**(`codes/project-codes.tsx`) — 캔버스 · 팝업 층 · 속성 패널이 읽고, 셸이 `codes-changed` 로 다시 읽게 한다. */}
+          <ProjectCodesProvider projectId={state.project.id}>
+            {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
+            <PlacementRegionsProvider>
+              {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
-            <ViewStateProvider pageId={params.pageId}>
-              <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
-            </ViewStateProvider>
-          </PlacementRegionsProvider>
+              <ViewStateProvider pageId={params.pageId}>
+                <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
+              </ViewStateProvider>
+            </PlacementRegionsProvider>
+          </ProjectCodesProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
     </EditorStoreProvider>
@@ -540,6 +545,31 @@ export function EditorShellRoute(): ReactElement {
 }
 
 /** 세 패널과 상단 도구. 스토어는 컨텍스트에서 꺼낸다. */
+/**
+ * **주소의 `?node=<id>` 를 고른다** — 공통코드 화면의 사용처 줄(`codes/codes-screen.tsx` 의 `usageHref`)이 여기로 데려온다. 그 페이지의 문서가 서면
+ * 한 번 고르고 질의를 걷는다(`replace` — 뒤로 가기에 남기지 않는다 · 다시 고르지 않는다). 문서에 없는 id 는 고르지 않고 걷기만 한다. 남이 잠근
+ * 노드는 `selectNode` 가 안 고른다(「소프트 잠금」).
+ */
+function useNodeFromAddress(pageId: string | undefined): void {
+  const store = useEditorStoreInstance()
+  const [params, setParams] = useSearchParams()
+  const wanted = params.get('node')
+  // 주소의 페이지와 대조한 문서다 — 다른 페이지의 문서에서 고르지 않는다.
+  const document = useOpenDocument(pageId)
+  useEffect(() => {
+    if (wanted === null || document === null) return
+    if (findNode(document.root, wanted) !== undefined) store.selectNode(wanted)
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('node')
+        return next
+      },
+      { replace: true },
+    )
+  }, [wanted, document, store, setParams])
+}
+
 function EditorShell(props: {
   project: ProjectView
   /** 역할을 아는가 — 모르면 아무것도 못 하는 쪽으로 선다(`EditorShellRoute`의 `reread`). */
@@ -550,6 +580,7 @@ function EditorShell(props: {
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
+  useNodeFromAddress(props.pageId)
   /**
    * 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`).
    * 역할은 **실행 중에 바뀐다** — 라우트가 프로젝트를 다시 읽으면 이 줄이 새 값으로 다시 돈다. 모르면
@@ -699,6 +730,7 @@ function EditorShell(props: {
    * 사람의 화면도 맞춰진다.
    */
   const theme = useProjectTheme()
+  const codes = useProjectCodes()
   useRealtime(
     props.project.id,
     useCallback(() => setResyncToken((token) => token + 1), []),
@@ -706,6 +738,7 @@ function EditorShell(props: {
     props.onMembership,
     theme.applyFrame,
     onMenuChanged,
+    codes.reload,
   )
   /**
    * **테마를 따라잡는다** — 라우트의 다시 읽기(룸에 듦 · 다시 붙음 · 멤버십 신호)가 받은 `themeRev` 가 쥔 바인딩보다 새것이면 다시 읽는다.
@@ -816,6 +849,7 @@ function EditorShell(props: {
       : []),
     ...(!switcherInHead && props.pageId !== undefined ? viewStateMenuItems(viewStateChoice, { prefixed: true }) : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
+    { key: 'codes', label: '공통코드', icon: ICONS.codes, to: `/projects/${props.project.id}/codes` },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
     { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
     { key: 'export', label: '프로젝트 내보내기', icon: ICONS.exportProject, onSelect: () => setDialog('export') },

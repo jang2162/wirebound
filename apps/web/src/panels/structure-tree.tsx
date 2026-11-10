@@ -18,6 +18,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import { childLists, nodeAlias, nodeSummary, zoneDefs, zonePointer, type NodeLock, type WbNode } from '@wirebound/schema'
+import { useProjectCodes } from '../codes/project-codes'
 import { DropIndicator, DropRefusal } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { kindTargets } from '../edit/change-kind'
@@ -443,6 +444,8 @@ function StructureNode(props: {
   onSelectZone: (parentId: string, zone: string) => void
 }): ReactElement {
   const { node, row } = props
+  // 묶인 노드의 요약은 표의 이름이다 — 캔버스가 그리는 글과 같은 표(`useProjectCodes`). 표를 못 읽은 동안은 prop 의 대체 글이다.
+  const codes = useProjectCodes().index
   // **모양 가드 둘.** 검증 전 문서에는 `children`이 배열이 아니거나 `type`이
   // 문자열이 아닌 노드가 들어올 수 있고, 둘 다 렌더 도중 던진다 — 앞은 `.map`이,
   // 뒤는 React가(`Objects are not valid as a React child`). 이쪽에는 캔버스와 달리 오류
@@ -457,7 +460,7 @@ function StructureNode(props: {
    * 같은 글 — MCP 가 같은 것을 낸다). 타입을 못 읽는 노드는 요약이 없다.
    */
   const alias = nodeAlias(node)
-  const summary = nodeSummary(node)
+  const summary = nodeSummary(node, codes)
   /**
    * 줄 글 전부 — 줄 단추의 접근 이름과 같다. **줄 행동(`+` · `…`)의 이름도 이것으로 짓는다** — 타입만으로 지으면 라벨이 «추가»인 Button 줄
    * (`Button 추가`)과 그 줄의 `+`(`Button 추가`)가 같은 이름이 된다.

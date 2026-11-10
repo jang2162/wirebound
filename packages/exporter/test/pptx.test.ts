@@ -400,6 +400,39 @@ describe('XML 로 못 담는 글자', () => {
   })
 })
 
+describe('공통코드 — 묶인 노드의 이름', () => {
+  const BOUND = documentOf([
+    {
+      id: 'n_btn',
+      type: 'Button',
+      props: { label: '옛 이름' },
+      code: { group: 'KIND', item: 'A' },
+      marker: 1,
+      interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_btn', value: false }] }],
+    },
+  ])
+  const page = { title: '공통코드', document: BOUND, comments: [{ nodeId: 'n_btn', body: '확인' }] }
+  const CODES = [{ key: 'KIND', name: '구분', items: [{ value: 'A', name: '새 이름', active: true }] }]
+
+  it('표를 받으면 상호작용 문장 · 코멘트 줄이 표의 이름이다 — 슬라이드와 노트 모두', () => {
+    const { parts } = exportPptx({ pages: [page], codes: CODES })
+    for (const [label, root] of [
+      ['슬라이드', slide(parts, 1)],
+      ['노트', notes(parts, 1)],
+    ] as const) {
+      const lines = texts(root)
+      expect(lines.join(' | '), label).toContain('① 새 이름 버튼 클릭 시 ① 새 이름 버튼이 숨겨집니다')
+      expect(lines, label).toContain('① 새 이름 버튼')
+      expect(lines.join(' | '), label).not.toContain('옛 이름')
+    }
+  })
+
+  it('표가 없으면 대체 글이다', () => {
+    const lines = texts(slide(exportPptx({ pages: [page] }).parts, 1))
+    expect(lines).toContain('① 옛 이름 버튼')
+  })
+})
+
 describe('별칭 — PPTX 산출물로 잰다(L-126)', () => {
   /**
    * 번들(`alias.test.ts`)과 같은 표본이다 — 상호작용 문장 · 코멘트 줄의 노드 이름이 별칭이다. **코드가 `commentEntries` · `pageSentences` 를 부른다는 것이

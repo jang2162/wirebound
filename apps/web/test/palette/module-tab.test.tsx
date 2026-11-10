@@ -708,3 +708,23 @@ describe('그림 — 개인 몫과 프로젝트 사이', () => {
     expect({ mine: seen.mine, created: fake.calls.createdMine }).toEqual({ mine: [{ ids: [KEPT, LOST], from: PROJECT_ID }], created: [] })
   })
 })
+
+describe('공통코드 — 표에 없는 키를 든 모듈', () => {
+  it('거절 없이 들어가고 «끊긴 공통코드 1개» 를 말한다(Review Focus 1)', async () => {
+    const bound: ProjectModule = {
+      ...projectModule('m-code', '코드 칩'),
+      nodes: [{ id: 'm_affix', type: 'Affix', props: { text: '옛 이름' }, code: { group: 'NOT_HERE', item: 'X' } }],
+      nodeCount: 1,
+    }
+    const fake = server([bound])
+    fake.api.listCodes = async () => [{ key: 'ORDER_STATUS', name: '주문 상태', items: [] }]
+    await openWithPalette(fake)
+    await openModules()
+    await select(null)
+    await insert('코드 칩')
+    await waitFor(() => expect(fake.sent).toHaveLength(1))
+    const placed = fake.held().root.children!.at(-1)!
+    expect(placed.code).toEqual({ group: 'NOT_HERE', item: 'X' })
+    await waitFor(() => expect(infoNotice()).toContain('끊긴 공통코드 1개'))
+  })
+})

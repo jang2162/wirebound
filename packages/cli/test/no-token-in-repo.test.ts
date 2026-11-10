@@ -37,6 +37,17 @@ function fullRun(): FakeIo {
   // `runAllCommands`의 대조가 죽거나(그쪽이 먼저 말한다) 아무것도 안 훑는 census가 된다.
   stub(io, 'GET', `/api/projects/${PROJECT}/snapshot`, { status: 200, body: snapshotPayload() })
   stub(io, 'GET', `/api/projects/${PROJECT}/export?format=html`, { status: 200, bytes: bundleZip() })
+  // `codes …` 다섯 — 표 · 사용 수 · 사용처 · 쓰기(지금 서버 값을 부른다 — 리포에 아무것도 안 쓴다).
+  const codes = `/api/projects/${PROJECT}/codes`
+  stub(io, 'GET', codes, {
+    status: 200,
+    body: { groups: [{ key: 'KIND', name: '구분', items: [{ value: 'A', name: '가', active: true }] }] },
+  })
+  stub(io, 'GET', `${codes}/usage-counts`, { status: 200, body: { counts: {} } })
+  stub(io, 'GET', `${codes}/usage?group=KIND`, { status: 200, body: { usage: [] } })
+  stub(io, 'PATCH', `${codes}/KIND`, { status: 200, body: { group: { key: 'KIND', name: '구분', items: [] } } })
+  stub(io, 'PATCH', `${codes}/KIND/items/A`, { status: 200, body: { item: { value: 'A', name: '가', active: true } } })
+  stub(io, 'DELETE', `${codes}/KIND/items/A`, { status: 204 })
   return io
 }
 
@@ -69,6 +80,12 @@ const ARGV: Record<string, string[]> = {
   'page get': ['page', 'get', '관리자/회원/목록'],
   lint: ['lint'],
   export: ['export', '--format', 'html', '-o', 'design-bundle'],
+  // `codes …` 는 리포에 쓰는 것이 **없다** — 서버의 표를 읽고 고친다.
+  'codes list': ['codes', 'list'],
+  'codes usage': ['codes', 'usage', 'KIND'],
+  'codes set-group': ['codes', 'set-group', 'KIND', '--name', '구분'],
+  'codes set-item': ['codes', 'set-item', 'KIND', 'A', '--name', '가'],
+  'codes delete': ['codes', 'delete', 'KIND', 'A'],
 }
 
 /**

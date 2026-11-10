@@ -14,7 +14,7 @@
  *
  * 문서 · 테마 · 상태를 바꾸지 않는다 — 열린 목록은 부른 쪽이 들고(`usePopupStack`), 이 층은 그린다.
  */
-import type { AnyDocument } from '@wirebound/schema'
+import type { AnyDocument, CodeIndex } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { EMPTY_OVERLAY, type InteractionOverlay } from './interaction/runtime'
@@ -145,6 +145,8 @@ export interface PopupLayerProps {
    * 없으면 창 전체다.
    */
   area?: PopupArea
+  /** 팝업 문서의 공통코드 표(`RenderOptions.codes`) — 연 화면과 같은 프로젝트의 표다. */
+  codes?: CodeIndex
 }
 
 /** 열린 팝업을 그린다. 없으면 아무것도 안 그린다. */
@@ -260,6 +262,7 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
             <PopupDocument
               popup={popup}
               theme={props.theme}
+              codes={props.codes}
               overlay={overlays[popup.key] ?? EMPTY_OVERLAY}
               onNodeError={props.onNodeError}
               onEvent={(event) => {
@@ -278,6 +281,7 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
 function PopupDocument(props: {
   popup: OpenPopup
   theme: ThemeDefinition | undefined
+  codes: CodeIndex | undefined
   overlay: InteractionOverlay
   onEvent: (event: InteractionEvent) => void
   onNodeError: ((error: NodeRenderError) => void) | undefined
@@ -286,6 +290,7 @@ function PopupDocument(props: {
     ...(props.theme === undefined ? {} : { theme: props.theme }),
     ...(props.onNodeError === undefined ? {} : { onNodeError: props.onNodeError }),
     ...(props.popup.assetUrl === undefined ? {} : { assetUrl: props.popup.assetUrl }),
+    ...(props.codes === undefined ? {} : { codes: props.codes }),
     interaction: { overlay: props.overlay, onEvent: props.onEvent },
   })
 }

@@ -27,7 +27,7 @@
  * **이 파일에는 글자만 있다.** `--json`은 `lookupPage`가 낸 값을 **그대로** 낸다 — 사람이
  * 읽는 판과 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.
  */
-import { stateLineage, viewStateOrder, type PageView } from '@wirebound/schema'
+import { stateLineage, viewStateOrder, type PageView, type PageViewNode } from '@wirebound/schema'
 import { EXIT, usageError } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
@@ -100,7 +100,7 @@ export function renderPageView(view: PageView): string[] {
   lines.push('', '구조')
   for (const node of view.nodes) {
     // 이름 붙은 구역에 선 노드는 구역 화면 이름을 앞에 붙인다(«[머리 오른쪽] 수정 버튼»).
-    lines.push(`  ${'  '.repeat(node.depth)}${node.zoneLabel === undefined ? '' : `[${node.zoneLabel}] `}${node.name}`)
+    lines.push(`  ${'  '.repeat(node.depth)}${node.zoneLabel === undefined ? '' : `[${node.zoneLabel}] `}${node.name}${codeNote(node)}`)
   }
 
   lines.push('', `상호작용 ${view.interactions.length}개`)
@@ -115,6 +115,17 @@ export function renderPageView(view: PageView): string[] {
     for (const line of comment.body.split('\n')) lines.push(`    ${line}`)
   }
   return lines
+}
+
+/**
+ * 공통코드에 묶인 노드의 꼬리 — 무엇을 가리키는지(그룹 키 › 코드값). 표에 없으면 «끊긴 공통코드» 다. 표를 못 받은 판(`resolved` 가 `null`)은
+ * 끊김을 말하지 않는다(모르는 것과 끊긴 것은 다르다). 묶이지 않은 노드는 빈 글 — 옛 출력 그대로.
+ */
+function codeNote(node: PageViewNode): string {
+  const code = node.code
+  if (code === undefined) return ''
+  const target = code.item === undefined ? code.group : `${code.group} › ${code.item}`
+  return code.resolved?.broken === true ? ` · 끊긴 공통코드 ${target}` : ` · 공통코드 ${target}`
 }
 
 /**

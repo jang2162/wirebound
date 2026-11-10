@@ -2,6 +2,7 @@ export const PACKAGE_NAME = '@wirebound/schema'
 
 export type {
   AnyDocument,
+  CodeRef,
   Interaction,
   InteractionAction,
   InteractionTrigger,
@@ -42,6 +43,7 @@ export type { LockConflictInput, NodeLock, OpsLockConflictInput, SelectionConfli
 export { findLockConflict, lockConflictOfOps, locksAgainst, selectionConflicts } from './lock'
 
 export type {
+  CodeBinding,
   ComponentDef,
   ComponentPlace,
   ComponentPreset,
@@ -53,6 +55,7 @@ export type {
 } from './component/define'
 export { BODY_ZONE, defineComponent, placementsOf, propSchema, ZONE_NAME_PATTERN } from './component/define'
 export { presetOf, templateNode } from './component/preset'
+export { codeBindingOf, picksOneChoice } from './component/code-binding'
 export { propTextMax } from './component/text-max'
 export type { ChildList } from './zones'
 export { childLists, childNodes, hasBody, hasZone, mapChildLists, zoneDefs, zoneList, zonePointer } from './zones'
@@ -197,3 +200,21 @@ export { filterLintIssues } from './lint/filter'
 // 내는 이유는 그것이 **판단**이고, `themes`의 대조 케이스가 자기 표와 함께 봐야 하기
 // 때문이다 — 두 표를 함께 보는 자리는 `themes`뿐이다(의존 방향).
 export { VALIDATION_RULE, lintDesign } from './lint/design'
+
+// 공통코드 — 표의 모양 · 노드 참조의 풀기 · 사용처 셈(정본 설계서 「도메인 모델」의 공통코드).
+export type { CodeGroup, CodeItem, CodeTable } from './codes'
+export {
+  CODE_GROUPS_MAX,
+  CODE_ITEMS_MAX,
+  CODE_KEY_PATTERN,
+  CODE_NAME_MAX,
+  CODE_VALUE_MAX,
+  CodeKeySchema,
+  CodeNameSchema,
+  CodeTableSchema,
+  CodeValueSchema,
+} from './codes'
+export type { CodeIndex, ResolvedChoices, ResolvedCode } from './codes-resolve'
+export { indexCodes, isCodeBroken, resolveChoices, resolveCode, resolvedCodeProps, resolveLabel } from './codes-resolve'
+export type { CodeUsageCount, UsageHit, UsageSource } from './codes-usage'
+export { codeUsage, codeUsageCounts } from './codes-usage'

@@ -29,7 +29,9 @@
  * 문서를 무효로 만드는가."*** relay 규칙이 그 축의 값을 그대로 나르므로 lint가 그 둘의 뜻을
  * 바꾸면 한 목록 안에서 같은 필드가 두 뜻을 갖게 된다. **severity를 스스로 고르는 규칙은
  * `warning` 아니면 `info`다** — 그중 어느 것도 문서를 무효로 만들지 않는다(코멘트가 없어도,
- * 번호가 겹쳐도, 메뉴에 안 붙어도 문서는 그대로 선다).
+ * 번호가 겹쳐도, 메뉴에 안 붙어도 문서는 그대로 선다). **하나만 `error`다 — `broken-code-ref`.** 끊긴 공통코드 참조는 저장을
+ * 막지 않지만(검증은 표를 모른다) 화면이 표 대신 묶을 때의 옛 글을 그려, 그 문서는 «표의 이름을 쓴다»는 설계를 지키지 못한다 —
+ * 공통코드를 둔 까닭(고칠 곳을 빠짐없이 찾기)이 그 줄에서 끊긴다. `wireb lint` 의 기본 실패 선(`error`)이 그것을 잡게 한다.
  *
  * **`info`는 결함이 아니라 알림이다** — 「lint 규칙」이 «정보»로 적은 줄(쓰이지 않는 화면 상태 · 상태 영역 안의 상태 영역)만
  * 쓴다. 고칠 것이 없을 수도 있는 설계의 모양이라 `warning`으로 내면 `--fail-on warning`을 건 파이프라인이 멀쩡한 설계서에
@@ -177,6 +179,43 @@ export const LINT_RULES = [
     group: 'document',
     owner: 'schema',
     severity: 'info',
+  },
+  {
+    id: 'broken-code-ref',
+    spec: '표에 없는 공통코드 그룹 · 항목을 가리키는 노드 — 오류',
+    group: 'document',
+    owner: 'schema',
+    // 머리말 «severity 축»의 하나뿐인 `error` 다.
+    severity: 'error',
+  },
+  {
+    id: 'broken-code-selected',
+    spec: '묶인 선택 위젯이 고른 코드값이 표에 없거나 사용 안 함 — 경고',
+    group: 'document',
+    owner: 'schema',
+    // 그룹 참조는 살아 있어 선택지는 표에서 선다 — 그 고름만 그리기에서 빠진다.
+    severity: 'warning',
+  },
+  {
+    id: 'inactive-code-ref',
+    spec: '사용 안 함 공통코드 항목을 가리키는 대표 글 — 경고',
+    group: 'document',
+    owner: 'schema',
+    severity: 'warning',
+  },
+  {
+    id: 'code-choices-truncated',
+    spec: '묶인 선택 위젯 그룹의 사용 중 항목이 선택지 한도(30)를 넘음 — 앞 30 개만 그린다 · 경고',
+    group: 'document',
+    owner: 'schema',
+    severity: 'warning',
+  },
+  {
+    id: 'code-choices-empty',
+    spec: '묶인 선택 위젯 그룹에 사용 중 항목이 없음 — 경고',
+    group: 'document',
+    owner: 'schema',
+    severity: 'warning',
   },
   // ── 테마 규칙 (「lint 규칙」) ───────────────────────────────────────────────
   {

@@ -71,6 +71,8 @@ import { openDocumentNow, useEditorStore, useEditorStoreInstance, useOpenDocumen
 import { useLockedBy } from '../store/use-locked-by'
 import { collapse, collapsedOf, expand, structureKey } from '../tree/collapse'
 import { ShortcutHelp } from './shortcut-help'
+import { useProjectCodes } from '../codes/project-codes'
+import { brokenCodesNotice, countBrokenCodes } from '../codes/broken-codes'
 
 export function EditorKeys(props: {
   projectId: string
@@ -235,6 +237,8 @@ export function EditorKeys(props: {
       ...(prepared.clearedOnly > 0 ? [clearedOnlyNotice(prepared.clearedOnly)] : []),
       ...(prepared.droppedActions > 0 ? [droppedActionsNotice(prepared.droppedActions)] : []),
       ...(imageNotice === undefined || imageNotice === null ? [] : [imageNotice]),
+      // 표에 없는 키를 든 노드도 거절 없이 붙는다 — 끊긴 채 들어왔다고 말한다(`codes/broken-codes.ts`).
+      ...[brokenCodesNotice(countBrokenCodes(prepared.nodes, live.current.codes))].filter((line) => line !== ''),
     ]
     // **붙이기는 성공했다** — 뺀 것은 정보 통지 자리다(실패 자리의 `role="alert"` 는 «붙이지 못했다» 를 말한다). 앞 잃음의 통지는 건드리지 않는다.
     if (dropped.length > 0) info(dropped.join(' '))
@@ -306,9 +310,10 @@ export function EditorKeys(props: {
   }
 
   // 목록을 읽은 뒤 도는 붙이기는 그때의 `commitOps`(열린 페이지 대조가 든 것)를 써야 한다.
-  const live = useRef({ commitOps: history.commitOps })
+  const codes = useProjectCodes().index
+  const live = useRef({ commitOps: history.commitOps, codes })
   useEffect(() => {
-    live.current = { commitOps: history.commitOps }
+    live.current = { commitOps: history.commitOps, codes }
   })
 
   function run(command: ShortcutCommand): void {
