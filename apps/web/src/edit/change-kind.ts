@@ -13,8 +13,33 @@
  * **op 은 노드째 바꾸지 않고 필드마다 낸다**(`type` · `props` · `variant`) — 노드째 `replace` 는 그 사이 남이 단 번호 · 별칭 · 상호작용을 덮는다. 필드
  * `replace` 는 남이 같은 필드를 고쳤어도 뒤의 것이 이긴다(`store/anchored-ops.ts` 머리말 — 리베이스가 원래 하던 일이다). `props` 는 통째다 — 새
  * 타입의 규격에 맞는 한 덩이라 그 사이 남이 고친 옛 타입의 prop 하나를 얹으면 규격이 깨진다.
+ *
+ * ## 공통코드에 묶인 노드
+ *
+ * `code` 는 봉투의 필드지만 **타입의 선언과 맞아야 선다**(검증의 `invalid-code-ref`) — 안 건드리면 새 타입이 거절하는 참조가 남아 서버가 편집을
+ * 422 로 돌려보낸다. 그래서 같은 묶음에서 옮기거나 푼다:
+ *
+ * | 옛 → 새 | `code` | props |
+ * |---|---|---|
+ * | 선택 위젯 → 선택 위젯 | 그대로. 하나 고르는 타입으로 가며 고른 값이 둘 이상이면 **첫 값만** 남긴다 | 위 표대로. 고름을 줄였고 표를 알면 `options` 의 대체 글을 그 고름으로 다시 푼다 |
+ * | 그 밖(받지 않는 타입 · 묶음 꼴이 다름) | 지운다 — 풀기(`code-ops.ts` 의 `unbindCodeOps`)와 같은 규칙 | **그때 표의 이름**으로 푼 props 에서 옮긴다(끊긴 참조 · 표 없음이면 대체 글에서) |
+ *
+ * 대표 글 ↔ 대표 글은 규칙이 없다 — 입력 조각 가운데 대표 글 타입이 `Input` 하나라 그 쌍이 없다(`test/edit/change-kind-code.test.ts` 가 센다).
+ * 풀었는지는 `changeKindUnbindsCode` 가 말하고, 입구(`panels/structure-toolbar.tsx`)가 그것으로 한 줄을 알린다.
  */
-import { getComponent, propSchema, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  codeBindingOf,
+  getComponent,
+  picksOneChoice,
+  propSchema,
+  resolveChoices,
+  resolvedCodeProps,
+  type CodeIndex,
+  type CodeRef,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
 import { findNodePathSafely, findNodeSafely } from './safe-walk'
 
 /** 서로 바꿀 수 있는 입력 조각 — 값을 받는 일곱(사이 글자 · 칩은 입력이 아니라 뺀다). 차례가 상자의 단추 차례다. */
@@ -61,27 +86,57 @@ function firstPickOnly(options: unknown): unknown {
   })
 }
 
+/** 묶인 노드를 `toType` 으로 바꿀 때 참조를 그대로 둘 수 있는가 — 옛 · 새 타입이 둘 다 선택 위젯일 때만이다(머리말의 표). */
+function keepsCode(fromType: string, toType: string): boolean {
+  return codeBindingOf(fromType)?.kind === 'choices' && codeBindingOf(toType)?.kind === 'choices'
+}
+
+/** 이 종류 바꾸기가 공통코드 묶음을 푸는가 — 묶인 노드이고 새 타입이 그 참조를 못 받는다. 입구가 이것으로 «묶음을 풀었습니다» 를 알린다. */
+export function changeKindUnbindsCode(node: WbNode, toType: string): boolean {
+  return node.code !== undefined && typeof node.type === 'string' && !keepsCode(node.type, toType)
+}
+
+/** 하나 고르는 타입으로 옮길 참조 — 고른 값이 둘 이상이면 첫 값만 남긴 것, 줄일 것이 없으면 `null`. */
+function trimmedRef(ref: CodeRef, toType: string): CodeRef | null {
+  const def = getComponent(toType)
+  if (def === undefined || !picksOneChoice(def) || (ref.selected ?? []).length <= 1) return null
+  return { ...ref, selected: [ref.selected![0]!] }
+}
+
 /**
- * 노드의 종류를 `toType` 으로 바꾸는 op. 노드가 없거나 · 입력 조각이 아니거나 · 같은 종류면 `null`.
+ * 노드의 종류를 `toType` 으로 바꾸는 op. 노드가 없거나 · 입력 조각이 아니거나 · 같은 종류면 `null`. `codes` 는 프로젝트의 공통코드 표 — 묶인 노드를
+ * 풀 때 그 이름을 읽는다(없으면 prop 의 대체 글이 남는다).
  *
  * | 필드 | op |
  * |---|---|
  * | `type` | `replace` |
  * | `props` | 옮길 것이 있으면 `replace`(키가 없었으면 `add`), 없고 키가 있었으면 `remove` |
  * | `variant` | 있었으면 `remove` |
+ * | `code` | 새 타입이 못 받으면 `remove`, 고름을 줄이면 `replace`(머리말 «공통코드에 묶인 노드») |
  */
-export function changeKindOps(document: PageDocument, nodeId: string, toType: string): PatchOp[] | null {
+export function changeKindOps(document: PageDocument, nodeId: string, toType: string, codes?: CodeIndex): PatchOp[] | null {
   const node = findNodeSafely(document.root, nodeId) as WbNode | undefined
   const path = findNodePathSafely(document.root, nodeId)
   if (node === undefined || path === undefined) return null
   if (!kindTargets(node.type).includes(toType)) return null
 
-  const from = node.props !== null && typeof node.props === 'object' ? (node.props as Record<string, unknown>) : {}
+  const own = node.props !== null && typeof node.props === 'object' ? (node.props as Record<string, unknown>) : {}
+  const unbinds = changeKindUnbindsCode(node, toType)
+  // 푸는 판은 표의 이름으로 푼 props 에서 옮긴다 — 묶을 때의 옛 글이 다시 나타나지 않게(풀기와 같은 규칙).
+  const from = unbinds && codes !== undefined ? (resolvedCodeProps(node, codes) ?? own) : own
   const props = carriedProps(from, toType)
+  const trimmed = node.code === undefined || unbinds ? null : trimmedRef(node.code, toType)
+  if (trimmed !== null && codes !== undefined) {
+    // 줄인 고름의 대체 글 — 옛 선택지의 «첫 고름»은 표의 차례라 남긴 값과 다른 항목일 수 있다.
+    const choices = resolveChoices(codes, trimmed)
+    if (choices.options.length > 0) props.options = choices.options
+  }
   const ops: PatchOp[] = [{ op: 'replace', path: `${path}/type`, value: toType }]
   const hasProps = Object.hasOwn(node, 'props')
   if (Object.keys(props).length > 0) ops.push({ op: hasProps ? 'replace' : 'add', path: `${path}/props`, value: props })
   else if (hasProps) ops.push({ op: 'remove', path: `${path}/props` })
   if (Object.hasOwn(node, 'variant')) ops.push({ op: 'remove', path: `${path}/variant` })
+  if (unbinds) ops.push({ op: 'remove', path: `${path}/code` })
+  else if (trimmed !== null) ops.push({ op: 'replace', path: `${path}/code`, value: trimmed })
   return ops
 }
