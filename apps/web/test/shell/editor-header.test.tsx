@@ -81,7 +81,7 @@ describe('머리에 선 것', () => {
 })
 
 describe('`…` 메뉴', () => {
-  it.each(['owner', 'editor', 'viewer'] as const)('%s 에게 항목 다섯이 이 차례로 서고 머리에 사람 이름이 있다', async (role) => {
+  it.each(['owner', 'editor', 'viewer'] as const)('%s 에게 항목 여섯이 이 차례로 서고 머리에 사람 이름이 있다', async (role) => {
     await open(role)
     fireEvent.click(within(header()).getByRole('button', { name: SHELL_MENU }))
     const menu = within(openedMenu(header())).getByRole('menu')
@@ -89,7 +89,7 @@ describe('`…` 메뉴', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent),
-    ).toEqual(['계정 설정', '프로젝트 설정', '스냅샷', '프로젝트 내보내기', '로그아웃'])
+    ).toEqual(['계정 설정', '공통코드', '프로젝트 설정', '스냅샷', '프로젝트 내보내기', '로그아웃'])
     // 하네스의 로그인한 사람.
     expect(within(openedMenu(header())).getByText('테스터')).toBeTruthy()
   })

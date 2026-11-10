@@ -91,6 +91,8 @@ describe('역할을 읽는 자리', () => {
         '../src/settings/members-section.tsx',
         // «위험 구역» 이 절을 세울지(`remove`)를 안다 — 목록 줄의 삭제는 없다.
         '../src/settings/danger-section.tsx',
+        // 공통코드 화면이 만들기 · 줄 «…» 를 열지(`editDesign`)를 안다 — 역할은 그 라우트의 `getProject` 에서 온다.
+        '../src/routes/codes.tsx',
         // 목록 카드의 역할 표지 · 역할 거름과 그 고르개(위 «예외 둘째»).
         '../src/projects/project-filter.ts',
         '../src/routes/project-list.tsx',

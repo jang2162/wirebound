@@ -182,7 +182,7 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // **소비자가 셋이고 읽는 것이 다르다.** 셸은 `name`·`id`·`themeRev`(테마 따라잡기)를 그리려고 부르고, 스냅샷 화면은 **`role`**
   // 때문에 부른다 — 「권한 모델」이 생성을 editor에게 열었으므로 폼을 열지 말지 알아야 한다(목록은 viewer도 본다). 설정 페이지는
   // 이름 · 슬러그 · 설명(«일반» 의 지금 값)과 `role`(칸을 열지)을 읽는다.
-  getProject: ['../src/routes/editor.tsx', '../src/shell/snapshots-panel.tsx', '../src/routes/settings.tsx'],
+  getProject: ['../src/routes/editor.tsx', '../src/shell/snapshots-panel.tsx', '../src/routes/settings.tsx', '../src/routes/codes.tsx'],
   createProject: ['../src/projects/use-project-commands.tsx'],
   // 설정 페이지의 «일반» 절 하나다 — 목록 줄의 인라인 수정은 없다(`routes/project-list.tsx` 머리말).
   updateProject: ['../src/settings/general-section.tsx'],
@@ -322,16 +322,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listAdminProjects: ['../src/admin/projects-section.tsx', '../src/admin/users-section.tsx'],
   transferProjectOwner: ['../src/admin/projects-section.tsx'],
   listAudit: ['../src/admin/audit-section.tsx'],
-  // 공통코드 — 셸의 표(`codes/project-codes.tsx`)가 읽는다. 쓰기 · 사용처는 공통코드 화면 · 속성 패널이 서면 적는다.
-  listCodes: ['../src/codes/project-codes.tsx'],
-  createCodeGroup: [],
-  updateCodeGroup: [],
-  deleteCodeGroup: [],
-  createCodeItem: [],
-  updateCodeItem: [],
-  deleteCodeItem: [],
-  codeUsage: [],
-  codeUsageCounts: [],
+  // 공통코드 — 셸의 표(`codes/project-codes.tsx`)와 공통코드 화면(`codes/codes-screen.tsx` — 표 · 사용 수 · 사용처 · 쓰기 여섯)이 부른다.
+  listCodes: ['../src/codes/project-codes.tsx', '../src/codes/codes-screen.tsx'],
+  createCodeGroup: ['../src/codes/codes-screen.tsx'],
+  updateCodeGroup: ['../src/codes/codes-screen.tsx'],
+  deleteCodeGroup: ['../src/codes/codes-screen.tsx'],
+  createCodeItem: ['../src/codes/codes-screen.tsx'],
+  updateCodeItem: ['../src/codes/codes-screen.tsx'],
+  deleteCodeItem: ['../src/codes/codes-screen.tsx'],
+  codeUsage: ['../src/codes/codes-screen.tsx'],
+  codeUsageCounts: ['../src/codes/codes-screen.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

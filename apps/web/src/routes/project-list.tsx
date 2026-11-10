@@ -305,6 +305,15 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
         </Link>
         {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다). 톱니만 남은 단추라 이름은
             `aria-label` 과 `title` 이 같은 글로 든다(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
+        {/* 공통코드 화면 — 설정과 같은 꼴의 아이콘 단추다(모든 멤버에게 — viewer 는 읽기로만 본다). */}
+        <Link
+          className="wb-shell-home-settings"
+          to={`/projects/${project.id}/codes`}
+          aria-label={`${project.name} 공통코드`}
+          title={`${project.name} 공통코드`}
+        >
+          {shellIcon('codes', 16)}
+        </Link>
         <Link
           className="wb-shell-home-settings"
           to={`/projects/${project.id}/settings`}

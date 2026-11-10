@@ -26,7 +26,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
+import { findNode } from '@wirebound/schema'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -544,6 +545,31 @@ export function EditorShellRoute(): ReactElement {
 }
 
 /** 세 패널과 상단 도구. 스토어는 컨텍스트에서 꺼낸다. */
+/**
+ * **주소의 `?node=<id>` 를 고른다** — 공통코드 화면의 사용처 줄(`codes/codes-screen.tsx` 의 `usageHref`)이 여기로 데려온다. 그 페이지의 문서가 서면
+ * 한 번 고르고 질의를 걷는다(`replace` — 뒤로 가기에 남기지 않는다 · 다시 고르지 않는다). 문서에 없는 id 는 고르지 않고 걷기만 한다. 남이 잠근
+ * 노드는 `selectNode` 가 안 고른다(「소프트 잠금」).
+ */
+function useNodeFromAddress(pageId: string | undefined): void {
+  const store = useEditorStoreInstance()
+  const [params, setParams] = useSearchParams()
+  const wanted = params.get('node')
+  const document = useEditorStore(store, (s) => s.document)
+  const openPageId = useEditorStore(store, (s) => s.openPageId)
+  useEffect(() => {
+    if (wanted === null || document === null || pageId === undefined || openPageId !== pageId) return
+    if (findNode(document.root, wanted) !== undefined) store.selectNode(wanted)
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('node')
+        return next
+      },
+      { replace: true },
+    )
+  }, [wanted, document, openPageId, pageId, store, setParams])
+}
+
 function EditorShell(props: {
   project: ProjectView
   /** 역할을 아는가 — 모르면 아무것도 못 하는 쪽으로 선다(`EditorShellRoute`의 `reread`). */
@@ -554,6 +580,7 @@ function EditorShell(props: {
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
+  useNodeFromAddress(props.pageId)
   /**
    * 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`).
    * 역할은 **실행 중에 바뀐다** — 라우트가 프로젝트를 다시 읽으면 이 줄이 새 값으로 다시 돈다. 모르면
@@ -822,6 +849,7 @@ function EditorShell(props: {
       : []),
     ...(!switcherInHead && props.pageId !== undefined ? viewStateMenuItems(viewStateChoice, { prefixed: true }) : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
+    { key: 'codes', label: '공통코드', icon: ICONS.codes, to: `/projects/${props.project.id}/codes` },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
     { key: 'snapshots', label: '스냅샷', icon: ICONS.snapshots, onSelect: () => setDialog('snapshots') },
     { key: 'export', label: '프로젝트 내보내기', icon: ICONS.exportProject, onSelect: () => setDialog('export') },
