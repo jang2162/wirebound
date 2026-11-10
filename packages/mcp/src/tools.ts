@@ -155,6 +155,47 @@ export const TOOLS: readonly ToolSpec[] = [
     inputSchema: { type: 'object', properties: { path: PATH_ARG }, additionalProperties: false },
     spec: 'lint 규칙 실행',
   },
+  {
+    name: 'list_codes',
+    description:
+      '프로젝트의 공통코드 표(그룹 → 항목: 그룹 키 · 코드값 · 이름 · 사용 여부)와 그룹 · 항목마다 그것을 쓰는 노드 수를 돌려줍니다. ' +
+      '노드는 그룹 키 · 코드값으로 표를 가리킵니다 — get_page 의 nodes[].code 가 그 참조와 풀린 이름(resolved)입니다.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    spec: '공통코드 표 + 사용 수 조회',
+  },
+  {
+    name: 'code_usage',
+    description:
+      '공통코드 그룹(· 항목)을 가리키는 노드를 페이지 · 레이아웃 · 모듈마다 돌려줍니다. 항목을 지우거나 바꾸기 전에 고칠 곳을 셉니다. ' +
+      '화면 상태로 숨은 노드 · 구역 안 노드도 셉니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        group: { type: 'string', description: '그룹 키(예: ORDER_STATUS). list_codes 의 groups[].key 입니다.' },
+        item: { type: 'string', description: '코드값(예: WAIT). 주면 그 항목을 가리키는 노드만 냅니다.' },
+      },
+      required: ['group'],
+      additionalProperties: false,
+    },
+    spec: '공통코드 그룹 · 항목의 사용처 조회',
+  },
+  {
+    name: 'edit_codes',
+    description:
+      '공통코드 표를 고칩니다. ops 를 차례로 보내고 첫 거절에서 멈춥니다 — 표에는 이력이 없어 묶음을 되돌리지 않으므로 응답의 applied 가 이미 된 수입니다. ' +
+      '원소: { op: "add-group", group, name } · { op: "update-group", group, name?, sortOrder? } · { op: "delete-group", group } · ' +
+      '{ op: "add-item", group, item, name, active? } · { op: "update-item", group, item, name?, sortOrder?, active? } · { op: "delete-item", group, item }. ' +
+      '그룹 키 · 코드값은 만든 뒤 못 바꿉니다. 지운 그룹 · 항목을 가리키던 노드는 끊긴 참조로 남습니다(지우기 전에 code_usage).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ops: { type: 'array', description: '표 쓰기 목록. 원소의 꼴은 이 도구의 설명에 있습니다.', items: { type: 'object' } },
+      },
+      required: ['ops'],
+      additionalProperties: false,
+    },
+    spec: '공통코드 그룹 · 항목 만들기 · 고치기 · 지우기',
+  },
 ]
 
 /** 표에서 하나. 모르는 이름이면 `undefined` — 부르는 쪽이 그것을 프로토콜 오류로 만든다. */

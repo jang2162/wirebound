@@ -982,10 +982,15 @@ wirebound-export/
 | `patch_page` | 사람 편집과 동일 경로의 수정 (baseSeq 필수) |
 | `add_comment` | 구현 중 발견한 이슈를 설계서에 기록 |
 | `validate` | lint 규칙 실행 |
+| `list_codes` | 공통코드 표 + 사용 수 조회 |
+| `code_usage` | 공통코드 그룹 · 항목의 사용처 조회 |
+| `edit_codes` | 공통코드 그룹 · 항목 만들기 · 고치기 · 지우기 |
 
-`get_page` 의 노드 개요(`nodes[]`)는 노드마다 이름(`name` — 문장이 부르는 이름이라 별칭이 있으면 별칭 · `only` 보임 노드면 «(관리자 상태)»를 붙인다) · 별칭(`alias` — 있을 때만) · 구조 트리 줄과 같은 글(`rowLabel` — `타입 (별칭) 요약`) · 상태 보임(`visibility` — 노드 자신의 것 그대로, 있을 때만)을 싣고, 페이지는 화면 상태 목록(`viewStates` — `parent` 로 트리 · 없으면 빈 목록)을 싣는다. 판 1 문서는 읽을 때 판 2 로 옮겨 보인다.
+`get_page` 의 노드 개요(`nodes[]`)는 노드마다 이름(`name` — 문장이 부르는 이름이라 별칭이 있으면 별칭 · `only` 보임 노드면 «(관리자 상태)»를 붙인다) · 별칭(`alias` — 있을 때만) · 구조 트리 줄과 같은 글(`rowLabel` — `타입 (별칭) 요약`) · 상태 보임(`visibility` — 노드 자신의 것 그대로, 있을 때만) · 공통코드 참조(`code` — 묶인 노드만: 참조 그대로 + 표로 푼 값 `resolved`(대표 글은 항목 이름 · 끊겼으면 `null`, 선택 위젯은 그릴 선택지 이름 · 고른 것 · 빠진 고른 값) — 표를 담지 않은 옛 판 payload 는 `resolved: null`)를 싣고 묶인 노드의 이름 · `rowLabel` 은 표의 이름이다. 페이지는 화면 상태 목록(`viewStates` — `parent` 로 트리 · 없으면 빈 목록)을 싣는다. 판 1 문서는 읽을 때 판 2 로 옮겨 보인다.
 
 화면 상태 전용 쓰기 도구는 없다 — `patch_page` 의 JSON Patch 로 목록(`/viewStates`)과 노드 보임(`/…/visibility`)을 고친다. 꼴(상태 더하기 · 하위 상태 더하기 · 이 상태에서만 보이기 · 상태 지우기)은 MCP 스킬 문서(`packages/mcp/skill/SKILL.md` 「화면 상태를 다룰 때」)가 가르치고, 그 예를 api 케이스가 글자 그대로 저장 경계에 보낸다(`apps/api/test/view-states-skill.test.ts`). `validate` 는 `info` 등급(«lint 규칙»)을 `infos` 로 따로 센다.
+
+공통코드 도구 셋은 스냅샷이 아니라 지금 표를 부른다(`GET …/codes` · `…/codes/usage` · `…/codes/usage-counts` — 사용 수 · 사용처는 서버가 센다). `edit_codes` 는 `ops` 를 차례로 보내고 첫 거절에서 멈춘다 — 표에 이력이 없어 묶음을 되돌리지 않으므로 응답의 `applied` 가 이미 된 수다. 원소의 꼴은 보내기 전에 다 읽어 틀린 원소가 있으면 하나도 안 보낸다.
 
 ### 12.3 CLI
 
@@ -996,6 +1001,11 @@ wireb pull                         프로젝트 스냅샷을 로컬 JSON으로 (
 wireb page get <경로> [--json]     페이지 조회
 wireb lint [경로]                  규칙 검증
 wireb export --format html|pptx -o dir  정적 번들 · PPTX 파일 생성
+wireb codes list [--json]          공통코드 표와 쓰는 노드 수
+wireb codes usage <키> [코드값]    그 그룹 · 항목을 쓰는 노드
+wireb codes set-group <키> …       그룹 만들기(이름 필수) · 고치기
+wireb codes set-item <키> <값> …   항목 만들기 · 고치기(--name · --order · --active|--inactive)
+wireb codes delete <키> [코드값]   그룹(항목째) · 항목 지우기
 ```
 
 터미널로 나가는 글(`--json` 포함)은 라벨 · 제목 · 코멘트 본문처럼 설계서를 고치는 누구나 넣을 수 있는 글을 싣는다 — `\n` · `\t` 를 뺀 C0 · DEL · C1(`U+009B` 는 CSI) · 줄 · 문단 구분 · 방향 제어 글자를 `\uXXXX` 글로 바꿔 낸다(`packages/cli/src/terminal-safe.ts` — `--json` 은 읽은 값이 같다). 파일에 쓰는 바이트는 안 바뀐다.

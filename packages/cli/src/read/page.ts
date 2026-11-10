@@ -30,6 +30,7 @@
  */
 import {
   duplicateTargets,
+  indexCodes,
   matchPageTargets,
   migrateDocument,
   pageKindOf,
@@ -171,6 +172,8 @@ export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
           authorName: comment.authorName,
           createdAt: comment.createdAt,
         })),
+      // 공통코드 표(payload 판 4 이상) — 묶인 노드의 이름을 표로 읽고 `nodes[].code.resolved` 를 싣는다. 옛 판 payload 는 표가 없다.
+      ...(payload.codes === undefined ? {} : { codes: indexCodes(payload.codes) }),
     }),
   }
 }

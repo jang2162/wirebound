@@ -40,7 +40,7 @@ const skill = readFileSync(SKILL_PATH, 'utf8')
 
 /** 스킬의 도구 표에서 `| \`이름\` | \`인자\` · … | 설명 |` 줄을 읽는다. */
 function skillTools(): { name: string; args: string[] }[] {
-  const section = skill.slice(skill.indexOf('## 도구 다섯'), skill.indexOf('## 흐름'))
+  const section = skill.slice(skill.indexOf('## 도구 여덟'), skill.indexOf('## 흐름'))
   const found: { name: string; args: string[] }[] = []
   for (const line of section.split('\n')) {
     const match = /^\|\s*`([a-z_]+)`\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|$/.exec(line.trim())
@@ -60,7 +60,7 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
   const listed = skillTools()
 
   it('스킬에서 도구 줄을 실제로 읽는다 — 파서가 어긋나면 아래가 조용히 통과한다', () => {
-    expect(listed.length).toBe(5)
+    expect(listed.length).toBe(8)
     expect(listed.map((one) => one.name)).toContain('patch_page')
   })
 
@@ -187,6 +187,12 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'navigate',
       'kind',
       'popup',
+      // 공통코드의 꼴 — 노드 칸 · 응답 필드
+      'code',
+      'resolved',
+      'broken',
+      'applied',
+      'op',
     ])
     const 후보 = backticked().filter((name) => !notArgs.has(name) && !name.includes('.'))
     // 분모가 0이면 아래가 공허하다 — 실제 인자 이름이 산문에 나온다.

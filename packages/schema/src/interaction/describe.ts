@@ -327,8 +327,9 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
  * **저작 UI의 타겟 목록이 이것을 쓴다** — 목록에서 고른 이름과 문장에 나오는 이름이
  * 갈리면 사용자가 둘을 잇지 못한다. 그래서 이름을 만드는 자리는 여기 하나다.
  */
-export function describeNode(node: WbNode, context?: NamingContext): string {
-  return nodeName(node, context)
+/** `codes` 를 주면 묶인 노드를 표의 이름으로 부른다(`nodeDisplayName`). */
+export function describeNode(node: WbNode, context?: NamingContext, codes?: CodeIndex): string {
+  return nodeName(node, context, codes)
 }
 
 /**
@@ -337,8 +338,8 @@ export function describeNode(node: WbNode, context?: NamingContext): string {
  * **카탈로그에 없는 타입은 영문 타입 이름을 그대로 쓴다.** 그 노드는 화면에도 폴백으로
  * 그려지고 `unknown-type` 이슈가 따로 붙으므로, 문장이 그것을 숨기지 않는 편이 맞다.
  */
-function nodeName(node: WbNode, context?: NamingContext): string {
-  const named = nodeDisplayName(node, context)
+function nodeName(node: WbNode, context?: NamingContext, codes?: CodeIndex): string {
+  const named = nodeDisplayName(node, context, codes)
   const marker = markerOf(node)
   return marker === null ? named : `${marker} ${named}`
 }

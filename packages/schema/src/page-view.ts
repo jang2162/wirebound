@@ -20,7 +20,8 @@
  * 설치 전에 부르면 `setProp`의 라벨이 `로딩 상태`가 아니라 `loading`으로 나온다(던지지는
  * 않는다 — `describe.ts`의 `propLabel`이 레지스트리에서 못 찾으면 prop 이름을 쓴다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
  */
-import type { NodeVisibility, PageDocument, ViewState, WbNode } from './node'
+import { resolveCode, type CodeIndex, type ResolvedCode } from './codes-resolve'
+import type { CodeRef, NodeVisibility, PageDocument, ViewState, WbNode } from './node'
 import { nodeAlias, nodeRowLabel } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
 import { pageKindOf, type PageKind } from './new-page'
@@ -74,6 +75,11 @@ export interface PageViewNode {
    * 부모가 보이는 모든 상태에 있다(부모가 숨으면 자손도 숨는다).
    */
   visibility?: NodeVisibility
+  /**
+   * 공통코드 참조(`WbNode.code` 그대로)와 그 풀린 값(`resolved` — `resolveCode`). 표를 받지 못한 판(`PageViewInput.codes` 없음)은 `resolved` 가
+   * `null` 이다. 묶이지 않은 노드는 키가 없다.
+   */
+  code?: CodeRef & { resolved: ResolvedCode | null }
 }
 
 /** `pageView`가 받는 코멘트. 이름은 이 함수가 붙인다. */
@@ -94,6 +100,8 @@ export interface PageViewInput {
   menuPath: readonly string[]
   document: PageDocument
   comments: readonly PageViewCommentInput[]
+  /** 프로젝트의 공통코드 표. 주면 묶인 노드의 이름 · `rowLabel` 이 표의 이름이고 `nodes[].code.resolved` 가 선다. */
+  codes?: CodeIndex
 }
 
 export interface PageView {
@@ -142,11 +150,14 @@ export function pageView(input: PageViewInput): PageView {
       ...(zone !== null && zone !== BODY_ZONE && parent !== null
         ? { zone, zoneLabel: zoneDefs(parent.type).find((def) => def.name === zone)?.label ?? zone }
         : {}),
-      name: describeNode(node, naming.get(node.id)),
+      name: describeNode(node, naming.get(node.id), input.codes),
       ...aliasEntry(node),
-      rowLabel: nodeRowLabel(node),
+      rowLabel: nodeRowLabel(node, input.codes),
       path,
       ...(node.visibility === undefined ? {} : { visibility: node.visibility }),
+      ...(node.code === undefined
+        ? {}
+        : { code: { ...node.code, resolved: input.codes === undefined ? null : resolveCode(node, input.codes) } }),
     })
   }
 
@@ -166,7 +177,7 @@ export function pageView(input: PageViewInput): PageView {
       const node = nodes.get(comment.nodeId)
       return {
         nodeId: comment.nodeId,
-        nodeName: node === undefined ? MISSING_NODE_NAME : describeNode(node, naming.get(comment.nodeId)),
+        nodeName: node === undefined ? MISSING_NODE_NAME : describeNode(node, naming.get(comment.nodeId), input.codes),
         body: comment.body,
         authorName: comment.authorName,
         createdAt: comment.createdAt,

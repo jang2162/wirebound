@@ -20,7 +20,21 @@
  * 값은 전부 읽기 층이 만들고, 여기서는 그것을 에이전트가 읽을 봉투에 담는다. 무엇을 담을지가
  * 판정인 자리는 각 함수의 머리말에 있다.
  */
-import { CliError, fetchLintTheme, lintReport, listProject, lookupPage, readLintConfig, type Io } from '@wirebound/cli/embed'
+import {
+  applyCodeEdits,
+  CliError,
+  fetchCodeTable,
+  fetchCodeUsage,
+  fetchLintTheme,
+  lintReport,
+  listProject,
+  lookupPage,
+  readCodeEdit,
+  readLintConfig,
+  requireProject,
+  type Io,
+  type ProjectAccess,
+} from '@wirebound/cli/embed'
 import { toolFailureResult, toolResult, type ToolOutcome } from './outcome'
 import { callProject, openProject, projectHead, rereadHeadSeq, type OpenProject } from './session'
 
@@ -382,6 +396,52 @@ const addComment: ToolHandler = async (io, args) => {
 }
 
 /**
+ * 공통코드 도구 셋의 머리 — 스냅샷을 안 받으므로 `capturedAt` 이 없다(표는 지금 값이다).
+ */
+function accessHead(access: ProjectAccess): { server: string; projectId: string } {
+  return { server: access.binding.server, projectId: access.binding.projectId }
+}
+
+/** 「MCP 도구」 *"공통코드 표 + 사용 수 조회"*. 표와 사용 수는 `wireb codes list` 와 같은 함수(`fetchCodeTable`)가 읽는다. */
+const listCodes: ToolHandler = async (io) => {
+  const access = await requireProject(io)
+  const listing = await fetchCodeTable(io, access)
+  return toolResult({ ...accessHead(access), groups: listing.groups, counts: listing.counts })
+}
+
+/** 「MCP 도구」 *"공통코드 그룹 · 항목의 사용처 조회"*. 세는 것은 서버다(`codeUsage` 한 벌). */
+const codeUsage: ToolHandler = async (io, args) => {
+  const access = await requireProject(io)
+  const group = args.group as string
+  const item = args.item as string | undefined
+  const usage = await fetchCodeUsage(io, access, group, item)
+  return toolResult({ ...accessHead(access), group, item: item ?? null, usage })
+}
+
+/**
+ * 「MCP 도구」 *"공통코드 그룹 · 항목 만들기 · 고치기 · 지우기"*.
+ *
+ * **원소의 꼴은 보내기 전에 다 읽는다** — 셋째 원소가 틀렸는데 앞 둘을 보낸 뒤에야 알면 묶음이 반쯤 선다. 그 밖(키 꼴 · 길이 · 겹침 · 상한)은
+ * 서버가 본다(두 벌을 두지 않는다). **첫 거절에서 멈추고 `isError` 를 세운다** — 앞에서 된 것은 `applied` 가 말한다(표에 이력이 없어 되돌리지 않는다).
+ */
+const editCodes: ToolHandler = async (io, args) => {
+  const ops = (args.ops as unknown[]).map((op, index) => readCodeEdit(op, `ops[${index}]`))
+  const access = await requireProject(io)
+  const outcome = await applyCodeEdits(io, access, ops)
+  const head = { ...accessHead(access), total: ops.length, applied: outcome.applied }
+  if (outcome.rejected === null) return toolResult({ ...head, rejected: null })
+  return toolFailureResult({
+    ...head,
+    rejected: {
+      index: outcome.rejected.index,
+      status: outcome.rejected.status,
+      message: `[wireb 코드 ${outcome.rejected.code}] ${outcome.rejected.message}`,
+    },
+    next: `ops[${outcome.rejected.index}] 부터 보내지 않았습니다 — 앞의 ${outcome.applied}개는 이미 표에 섰습니다. list_codes 로 표를 다시 읽고 남은 것을 고쳐 보내세요.`,
+  })
+}
+
+/**
  * 필수 `path` 인자. **`server.ts`가 이미 모양을 봤다** — 여기 오는 값은 반드시 문자열이다.
  *
  * **좁히는 자리를 한 곳에 둔다.** 도구마다 `args.path as string`을 적으면 그 캐스팅이
@@ -402,4 +462,7 @@ export const HANDLERS: Record<string, ToolHandler> = {
   patch_page: patchPage,
   add_comment: addComment,
   validate,
+  list_codes: listCodes,
+  code_usage: codeUsage,
+  edit_codes: editCodes,
 }

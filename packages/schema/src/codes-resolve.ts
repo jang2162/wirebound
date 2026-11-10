@@ -76,6 +76,36 @@ export function resolvedCodeProps(node: WbNode, index: CodeIndex): Record<string
   return choices.brokenGroup ? null : { ...props, options: choices.options }
 }
 
+/**
+ * 묶인 노드의 풀린 값 — 표를 읽어 내는 출력(`wireb page get` · MCP `get_page` 의 `nodes[].code.resolved`)이 싣는다. 대표 글은 그 항목의 이름
+ * (끊겼으면 `null`), 선택 위젯은 그릴 선택지 이름 · 그중 고른 것 · 빠진 고른 값이다. 그리기(`resolvedCodeProps`)와 같은 풀기를 지난다.
+ */
+export type ResolvedCode =
+  | { kind: 'label'; broken: boolean; name: string | null; inactive: boolean }
+  | { kind: 'choices'; broken: boolean; options: string[]; selected: string[]; truncated: boolean; brokenSelected: string[] }
+
+/** 묶인 노드의 풀린 값(`ResolvedCode`). 묶이지 않았거나 받지 않는 타입이면 `null`. */
+export function resolveCode(node: WbNode, index: CodeIndex): ResolvedCode | null {
+  const ref = node.code
+  if (ref === undefined || typeof node.type !== 'string') return null
+  const binding = BINDINGS.get(node.type)
+  if (binding === undefined) return null
+  if (binding.kind === 'label') {
+    const label = resolveLabel(index, ref)
+    return { kind: 'label', broken: label === null, name: label?.name ?? null, inactive: label?.inactive ?? false }
+  }
+  const choices = resolveChoices(index, ref)
+  const picked = new Set(ref.selected ?? [])
+  return {
+    kind: 'choices',
+    broken: choices.brokenGroup,
+    options: choices.items.map((item) => item.name),
+    selected: choices.items.filter((item) => picked.has(item.value)).map((item) => item.name),
+    truncated: choices.truncated,
+    brokenSelected: choices.brokenSelected,
+  }
+}
+
 /** 노드의 참조가 끊겼는가 — 그룹이 없거나(선택 위젯 · 대표 글) 항목이 없다(대표 글). 고른 값만 빠진 것은 끊김이 아니다(그룹은 산다). */
 export function isCodeBroken(node: WbNode, index: CodeIndex): boolean {
   const ref = node.code

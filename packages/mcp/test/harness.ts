@@ -46,8 +46,15 @@ export interface HarnessOptions {
    * 요청만 다른 payload를 받아야 *"다시 읽었다"*와 *"처음 것을 재사용했다"*가 갈린다.
    */
   rereadPayload?: SnapshotPayload
+  /** `GET .../codes` 의 그룹들. 안 주면 `CODE_GROUPS`. */
+  codes?: unknown[]
+  /** `POST .../codes`(그룹 만들기)가 어떻게 답할지. */
+  codeWrite?: WriteMode
   cwd?: string
 }
+
+/** 하네스의 공통코드 표 — 그룹 하나 · 항목 하나. */
+export const CODE_GROUPS = [{ key: 'KIND', name: '구분', items: [{ value: 'A', name: '새 이름', active: true }] }]
 
 /** 서버가 내는 오류 봉투 하나. */
 function apiError(status: number, code: string, message: string): { status: number; body: unknown } {
@@ -89,6 +96,23 @@ export function harness(options: HarnessOptions = {}): FakeIo {
 
   // `validate` 가 테마 규칙을 돌리려 프로젝트의 manifest 를 받는다(`fetchLintTheme`).
   stub(io, 'GET', `/api/projects/${PROJECT}/theme`, { status: 200, body: options.theme ?? projectThemeResponse() })
+
+  // 공통코드 표 · 사용 수 · 사용처 · 쓰기(`list_codes` · `code_usage` · `edit_codes`). 본문은 `apps/api` 의 응답 꼴이다(`apps/api/README.md`).
+  // 스냅샷을 거절 · 못 닿음으로 세운 판은 이 경로들도 같다 — 그 판들이 도구마다 그 갈래를 잰다(`no-token-in-response.test.ts`).
+  const codes = `/api/projects/${PROJECT}/codes`
+  const codeRoute = (method: string, at: string, ok: { status: number; body: unknown }): void => {
+    if (mode === 'refused') stub(io, method, at, apiError(403, 'forbidden', '이 프로젝트에 대한 권한이 없습니다'))
+    else if (mode === 'unreachable') stub(io, method, at, () => new Error('connect ECONNREFUSED 127.0.0.1:443'))
+    else if (method === 'GET') stub(io, method, at, ok)
+    else stubWrite(io, method, at, options.codeWrite ?? 'ok', ok)
+  }
+  codeRoute('GET', codes, { status: 200, body: { groups: options.codes ?? CODE_GROUPS } })
+  codeRoute('GET', `${codes}/usage-counts`, { status: 200, body: { counts: { KIND: { group: 1, items: { A: 1 } } } } })
+  codeRoute('GET', `${codes}/usage?group=KIND`, {
+    status: 200,
+    body: { usage: [{ kind: 'page', id: WRITE_PAGE, title: '목록', nodes: [{ nodeId: 'list', name: '구분 칩' }] }] },
+  })
+  codeRoute('POST', codes, { status: 201, body: { group: { key: 'NEW', name: '새 그룹', items: [] } } })
 
   stubWrite(io, 'PATCH', `/api/projects/${PROJECT}/pages/${WRITE_PAGE}/ops`, options.patch ?? 'ok', {
     status: 200,

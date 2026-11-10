@@ -177,6 +177,22 @@ const TOOL_TEXT: Record<string, ToolText> = {
     summary: 'Run the lint rules. Findings are a normal result, not an error. Naming rules come from `.wirebound.json`.',
     args: { path: 'Optional page path; without it the whole project is checked.' },
   },
+  list_codes: {
+    summary:
+      'The project common code table (groups → items: group key, code value, name, active) and how many nodes use each group and item. Bound nodes in `get_page` carry `nodes[].code` with the resolved names.',
+    args: {},
+  },
+  code_usage: {
+    summary: 'Nodes in pages, layouts and modules that point at a common code group (or one item). Count before deleting.',
+    args: { group: 'Group key from `list_codes`, e.g. `ORDER_STATUS`.', item: 'Optional code value; only nodes pointing at that item.' },
+  },
+  edit_codes: {
+    summary:
+      'Change the common code table: add, rename, reorder, (de)activate and delete groups and items. Ops are sent in order and stop at the first rejection; the table has no history, so `applied` says how many already landed. Group keys and code values cannot change after creation; nodes pointing at a deleted entry keep a broken reference.',
+    args: {
+      ops: 'Table edits: `{ op: "add-group" | "update-group" | "delete-group" | "add-item" | "update-item" | "delete-item", group, item?, name?, sortOrder?, active? }` — the tool description lists which fields each op takes.',
+    },
+  },
 }
 
 export function renderLlmsTxt(): string {
