@@ -54,7 +54,8 @@
 | `release` | 뗐다 | 좌표 · `landed`(뗀 자리의 답이 있나) · `shown`(보인 답이 있었나) · `still`(마지막 움직임과 같은 자리인가) |
 | `drop-refused` | 뗀 자리의 답이 보인 답과 다른 부모 | `why=not-shown` |
 | `end` | 누름이 끝났다 | `why`(click · touch-scroll · release · pointercancel · escape · unmount) · `started` |
-| `drop` | 놓기의 결과 | `result=committed`(부모 · 차례 · 넣은 것) · `result=refused why=<까닭>` |
+| `drop` | 놓기의 결과 | `result=committed`(부모 · 차례 · 넣은 것) · `result=asked`(같은 값 — 첫 행 확인 상자를 띄웠고 아직 안 냈다) · `result=refused why=<까닭>` |
+| `ask` | 첫 행 확인 상자가 닫혔다(`drop result=asked` 뒤) | `result=continued`(«계속» — 낸 편집의 부모 · 차례 · 넣은 것) · `result=cancelled`(«취소» · Escape · 닫기 — 낸 것 없음) · `result=stale`(«계속» 했지만 그 사이 문서가 바뀌어 안 냈다) |
 
 ### 까닭(`why=`)
 
@@ -90,6 +91,7 @@
 - **`start` 뒤 `tag` 가 없거나 크기 0** — «이름표조차 안 선다» 판.
 - **`over` 가 끝까지 `result=none`** — 그 `why` 가 판을 가른다. **«이름표는 따라오는데 놓아도 아무 일 없음»** 이면 대개 이 줄이다.
 - **`release landed=true` 인데 `drop` 이 없거나 `drop-refused`** — 뗀 순간 자리가 바뀌었다.
+- **`drop result=asked` 뒤 `ask` 가 없다** — 상자가 아직 열려 있거나, 페이지를 옮겨 물음이 상자 없이 걷혔다. 커스텀 행을 그리드의 첫 자리로 데려오는 놓기는 늘 묻는다(`apps/web/src/edit/first-row-ask.ts`) — 거절이 아니다.
 
 ## 끄는 법
 
@@ -97,4 +99,4 @@
 
 ## 걷는 법
 
-장치를 걷으려면 `git grep -nE 'wb-drag|drag-debug|dragDebug|DropMiss'` 로 센 자리를 지운다 — 줄 함수(`apps/web/src/drag/drag-debug.ts`) · 끌기 장치 · 경로 층 · `canvasHitAt` · `structureDropTarget` 의 `why` 인자 · 카드의 이름표 ref · 케이스 둘(`apps/web/test/drag/drag-debug.test.tsx` · `apps/web/build-test/drag-debug.test.ts`) · 이 문서와 README 의 가리킴. `why` 인자는 끝에 붙은 선택 인자라 지워도 다른 부르는 쪽이 안 바뀐다.
+장치를 걷으려면 `git grep -nE 'wb-drag|drag-debug|dragDebug|DropMiss|onAskSettled|FirstRowOutcome'` 로 센 자리를 지운다 — 줄 함수(`apps/web/src/drag/drag-debug.ts`) · 끌기 장치 · 경로 층 · `canvasHitAt` · `structureDropTarget` 의 `why` 인자 · 첫 행 확인의 결말 콜백(`CommitOptions.onAskSettled` · `FirstRowAsk.settled` · `FirstRowOutcome`) · 카드의 이름표 ref · 케이스 둘(`apps/web/test/drag/drag-debug.test.tsx` · `apps/web/build-test/drag-debug.test.ts`) · 이 문서와 README 의 가리킴. `why` 인자는 끝에 붙은 선택 인자라 지워도 다른 부르는 쪽이 안 바뀐다.

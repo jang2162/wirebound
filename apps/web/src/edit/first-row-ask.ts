@@ -22,6 +22,12 @@ export const FIRST_ROW_ASK_CONFIRM = '계속'
 /** 확인을 누른 때 그 편집이 더는 얹히지 않는다(남의 편집이 대상 · 목적지를 지움). */
 export const FIRST_ROW_ASK_STALE = '묻는 사이 페이지가 바뀌어 편집을 내지 않았습니다 — 다시 해 주세요.'
 
+/**
+ * 물은 편집의 결말 — 상자가 닫힐 때 그 물음을 건 쪽에 알린다(`CommitOptions.onAskSettled`). «계속» 해서 냈다(`continued`) · «취소» · Escape ·
+ * 닫기(`cancelled`) · «계속» 했지만 더는 얹히지 않아 안 냈다(`stale`). 페이지를 옮겨 물음이 상자 없이 걷히면 알리지 않는다.
+ */
+export type FirstRowOutcome = 'continued' | 'cancelled' | 'stale'
+
 /** 첫 자리로 온 커스텀 행 — 상자가 그 행을 이름으로 말한다. */
 export interface FirstRowLead {
   gridId: string

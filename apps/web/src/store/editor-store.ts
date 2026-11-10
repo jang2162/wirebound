@@ -24,6 +24,7 @@ import {
   selectionConflicts,
   type ValidationIssue,
 } from '@wirebound/schema'
+import type { FirstRowOutcome } from '../edit/first-row-ask'
 import { findNodeSafely } from '../edit/safe-walk'
 import type { NodeLockView } from '../realtime/protocol'
 import { anchorOps, rebaseAnchored, sameOps, type AnchoredOp } from './anchored-ops'
@@ -158,6 +159,8 @@ export interface FirstRowAsk {
   anchored: AnchoredOp[] | null
   /** 낸 뒤의 일(넣은 노드 고르기 등) — 부른 쪽이 `commitOps` 의 참 갈래에서 하던 것. */
   after: (() => void) | null
+  /** 결말을 받는 쪽(`CommitOptions.onAskSettled`) — 끌기 진단 줄만 준다. */
+  settled: ((outcome: FirstRowOutcome) => void) | null
 }
 
 export interface EditorState {
@@ -2320,24 +2323,47 @@ export class EditorStore {
    * 옮기자, 서버에는 앞 편집만 · 통지 0).
    */
   /** 커스텀 행을 첫 자리로 데려오는 편집을 묻는다 — 지금 열린 문서에서 붙잡는다(`EditorState.firstRowAsk`). 문서가 없으면 안 묻는다. */
-  readonly askFirstRow = (input: { rowId: string; ops: readonly PatchOp[]; after: (() => void) | null }): void => {
+  readonly askFirstRow = (input: {
+    rowId: string
+    ops: readonly PatchOp[]
+    after: (() => void) | null
+    settled?: ((outcome: FirstRowOutcome) => void) | null
+  }): void => {
     const { openPageId, document } = this.#state
     if (openPageId === null || document === null) return
-    this.#apply({ firstRowAsk: { pageId: openPageId, rowId: input.rowId, anchored: anchorOps(document, input.ops), after: input.after } })
+    this.#apply({
+      firstRowAsk: {
+        pageId: openPageId,
+        rowId: input.rowId,
+        anchored: anchorOps(document, input.ops),
+        after: input.after,
+        settled: input.settled ?? null,
+      },
+    })
   }
 
   /**
    * 묻던 편집을 걷고 «계속» 이면 지금 문서로 옮긴 연산을 돌려준다(`rebaseAnchored` — 남의 편집이 그 사이 닿았어도 노드 id 의 자리로 다시 짓는다).
-   * 더는 얹히지 않으면(대상 · 목적지가 사라짐) `null`. 묻는 중이 아니거나 다른 페이지면 `undefined`.
+   * 더는 얹히지 않으면(대상 · 목적지가 사라짐) `null`. 묻는 중이 아니거나 다른 페이지면 `undefined`. 결말(`FirstRowAsk.settled`)은 `undefined` 를 내는
+   * 갈래만 여기서 알리고, 돌려준 연산의 결말은 그것을 내는 상자가 알린다(`shell/first-row-dialog.tsx`).
    */
-  readonly settleFirstRowAsk = (proceed: boolean): { ops: PatchOp[] | null; after: (() => void) | null } | undefined => {
+  readonly settleFirstRowAsk = (
+    proceed: boolean,
+  ): { ops: PatchOp[] | null; after: (() => void) | null; settled: ((outcome: FirstRowOutcome) => void) | null } | undefined => {
     const ask = this.#state.firstRowAsk
     if (ask === null) return undefined
     this.#apply({ firstRowAsk: null })
     const { openPageId, document } = this.#state
-    if (!proceed || openPageId !== ask.pageId || document === null) return undefined
+    if (!proceed) {
+      ask.settled?.('cancelled')
+      return undefined
+    }
+    if (openPageId !== ask.pageId || document === null) {
+      ask.settled?.('stale')
+      return undefined
+    }
     const rebased = ask.anchored === null ? null : rebaseAnchored(document, ask.anchored)
-    return { ops: rebased === null ? null : rebased.ops, after: ask.after }
+    return { ops: rebased === null ? null : rebased.ops, after: ask.after, settled: ask.settled }
   }
 
   readonly clearPage = (options: { restoreReread?: boolean } = {}): PendingEdit[] => {

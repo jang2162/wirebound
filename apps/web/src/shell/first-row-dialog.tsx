@@ -41,8 +41,10 @@ export function FirstRowDialog(props: { projectId: string; pageId: string }): Re
     if (settled === undefined) return
     if (settled.ops === null || !commitOps(settled.ops, { firstRowAsked: true })) {
       store.tellLoss({ key: 'first-row:stale', rank: LOSS_RANK.cancelled, counts: [], render: () => FIRST_ROW_ASK_STALE })
+      settled.settled?.('stale')
       return
     }
+    settled.settled?.('continued')
     settled.after?.()
   }
 

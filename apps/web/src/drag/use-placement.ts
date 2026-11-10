@@ -99,6 +99,7 @@ import type { PageDocument } from '@wirebound/schema'
 import { canvasHitAt, COPY_DROP_REFUSAL, type CanvasHit, type HitNode, type Layout, type Point, type Rect } from '../canvas/canvas-drop'
 import { isPreviewId, withoutPreview, type PlacementPreview } from '../canvas/canvas-preview'
 import { createNode } from '../edit/create-node'
+import type { FirstRowOutcome } from '../edit/first-row-ask'
 import { findNodeSafely } from '../edit/safe-walk'
 import { acceptsChildren } from '../edit/structure-actions'
 import {
@@ -619,15 +620,29 @@ export function usePlacementDrop(input: {
     const placed = (): void => {
       if (node !== null) store.selectPlaced([node.id])
     }
-    const committed = commitOps(ops, { after: placed })
-    if (!committed) return logRefused(debug, reason, 'commit-refused')
-    debug?.line('drop', {
-      result: 'committed',
+    const placedAs = {
       parent: target.parentId,
       index: target.index,
       placing:
         placing.kind === 'new' ? `new:${placing.type}${placing.preset === undefined ? '' : `:${placing.preset}`}` : `node:${placing.id}`,
-    })
+    }
+    // 첫 행 확인으로 물은 놓기(`edit/first-row-ask.ts`)는 «거절» 이 아니다 — `commitOps` 는 물어도 `false` 라, 결말을 받는 쪽을 실어 그것이
+    // 물음에 실렸는지로 가른다. 결말은 상자가 닫힐 때 `ask` 한 줄로 따로 선다. 진단이 꺼졌으면 안 싣는다(그 판의 물음은 아무것도 안 바뀐다).
+    const settled =
+      debug === null
+        ? undefined
+        : (outcome: FirstRowOutcome): void => {
+            debug.line('ask', outcome === 'continued' ? { result: outcome, ...placedAs } : { result: outcome })
+          }
+    const committed = commitOps(ops, { after: placed, onAskSettled: settled })
+    if (!committed) {
+      if (settled !== undefined && store.getState().firstRowAsk?.settled === settled) {
+        debug?.line('drop', { result: 'asked', ...placedAs })
+        return
+      }
+      return logRefused(debug, reason, 'commit-refused')
+    }
+    debug?.line('drop', { result: 'committed', ...placedAs })
     placed()
   }
 
