@@ -24,7 +24,7 @@ let rows: ExportRows = emptyRows()
 let pendingScreens: { results: ScreenResult[]; resolve(batch: ScreenBatch): void; reject(error: unknown): void } | null = null
 
 function emptyRows(): ExportRows {
-  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null, images: [] }
+  return { menu: [], pages: [], comments: [], theme: null, themeWarning: null, images: [], codes: [] }
 }
 
 function send(message: FromWorker, transfer: ArrayBuffer[] = []): void {

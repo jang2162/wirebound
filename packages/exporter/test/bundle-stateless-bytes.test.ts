@@ -38,6 +38,9 @@
  * 트리 항목 계층(문서 판 6 · SDK 1.9.0)을 들이며 다시 지었다 — `assets/views.css` 는 트리의 단 규칙(항목마다 단 변수 → 자식 목록의 들여쓰기 · 표지 칸
  * 폭), «넓은 표본»(과 그 사본 `index.html`)은 픽스처의 트리가 펼친 항목 · 접힌 항목 · 맨 위 잎을 싣게 바뀌었고, «슬롯» · «글» 은 문서 JSON 의 판 번호(5 → 6)만 다르다(다시 재는 법: 두 페이지의
  * 문서를 `version: 5` 로 되돌려 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-03-tr-report.md`). «깨진 문서» 는 그대로다.
+ * 공통코드를 들이며 «넓은 표본»(과 그 사본 `index.html`)만 다시 지었다 — 픽스처의 칩 하나가 `code`(공통코드 참조)를 싣게 바뀌어 문서 JSON 이 그만큼
+ * 길다. 표를 넘기지 않는 번들이라 페이지 데이터에 `codes` 키 · 좌측 트리의 «공통코드» 절 · `codes.html` 이 없고, 나머지 페이지 · 시트는 그대로다(다시 재는 법:
+ * `test-support/fixtures.ts` 의 그 칩에서 `code` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-10-cc-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -78,16 +81,16 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '795b9ff02355c860',
-    'pages/넓은-표본.html': '646306ac8b5d9947',
+    'index.html': 'ebdc496710f6b83e',
+    'pages/넓은-표본.html': '1c4cbaf5bb10306b',
     'pages/슬롯.html': '8f223165d94d90d6',
     'pages/글.html': '34fd83c19f5e64dd',
     'pages/깨진-문서.html': '1e6593b7b432956c',
     'assets/views.css': '556341d0b9e1bbc4',
   },
   themed: {
-    'index.html': 'f23bef2efe2782ce',
-    'pages/넓은-표본.html': '39f1da837c98e4d8',
+    'index.html': '4e93060ac265781e',
+    'pages/넓은-표본.html': '50102e11ed7df659',
     'pages/슬롯.html': '5a47bcdcb93ed712',
     'pages/글.html': 'e4417938f0971101',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
@@ -126,13 +129,18 @@ describe('상태 없는 페이지의 번들 바이트', () => {
     expect(html(empty).replace(',"viewStates":[]', '')).toBe(html(without))
   })
 
-  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…) · 목차의 팝업 표지(.wb-export-nav-kind · .wb-export-hidden)를 겨누는 것뿐이다', () => {
+  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…) · 목차의 팝업 표지(.wb-export-nav-kind · .wb-export-hidden) · «공통코드» 장을 겨누는 것뿐이다', () => {
     const css = String(exportBundle({ pages: pages(), runtimeJs: '' }).files.find((file) => file.path === 'assets/shell.css')!.content)
     expect(hash(css.slice(0, SHELL_CSS_BEFORE.length))).toBe(SHELL_CSS_BEFORE.hash)
     const added = css.slice(SHELL_CSS_BEFORE.length)
     const selectors = [...added.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^}]*\}/g)].map((match) => match[1]!.trim())
     expect(selectors.length).toBeGreaterThan(0)
     // 팝업 표지는 팝업 페이지 줄에만 선다 — 그 클래스는 다른 줄에 안 붙는다(`bundle/shell.tsx`).
-    for (const selector of selectors) expect(selector).toMatch(/\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$/)
+    // «공통코드» 장의 규칙은 표가 있는 번들에만 서는 요소(좌측 트리의 둘째 절 · `codes.html`)를 겨눈다.
+    for (const selector of selectors) {
+      expect(selector).toMatch(
+        /\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$|^\.wb-export-(codes|chapter|nav-heading-next)\b/,
+      )
+    }
   })
 })

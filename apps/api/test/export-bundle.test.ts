@@ -276,6 +276,23 @@ describe('exportProjectBundle', () => {
     })
   })
 
+  /** **표를 읽어 번들에 넘긴다**(`ExportRows.codes`) — 그룹이 있으면 `codes.html` 장이 서고, 페이지 데이터가 표를 싣는다. 표가 빈 프로젝트는 위 판(장 없음)이다. */
+  it('공통코드 표가 있으면 «공통코드» 장과 페이지 데이터의 표가 실린다', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, '공통코드 설계서', 'codes-one')
+      const base = `/api/projects/${fixture.projectId}/codes`
+      const post = (url: string, payload: Record<string, unknown>) =>
+        ctx.app.inject({ method: 'POST', url: `${base}${url}`, cookies: fixture.cookie, payload })
+      expect((await post('', { key: 'GRADE', name: '등급' })).statusCode).toBe(201)
+      expect((await post('/GRADE/items', { value: 'VIP', name: '우수' })).statusCode).toBe(201)
+      const bundle = await exportProjectBundle(ctx.db, fixture.projectId)
+      const chapter = bundle.files.find((file) => file.path === 'codes.html')
+      expect(String(chapter?.content)).toContain('<td>우수</td>')
+      const index = String(bundle.files.find((file) => file.path === 'index.html')!.content)
+      expect(index).toContain('"codes":[{"key":"GRADE","name":"등급","items":[{"value":"VIP","name":"우수","active":true}]}]')
+    })
+  })
+
   /**
    * **이름은 번들이 부르는 이름이다**(조상이 붙어 있다). 맨 제목을 내면 내려받기 화면의
    * 페이지 목록이 `목록`·`목록`으로 보인다 — 번들의 좌측 트리가 조상을 붙이는 것과 같은

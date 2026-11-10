@@ -4,7 +4,7 @@
  * `dom-compare.ts`와 같은 이유로 여기 산다 — `packages/exporter`의 견주기와 `apps/web`의
  * 캔버스↔번들 견주기가 **같은 문서·같은 테마**를 써야 두 결과를 나란히 읽을 수 있다.
  */
-import type { PageDocument, WbNode } from '@wirebound/schema'
+import type { CodeTable, PageDocument, WbNode } from '@wirebound/schema'
 import { defineTheme, Root, view, type ThemeDefinition, type ThemeManifest } from '@wirebound/theme-sdk'
 import { createElement } from 'react'
 
@@ -153,7 +153,8 @@ export function broadFixture(): PageDocument {
                   children: [
                     { id: id(), type: 'RadioGroup', props: { options: [{ label: 'Y', selected: true }, { label: 'N' }] } },
                     { id: id(), type: 'Input', weight: 1, props: { kind: 'number', size: 'short', value: '80' } },
-                    { id: id(), type: 'Chip', props: { label: '설문' } },
+                    // 공통코드에 묶인 노드 — 표(`FIXTURE_CODES`)를 주면 «설문 응답», 안 주면 대체 글 «설문»으로 선다.
+                    { id: id(), type: 'Chip', props: { label: '설문' }, code: { group: 'MEMBER_KIND', item: 'SURVEY' } },
                   ],
                 },
                 {
@@ -288,6 +289,18 @@ export function popupFixture(): PageDocument {
     },
   }
 }
+
+/** «넓은 표본» 의 묶인 칩이 가리키는 표 — 그룹 하나 · 사용 항목 하나 · 사용 안 함 항목 하나. */
+export const FIXTURE_CODES: CodeTable = [
+  {
+    key: 'MEMBER_KIND',
+    name: '회원 구분',
+    items: [
+      { value: 'SURVEY', name: '설문 응답', active: true },
+      { value: 'OLD', name: '휴면', active: false },
+    ],
+  },
+]
 
 /** 노드 하나를 `Page` 아래에 둔 문서. */
 export function pageWith(node: WbNode): PageDocument {

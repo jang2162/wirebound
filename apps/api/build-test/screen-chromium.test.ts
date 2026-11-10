@@ -167,6 +167,48 @@ describe.skipIf(!있다)('진짜 브라우저가 그린 PNG', () => {
     expect(heights[0]).toBe(heights[2])
   })
 
+  /**
+   * **PPTX 의 화면도 묶인 노드를 표의 이름으로 그린다** — 그리는 자는 번들 페이지를 그대로 연다(`export-pptx.ts`). 번들의 런타임(`boot`)이 페이지
+   * 데이터의 표를 풀어 렌더러에 넘기는지를 실 Chrome 으로 잰다. 화소로 글을 못 읽으니, 테마 스크립트가 문서에 그 이름이 서면 빨간 상자 · 대체
+   * 글이 서면 파란 상자를 단다(뿌리가 바뀔 때마다 본다) — 표를 실은 판은 빨강만, 안 실은 판은 파랑만.
+   */
+  it('공통코드 — 묶인 노드를 표의 이름으로 그린다(표가 없으면 대체 글)', async () => {
+    const page: PageDocument = {
+      version: 6,
+      root: {
+        id: 'n_page',
+        type: 'Page',
+        children: [{ id: 'n_kind', type: 'Text', props: { content: '옛 이름' }, code: { group: 'KIND', item: 'A' } }],
+      },
+    } as PageDocument
+    const codes = [{ key: 'KIND', name: '구분', items: [{ value: 'A', name: '새 이름', active: true }] }]
+    const mark = [
+      `const paint = () => {`,
+      // 목업 칸의 글만 읽는다 — 몸 전체는 페이지 데이터 JSON(표의 이름이 든다)까지 든다.
+      `  const canvas = document.querySelector('.wb-export-canvas')`,
+      `  if (canvas === null || document.getElementById('wb-probe') !== null) return`,
+      `  const text = canvas.textContent ?? ''`,
+      `  const color = text.includes('새 이름') ? 'rgb(255, 0, 0)' : text.includes('옛 이름') ? 'rgb(0, 0, 255)' : null`,
+      `  if (color === null) return`,
+      `  const box = document.createElement('div')`,
+      `  box.id = 'wb-probe'`,
+      `  box.style.cssText = 'position:fixed;left:0;top:0;width:40px;height:40px;z-index:2147483647;background:' + color`,
+      `  document.body.appendChild(box)`,
+      `}`,
+      `new MutationObserver(paint).observe(document.documentElement, { subtree: true, childList: true, characterData: true })`,
+    ].join('\n')
+    const theme = (): ReturnType<typeof inlineTheme> => inlineTheme({ id: 'probe', before: mark })
+    const batch = await draw([bundled('묶인 노드', page, theme(), codes), bundled('표 없음', page, theme())])
+    const [withTable, without] = batch.results
+    if (withTable === undefined || !withTable.ok || without === undefined || !without.ok) throw new Error('그리지 못했다')
+    // 배율 2배 — 40px 상자는 80 × 80 화소다.
+    expect({ red: countColor(withTable.bytes, [255, 0, 0]), blue: countColor(withTable.bytes, [0, 0, 255]) }).toEqual({
+      red: 6400,
+      blue: 0,
+    })
+    expect({ red: countColor(without.bytes, [255, 0, 0]), blue: countColor(without.bytes, [0, 0, 255]) }).toEqual({ red: 0, blue: 6400 })
+  })
+
   it('한글이 두부가 아니다 — 이 기계에는 글꼴이 있다', async () => {
     const batch = await draw([requestFor(1, 4)])
     expect(batch.fontWarning).toBeNull()

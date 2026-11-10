@@ -24,10 +24,11 @@
  *    「내보내기와 PPTX」 의 «테마 코드는 브라우저에서만 돈다»). 번들과 PPTX 화면이 같은 테마로 그린다.
  */
 import type { BundleComment, BundleImage, BundleTheme } from '@wirebound/exporter'
-import { imageIdsIn, migrateDocument, targetedPages, type PageDocument, type TargetedPage } from '@wirebound/schema'
+import { imageIdsIn, migrateDocument, targetedPages, type CodeTable, type PageDocument, type TargetedPage } from '@wirebound/schema'
 import { readWbtheme } from '@wirebound/themes'
 import type { DbHandle } from '../db/tx'
 import { readProjectAssetsForBundle } from '../repos/assets'
+import { readCodeTable } from '../repos/codes'
 import { listProjectComments, type CommentRecord } from '../repos/comments'
 import { listMenuRows } from '../repos/menu'
 import { listPages, type PageRecord } from '../repos/pages'
@@ -96,6 +97,8 @@ export interface ExportRows {
    * 그 바이트는 여기 안 든다(정본 「그림」 — 권한은 소유 행이 가른다). 워커 경계를 넘도록 배열이다.
    */
   images: BundleImage[]
+  /** 프로젝트의 공통코드 표(`repos/codes.ts` 의 `readCodeTable`) — 번들이 묶인 노드를 표의 이름으로 그리고 «공통코드» 장을 싣는다. */
+  codes: CodeTable
 }
 
 /**
@@ -109,7 +112,8 @@ export async function readExportRows(db: DbHandle, projectId: string): Promise<E
   if (pages.length === 0) throw new EmptyProjectError()
   const comments = await listProjectComments(db, projectId)
   const images = await readExportImages(db, projectId, pages)
-  return { menu, pages, comments, ...(await readExportTheme(db, projectId)), images }
+  const codes = await readCodeTable(db, projectId)
+  return { menu, pages, comments, ...(await readExportTheme(db, projectId)), images, codes }
 }
 
 /** 페이지 문서들이 든 그림 id 가운데 그 프로젝트가 가진 것의 바이트(`ExportRows.images`). */

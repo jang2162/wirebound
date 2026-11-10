@@ -25,7 +25,7 @@ import {
   type InteractionRequest,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import { childLists, type PageDocument, type WbNode } from '@wirebound/schema'
+import { childLists, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { flushSync } from 'react-dom'
@@ -47,6 +47,8 @@ export interface ExportMountInput {
   images?: Readonly<Record<string, string>>
   /** «팝업 열기» 대상 → 실린 팝업 문서(`ExportPageData.popups`). 없는 대상은 `hrefs` 의 길이다. */
   popups?: Readonly<Record<string, ExportPopup>>
+  /** 공통코드 표(`ExportPageData.codes` 를 `indexCodes` 로 푼 것). 없으면 묶인 노드를 prop 의 대체 글로 그린다. */
+  codes?: CodeIndex
   /** 말할 자리(셸의 `.wb-export-status`). 없으면 말하지 않는다. */
   status: Element | null
   /** 늘 머리에 서는 줄 — 번들을 못 쓴 까닭 따위. 조작마다 비우지 않는다. */
@@ -245,6 +247,7 @@ function ExportCanvas(props: {
     interaction: { overlay, onEvent },
     viewState,
     assetUrl: (id) => input.images?.[id] ?? null,
+    ...(input.codes === undefined ? {} : { codes: input.codes }),
   })
 
   // 셸의 상태 줄. 빈 목록이면 줄을 감춘다 — 빈 상자가 남으면 목업이 밀린다.
@@ -302,7 +305,7 @@ function ExportCanvas(props: {
   return (
     <>
       {tree}
-      <PopupLayer stack={popups} theme={input.theme} onEvent={onPopupEvent} />
+      <PopupLayer stack={popups} theme={input.theme} onEvent={onPopupEvent} codes={input.codes} />
       {markers.length > 0 && (
         <div className="wb-export-markers" aria-hidden="true">
           {markers.map((box) => (

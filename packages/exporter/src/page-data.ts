@@ -4,7 +4,7 @@
  * Node 쪽(`bundle/index.ts` 가 짓는다)과 브라우저 쪽(`browser/boot.tsx` 가 읽는다)이 이 파일 하나를 본다. DOM 을 모르고 값만 둔다 —
  * 두 `tsconfig`(`tsconfig.json` · `tsconfig.runtime.json`)가 함께 든다.
  */
-import type { PageDocument } from '@wirebound/schema'
+import type { CodeTable, PageDocument } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 페이지 JSON 을 실은 `<script type="application/json">` 의 id. */
@@ -72,6 +72,11 @@ export interface ExportPageData {
    * 그대로 간다. 닿는 팝업이 없으면 키째 없다 — 팝업 없는 번들의 바이트가 그대로다.
    */
   popups?: Record<string, ExportPopup>
+  /**
+   * 프로젝트의 공통코드 표 — 런타임이 묶인 노드를 표의 이름으로 그린다(`RenderOptions.codes`). 이 페이지 · 실린 팝업이 같은 표를 쓴다.
+   * 표가 빈 프로젝트는 키째 없다 — 공통코드 없는 번들의 바이트가 그대로다.
+   */
+  codes?: CodeTable
 }
 
 /** 번들 페이지에 실은 팝업 하나(`ExportPageData.popups`). */
