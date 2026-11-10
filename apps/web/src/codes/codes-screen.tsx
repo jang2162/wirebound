@@ -114,21 +114,24 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
     return ok
   }
 
-  /** 지우기 — 쓰이면 사용처를 읽어 묻고, 안 쓰이면 곧바로 지운다. */
+  /**
+   * 지우기 — **늘 사용처를 한 번 묻고**, 쓰이면 그 목록으로 확인을 받고 안 쓰이면 곧바로 지운다. 화면의 사용 수(`counts`)로 정하지 않는다 — 이
+   * 화면은 룸에 안 들어 그 수가 연 때의 값이라, 연 뒤 다른 탭 · 다른 사람이 묶은 항목이 확인 없이 지워진다. 조회가 실패하면 지우지 않는다.
+   */
   async function askDelete(group: CodeGroup, item?: CodeItem): Promise<void> {
-    const uses = item === undefined ? (counts[group.key]?.group ?? 0) : (counts[group.key]?.items[item.value] ?? 0)
-    if (uses === 0) {
-      await remove(group, item)
-      return
-    }
     setBusy(true)
+    let hits: UsageHit[]
     try {
-      const hits = await api.codeUsage(props.projectId, group.key, item?.value)
-      setDeleting({ group, uses, hits, ...(item === undefined ? {} : { item }) })
+      hits = await api.codeUsage(props.projectId, group.key, item?.value)
     } catch (caught) {
       setFailure(toFailure(caught, USAGE_FAILURE))
+      setBusy(false)
+      return
     }
     setBusy(false)
+    const uses = hits.reduce((sum, hit) => sum + hit.nodes.length, 0)
+    if (uses === 0) await remove(group, item)
+    else setDeleting({ group, uses, hits, ...(item === undefined ? {} : { item }) })
   }
 
   async function remove(group: CodeGroup, item?: CodeItem): Promise<void> {

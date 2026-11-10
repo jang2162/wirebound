@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { Page } from 'playwright-core'
-import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -28,6 +28,7 @@ describe.skipIf(!전제.ok)('공통코드 화면 — 실브라우저', () => {
   let stack: EditorStack
   let alice: Session
   let projectId: string
+  let pageId: string
 
   beforeAll(async () => {
     if (!전제.ok) return
@@ -47,6 +48,7 @@ describe.skipIf(!전제.ok)('공통코드 화면 — 실브라우저', () => {
     }
     const menu = (await stack.request(alice, 'POST', `${base}/menu`, { parentId: null, title: '메뉴' })).body
     const page = (await stack.request(alice, 'POST', `${base}/pages`, { menuNodeId: menu.id, title: LONG_TITLE })).body
+    pageId = page.id
     const bound = await stack.request(alice, 'PATCH', `${base}/pages/${page.id}/ops`, {
       baseSeq: 0,
       ops: [
@@ -96,6 +98,56 @@ describe.skipIf(!전제.ok)('공통코드 화면 — 실브라우저', () => {
     }
     // eslint-disable-next-line no-console
     console.log(`[codes-screen 넘침] ${JSON.stringify(seen)}`)
+  })
+
+  /**
+   * 이 화면은 룸에 안 든다 — 사용 수는 연 때의 값이다. 연 뒤 다른 길(여기서는 REST 편집 — 다른 탭 · 다른 사람과 같은 길)로 그 항목을 묶고
+   * «삭제» 를 누르면, 지우기 직전에 사용처를 다시 물어 확인 상자가 서야 한다. 낡은 0 으로 정하면 확인 없이 `DELETE` 가 나간다.
+   */
+  it('연 뒤 다른 길로 묶인 항목의 «삭제» 는 확인 상자가 서고, 확인 전에는 지워지지 않는다', async () => {
+    const base = `/projects/${projectId}`
+    const value = `${LONG_VALUE.slice(0, 38)}1`
+    const hasItem = async (): Promise<boolean> =>
+      ((await stack.request(alice, 'GET', `${base}/codes`)).body.groups as { key: string; items: { value: string }[] }[])
+        .find((group) => group.key === LONG_KEY)!
+        .items.some((item) => item.value === value)
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
+    try {
+      await page.goto(`${base}/codes?group=${LONG_KEY}`)
+      const row = page.getByRole('table', { name: '공통코드 항목' }).locator('tbody tr').filter({ hasText: value })
+      await row.waitFor()
+      // 판 카나리아 — 화면이 아는 사용 수는 0 이다.
+      expect(await row.locator('td').nth(4).textContent()).toBe('0곳')
+
+      const headSeq = (await stack.request(alice, 'GET', `${base}/pages/${pageId}`)).body.headSeq as number
+      const late = await stack.request(alice, 'PATCH', `${base}/pages/${pageId}/ops`, {
+        baseSeq: headSeq,
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/0',
+            value: { id: 'n_codelate001', type: 'Affix', props: { text: 'y' }, code: { group: LONG_KEY, item: value } },
+          },
+        ],
+      })
+      expect(late.status).toBe(200)
+      // 화면은 그 편집을 모른다.
+      expect(await row.locator('td').nth(4).textContent()).toBe('0곳')
+
+      await row.getByRole('button', { name: /더 보기$/ }).click()
+      await page.getByRole('menuitem', { name: '삭제', exact: true }).click()
+      const dialog = page.getByRole('dialog', { name: '공통코드 항목 삭제' })
+      const outcome = await poll(
+        '상자가 서거나 항목이 지워진다',
+        async () => ((await dialog.count()) > 0 ? 'asked' : (await hasItem()) ? 'pending' : 'deleted'),
+        (state) => state !== 'pending',
+      )
+      expect(outcome).toBe('asked')
+      expect(await dialog.textContent()).toContain('1곳에서 씁니다')
+      expect(await hasItem()).toBe(true)
+    } finally {
+      await context.close()
+    }
   })
 })
 

@@ -155,6 +155,52 @@ describe('공통코드 화면', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  /**
+   * 화면은 룸에 안 들어 사용 수(`codeUsageCounts`)가 연 때의 값이다 — 연 뒤 다른 탭 · 다른 사람이 그 항목을 묶은 판. 지우기 직전에 사용처를 다시
+   * 묻지 않으면 낡은 0 으로 확인 없이 지운다.
+   */
+  it('화면을 연 뒤 다른 길로 묶인 항목 «삭제» 는 확인 상자가 선다 — 연 때의 사용 수 0 으로 지우지 않는다', async () => {
+    const board = fake()
+    let asked = 0
+    board.api.codeUsage = async (_p, key, item) => {
+      asked += 1
+      return key === 'ORDER_STATUS' && item === 'DONE' ? [{ ...HIT, nodes: [...HIT.nodes, { nodeId: 'n-late', name: '완료 버튼' }] }] : []
+    }
+    await open(board)
+    // 판 카나리아 — 화면이 아는 사용 수는 0 이다.
+    expect(within(rowOf('완료')).getAllByRole('cell')[4]!.textContent).toBe('0곳')
+    const before = asked
+    fireEvent.click(within(rowOf('완료')).getByRole('button', { name: '«완료» 더 보기' }))
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: '삭제' }))
+    // 상자가 서거나 지우기가 나가거나 — 어느 쪽인지는 아래 값으로 가른다(상자만 기다리면 곧바로 지운 판이 시간 초과로 죽는다).
+    await waitFor(() => expect(screen.queryByRole('dialog') !== null || board.writes.length > 0).toBe(true))
+    expect(board.writes).toEqual([])
+    const dialog = screen.getByRole('dialog', { name: '공통코드 항목 삭제' })
+    // 수는 방금 물은 사용처의 노드 수다(연 때의 0 이 아니다).
+    expect(dialog.textContent).toContain('2곳에서 씁니다')
+    expect(asked - before).toBe(1)
+    expect(board.writes).toEqual([])
+    fireEvent.click(within(dialog).getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(board.writes).toEqual(['delete-item ORDER_STATUS DONE']))
+  })
+
+  it('사용처 조회가 실패하면 지우지 않고 말한다', async () => {
+    const board = fake()
+    // 여는 동안의 사용처 칸 조회는 답하고, 지우기가 묻는 조회만 끊는다(하네스는 여는 때의 함수를 쥔다).
+    let failing = false
+    board.api.codeUsage = async () => {
+      if (failing) throw new Error('끊김')
+      return []
+    }
+    await open(board)
+    failing = true
+    fireEvent.click(within(rowOf('완료')).getByRole('button', { name: '«완료» 더 보기' }))
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: '삭제' }))
+    await waitFor(() => expect(screen.queryByRole('alert') !== null || board.writes.length > 0).toBe(true))
+    expect(board.writes).toEqual([])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('그룹을 만들면 그 그룹이 골라진다 · 주소에 실린다', async () => {
     const board = fake()
     await open(board)
