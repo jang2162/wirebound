@@ -60,6 +60,8 @@ export type ToWorker =
   | { t: 'rows'; part: 'comments'; items: ExportRows['comments'] }
   /** 페이지가 든 그림의 바이트(`ExportRows.images`) — 한 장씩 온다(한 장이 파일 한도 5 MB 까지라 묶지 않는다). */
   | { t: 'rows'; part: 'images'; items: ExportRows['images'] }
+  /** 프로젝트의 공통코드 표(`ExportRows.codes`) — 한 번에 온다(그룹 500 × 항목 200 이 상한이고 글자뿐이다). */
+  | { t: 'rows'; part: 'codes'; items: ExportRows['codes'] }
   /** 프로젝트 테마 — 패키지 파일 · 토큰(`ExportRows.theme`). 행 뒤 `run` 앞에 한 번 온다. */
   | { t: 'rows'; part: 'theme'; theme: ExportRows['theme']; warning: ExportRows['themeWarning'] }
   | { t: 'run' }

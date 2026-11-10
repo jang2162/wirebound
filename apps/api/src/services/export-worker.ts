@@ -728,6 +728,7 @@ export class ExportWorkerPool {
     }
     await yieldToLoop()
     if (done()) return
+    post({ t: 'rows', part: 'codes', items: rows.codes })
     post({ t: 'rows', part: 'theme', theme: rows.theme, warning: rows.themeWarning })
     if (done()) return
     post({ t: 'run' })

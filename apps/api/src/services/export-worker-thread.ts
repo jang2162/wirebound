@@ -72,6 +72,7 @@ port.on('message', (message: ToWorker) => {
       else if (message.part === 'pages') rows.pages.push(...message.items)
       else if (message.part === 'comments') rows.comments.push(...message.items)
       else if (message.part === 'images') rows.images.push(...message.items)
+      else if (message.part === 'codes') rows.codes = message.items
       else {
         rows.theme = message.theme
         rows.themeWarning = message.warning
