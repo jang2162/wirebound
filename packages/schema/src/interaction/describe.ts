@@ -53,6 +53,7 @@
  * 비어 있는 페이지 경로도 `아직 정해지지 않은 페이지`라고 말한다 — 빈 문자열을 그대로
  * 흘리면 *"…로 이동합니다"*가 되어 **대상이 있는 것처럼 읽힌다.**
  */
+import { resolvedCodeProps, type CodeIndex } from '../codes-resolve'
 import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
 import { isolateBidi } from '../bidi'
@@ -304,7 +305,7 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
         return `${name}${subjectParticle(name)} 탭으로 열립니다`
       }
       const tabs = nodeName(at.parent, index.naming.get(at.parent.id))
-      const label = readLabel(target, 'label')
+      const label = readLabel(target.props, 'label')
       // 이름을 못 읽으면 차례로 말한다 — 차례는 0부터이고 사람이 세는 것은 1부터다.
       const which = label === undefined ? `${at.index + 1}번째 탭` : `"${label}" 탭`
       return `${tabs}${subjectParticle(tabs)} ${which}${directionParticle(which)} 바뀝니다`
@@ -347,22 +348,25 @@ function nodeName(node: WbNode, context?: NamingContext): string {
  * 번호는 싣지 않는다(문장 · 고르개는 `describeNode` 가 번호를 앞에 붙인다).
  *
  * **노드를 이름으로 부르는 자리는 이것을 거친다** — 별칭을 읽는 자리가 여럿이면 한 자리가 타입 이름으로 남는다.
+ *
+ * `codes`(공통코드 표)를 주면 묶인 노드의 라벨을 표의 이름으로 읽는다(`codes-resolve.ts`). 안 주면 prop 의 글 — 묶을 때 적어 둔 대체 글이다.
  */
-export function nodeDisplayName(node: WbNode, context?: NamingContext): string {
-  const name = nodeAlias(node) ?? nounName(node)
+export function nodeDisplayName(node: WbNode, context?: NamingContext, codes?: CodeIndex): string {
+  const name = nodeAlias(node) ?? nounName(node, codes)
   return context?.viewStateName === undefined ? name : `'${name}'(${context.viewStateName} 상태)`
 }
 
-function nounName(node: WbNode): string {
+function nounName(node: WbNode, codes: CodeIndex | undefined): string {
   const noun = COMPONENT_NOUNS[node.type]
   const base = noun?.name ?? (typeof node.type === 'string' ? node.type : '알 수 없는 노드')
-  const label = noun?.labelProp === undefined ? undefined : readLabel(node, noun.labelProp)
+  const props = (codes === undefined ? null : resolvedCodeProps(node, codes)) ?? node.props
+  const label = noun?.labelProp === undefined ? undefined : readLabel(props, noun.labelProp)
   return label === undefined ? base : `${label} ${base}`
 }
 
 /** 라벨성 prop의 값. 문자열이 아니거나 비어 있으면 `undefined`다. */
-function readLabel(node: WbNode, prop: string): string | undefined {
-  const value = node.props?.[prop]
+function readLabel(props: WbNode['props'], prop: string): string | undefined {
+  const value = props?.[prop]
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   if (trimmed.length === 0) return undefined

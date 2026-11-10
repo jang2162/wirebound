@@ -214,3 +214,7 @@ export {
   CodeTableSchema,
   CodeValueSchema,
 } from './codes'
+export type { CodeIndex, ResolvedChoices } from './codes-resolve'
+export { indexCodes, isCodeBroken, resolveChoices, resolvedCodeProps, resolveLabel } from './codes-resolve'
+export type { CodeUsageCount, UsageHit, UsageSource } from './codes-usage'
+export { codeUsage, codeUsageCounts } from './codes-usage'

@@ -127,8 +127,27 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
               },
             },
           },
+          // 공통코드 다섯 — 끊긴 항목 · 사용 안 함 · 고른 값이 없음 · 31 개 · 0 개.
+          {
+            id: 'pg5',
+            menuNodeId: 'm1',
+            title: '코드',
+            target: 'page:관리자/코드',
+            document: doc([
+              { id: nid(), type: 'Affix', code: { group: 'S', item: 'GONE' } },
+              { id: nid(), type: 'Affix', code: { group: 'S', item: 'OFF' } },
+              { id: nid(), type: 'CheckboxGroup', code: { group: 'S', selected: ['GONE'] } },
+              { id: nid(), type: 'CheckboxGroup', code: { group: 'MANY' } },
+              { id: nid(), type: 'CheckboxGroup', code: { group: 'EMPTY' } },
+            ]),
+          },
         ],
         comments: [],
+        codes: [
+          { key: 'S', name: '상태', items: [{ value: 'OFF', name: '꺼짐', active: false }] },
+          { key: 'MANY', name: '많음', items: Array.from({ length: 31 }, (_, i) => ({ value: `V${i}`, name: `이름${i}`, active: true })) },
+          { key: 'EMPTY', name: '빔', items: [] },
+        ],
       },
       config: { naming: { page: '^[가-힣 ]+$' } },
       // `Button` 을 선언하되 `danger` 를 빼 — 테마 규칙(`theme-variant`)도 이 자리에서 난다.

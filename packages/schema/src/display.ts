@@ -13,6 +13,7 @@
  */
 import { isBlankAlias } from './alias'
 import { isolateBidi } from './bidi'
+import { resolvedCodeProps, type CodeIndex } from './codes-resolve'
 import { CATALOG_DEFS } from './component/catalog/index'
 import type { ComponentDef } from './component/define'
 import { DEFAULT_VIEW_STATE, type ViewState, type WbNode } from './node'
@@ -52,11 +53,13 @@ export function viewStateName(viewStates: readonly ViewState[] | undefined, stat
  * props 는 기본값을 채워 넘긴다(`Flex` 에 `direction` 이 없어도 `가로`). 규격에 안 맞으면 원본을 넘기고, `summary` 의
  * 읽개(`component/summary.ts`)가 틀린 값을 `null` 로 읽는다.
  */
-export function nodeSummary(node: WbNode): string | null {
+export function nodeSummary(node: WbNode, codes?: CodeIndex): string | null {
   if (typeof node.type !== 'string') return null
   const def = DEFS.get(node.type)
   if (def?.summary === undefined) return null
-  const raw = isRecord(node.props) ? node.props : {}
+  // 공통코드에 묶인 노드는 표의 이름으로 — 표를 안 받은 자리는 prop 의 대체 글이다(`codes-resolve.ts`).
+  const own = codes === undefined ? null : resolvedCodeProps(node, codes)
+  const raw = own ?? (isRecord(node.props) ? node.props : {})
   const parsed = def.props.safeParse(raw)
   const props = parsed.success && isRecord(parsed.data) ? parsed.data : raw
   return def.summary(props)
@@ -80,9 +83,9 @@ export function nodeHeading(node: WbNode): string {
 }
 
 /** `타입 (별칭) 요약` — 구조 트리 줄 · MCP 의 `rowLabel`. 별칭 · 요약이 없으면 그 조각을 생략한다. */
-export function nodeRowLabel(node: WbNode): string {
+export function nodeRowLabel(node: WbNode, codes?: CodeIndex): string {
   const heading = nodeHeading(node)
-  const summary = nodeSummary(node)
+  const summary = nodeSummary(node, codes)
   return summary === null ? heading : `${heading} ${summary}`
 }
 

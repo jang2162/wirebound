@@ -82,6 +82,7 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
   if (node.props !== undefined) next.props = cloneJsonValue(node.props)
   // 보임의 `states` 도 배열이라 얕게 두면 입력과 같은 배열이 된다.
   if (node.visibility !== undefined) next.visibility = { mode: node.visibility.mode, states: [...node.visibility.states] }
+  if (node.code !== undefined) next.code = copyCode(node.code)
 
   if (node.interactions) {
     next.interactions = node.interactions.map((interaction) => ({
@@ -103,6 +104,13 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
   if (node.zones) next.zones = copyZones(node.zones, (child) => rewrite(child, mapping))
 
   return next
+}
+
+function copyCode(code: NonNullable<WbNode['code']>): NonNullable<WbNode['code']> {
+  const out: NonNullable<WbNode['code']> = { group: code.group }
+  if (code.item !== undefined) out.item = code.item
+  if (code.selected !== undefined) out.selected = [...code.selected]
+  return out
 }
 
 /** 구역 맵의 사본 — 열쇠마다 새 배열(입력과 공유하지 않는다). 배열이 아닌 값은 그대로 옮긴다(봉투가 거절한다 — `rewrite`의 «선언되지 않은 키» 와 같은 자세). */
@@ -142,6 +150,8 @@ function copyNode(node: WbNode): WbNode {
   if (node.weight !== undefined) next.weight = node.weight
   // 보임은 옮긴다 — 붙여넣기 · 복제가 이 복사를 지난다. 걷는 것은 모듈 저장(`module/save.ts`)의 몫이다.
   if (node.visibility !== undefined) next.visibility = { mode: node.visibility.mode, states: [...node.visibility.states] }
+  // 공통코드 참조도 옮긴다 — 키 · 값으로 가리키므로 id 를 다시 짓지 않는다. 대상 프로젝트에 키가 없으면 끊긴 참조로 선다(lint · 캔버스 표지).
+  if (node.code !== undefined) next.code = copyCode(node.code)
   if (node.interactions !== undefined) {
     next.interactions = node.interactions.map((interaction) => ({
       on: interaction.on,
