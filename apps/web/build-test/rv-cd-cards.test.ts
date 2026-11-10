@@ -435,7 +435,7 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
       await page.getByRole('link', { name: '고객 포털 열기', exact: true }).waitFor()
       await page.locator('.wb-shell-home-search input').focus()
       const stops: string[] = []
-      for (let i = 0; i < 9; i += 1) {
+      for (let i = 0; i < 11; i += 1) {
         await page.keyboard.press('Tab')
         stops.push(await focusOf(page))
       }
@@ -499,17 +499,19 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
     expect(seen.afterEsc).toBe('button:프로젝트 추가')
     expect(seen.tabToCancel).toBe('button:취소')
     expect(seen.afterCancel).toBe('button:프로젝트 추가')
-    // 위 줄 둘 → 추가 카드 → 카드마다 «이름 → <이름> 열기 → <이름> 설정».
+    // 위 줄 둘 → 추가 카드 → 카드마다 «이름 → <이름> 열기 → <이름> 공통코드 → <이름> 설정».
     const stops = seen.stops as string[]
     expect(stops.slice(0, 3)).toEqual(['select:역할', 'select:정렬', 'button:프로젝트 추가'])
     const first = stops[3]!.slice('a:'.length)
-    const second = stops[6]!.slice('a:'.length)
+    const second = stops[7]!.slice('a:'.length)
     expect(stops.slice(3)).toEqual([
       `a:${first}`,
       `a:${first} 열기`,
+      `a:${first} 공통코드`,
       `a:${first} 설정`,
       `a:${second}`,
       `a:${second} 열기`,
+      `a:${second} 공통코드`,
       `a:${second} 설정`,
     ])
     expect(seen.bidiByRole).toEqual({ open: 1, gear: 1 })

@@ -9,4 +9,14 @@
 export { describeTree, normalizeStyle } from './dom-compare'
 // `unit` 프로젝트에 DOM이 없어 케이스가 XML을 읽을 자가 따로 있어야 한다. 근거는 그 파일의 머리말이다.
 export { findAll, parseXml, textOf, type XmlElement } from './xml'
-export { brokenFixture, broadFixture, EMPTY_MANIFEST, markedTheme, pageWith, SAMPLE_PAGE, slotFixture, typesIn } from './fixtures'
+export {
+  brokenFixture,
+  broadFixture,
+  EMPTY_MANIFEST,
+  FIXTURE_CODES,
+  markedTheme,
+  pageWith,
+  SAMPLE_PAGE,
+  slotFixture,
+  typesIn,
+} from './fixtures'

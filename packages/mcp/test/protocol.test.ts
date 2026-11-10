@@ -107,7 +107,7 @@ describe('`outcome.ts`의 세 갈래가 프로토콜에서 갈린다', () => {
   it('모르는 도구는 JSON-RPC 오류다 — 결과가 아니다', async () => {
     const client = await connect(harness())
     try {
-      // **설계서 「MCP 도구」의 표에 없는 이름이다.** 표가 다섯을 다 덮으므로 실재하지 않는 이름을 골랐다.
+      // **설계서 「MCP 도구」의 표에 없는 이름이다.** 표가 여덟을 다 덮으므로 실재하지 않는 이름을 골랐다.
       await expect(client.callTool({ name: 'delete_project', arguments: {} })).rejects.toMatchObject({
         code: ErrorCode.MethodNotFound,
       })
