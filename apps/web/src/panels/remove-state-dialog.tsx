@@ -20,7 +20,16 @@
  * 서버도 423 으로 막는다).
  */
 import { useId, useState, type ReactElement } from 'react'
-import { nodeRowLabel, removeViewStateOps, walkNodes, type PageDocument, type PatchOp, type WbNode } from '@wirebound/schema'
+import {
+  nodeRowLabel,
+  removeViewStateOps,
+  walkNodes,
+  type CodeIndex,
+  type PageDocument,
+  type PatchOp,
+  type WbNode,
+} from '@wirebound/schema'
+import { useProjectCodes } from '../codes/project-codes'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { ShellDialog } from '../shell/shell-dialog'
 import { useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
@@ -64,7 +73,7 @@ interface Removal {
   key: string
 }
 
-function removal(doc: PageDocument, stateId: string): Removal | null {
+function removal(doc: PageDocument, stateId: string, codes: CodeIndex | undefined): Removal | null {
   try {
     const result = removeViewStateOps(doc, stateId)
     if (result === null) return null
@@ -72,7 +81,7 @@ function removal(doc: PageDocument, stateId: string): Removal | null {
     const gone = new Set(result.removedNodeIds)
     const removed: { id: string; label: string }[] = []
     for (const { node } of walkNodes(doc.root)) {
-      if (gone.has(node.id)) removed.push({ id: node.id, label: nodeRowLabel(node as WbNode) })
+      if (gone.has(node.id)) removed.push({ id: node.id, label: nodeRowLabel(node as WbNode, codes) })
     }
     const sorted = (ids: readonly string[]): string => [...ids].sort().join(',')
     return {
@@ -121,7 +130,9 @@ function OpenRemoveStateDialog(props: {
   useLockedBy()
   const { commitOps } = useEditCommit({ projectId: props.projectId, pageId: props.target.pageId })
   const sentenceId = useId()
-  const pending = removal(props.doc, props.target.stateId)
+  // 지워질 줄의 이름은 구조 트리 줄과 같은 글이다 — 묶인 노드는 표의 이름.
+  const codes = useProjectCodes().index
+  const pending = removal(props.doc, props.target.stateId, codes)
   const [asking, setAsking] = useState<Asking>(() => ({ key: pending?.key ?? '', changed: false, recheck: false }))
   // 묻는 사이 집합이 바뀌었으면(남의 편집이 닿음) 새 집합으로 다시 선다 — 렌더 중에 고친다(«삭제»가 보는 열쇠와 같은 값).
   if (pending !== null && pending.key !== asking.key) setAsking({ key: pending.key, changed: true, recheck: true })
@@ -130,7 +141,7 @@ function OpenRemoveStateDialog(props: {
     pending === null ? STATE_GONE_REASON : blocker !== null ? `${blocker.userName}님이 편집 중인 노드가 있어 함께 지울 수 없습니다` : null
 
   function confirm(): void {
-    const now = removal(props.doc, props.target.stateId)
+    const now = removal(props.doc, props.target.stateId, codes)
     if (now === null || store.editBlockedBy(now.ops) !== null) return
     // 렌더 중의 견줌(위)이 대개 먼저 잡는다. 이 줄은 남의 편집이 스토어에 닿고 다시 그리기 전에 누름이 온 판의 몫이다.
     if (now.key !== asking.key) {

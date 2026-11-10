@@ -166,10 +166,10 @@ export interface InteractionSentence {
  * 상호작용 하나를 문장으로 만든다.
  *
  * `source`는 그 상호작용이 걸린 노드다. `document`는 **타겟을 찾기 위해** 받는다 —
- * 타겟의 타입을 알아야 이름과 prop 라벨이 나온다.
+ * 타겟의 타입을 알아야 이름과 prop 라벨이 나온다. `codes` 를 주면 묶인 노드를 표의 이름으로 부른다(`nodeDisplayName`).
  */
-export function describeInteraction(document: AnyDocument, source: WbNode, interaction: Interaction): string {
-  return sentenceOf(nodeIndex(document), source, interaction)
+export function describeInteraction(document: AnyDocument, source: WbNode, interaction: Interaction, codes?: CodeIndex): string {
+  return sentenceOf(nodeIndex(document, codes), source, interaction)
 }
 
 /**
@@ -182,10 +182,10 @@ export interface NamingContext {
 
 /**
  * 문서 전체의 상호작용을 노드 순서대로 낸다. **우측 패널과 내보내기가 이것을 쓴다** —
- * 둘이 각자 순회하면 순서가 갈릴 수 있다.
+ * 둘이 각자 순회하면 순서가 갈릴 수 있다. `codes` 를 주면 묶인 노드를 표의 이름으로 부른다 — 캔버스 · 번들의 그림과 같은 이름이다.
  */
-export function listInteractionSentences(document: AnyDocument): InteractionSentence[] {
-  const index = nodeIndex(document)
+export function listInteractionSentences(document: AnyDocument, codes?: CodeIndex): InteractionSentence[] {
+  const index = nodeIndex(document, codes)
   const out: InteractionSentence[] = []
 
   for (const { node } of walkNodes(document.root)) {
@@ -207,16 +207,18 @@ interface NodeIndex {
   /** 노드 id → 부모와 그 안의 자리(구역 · 차례) — 탭 바꾸기가 패널의 부모 `Tabs`와 패널 차례를 읽는다. */
   parents: Map<string, { parent: WbNode; index: number }>
   naming: Map<string, NamingContext>
+  /** 공통코드 표 — 문장이 부르는 모든 이름(트리거 · 대상 · 탭)이 이 하나를 읽는다. */
+  codes: CodeIndex | undefined
 }
 
-function nodeIndex(document: AnyDocument): NodeIndex {
+function nodeIndex(document: AnyDocument, codes: CodeIndex | undefined): NodeIndex {
   const nodes = new Map<string, WbNode>()
   const parents = new Map<string, { parent: WbNode; index: number }>()
   for (const { node, parent, index } of walkNodes(document.root)) {
     nodes.set(node.id, node)
     if (parent !== null && !parents.has(node.id)) parents.set(node.id, { parent, index })
   }
-  return { nodes, parents, naming: namingContexts(document) }
+  return { nodes, parents, naming: namingContexts(document), codes }
 }
 
 /**
@@ -247,7 +249,7 @@ export function namingContexts(document: AnyDocument): Map<string, NamingContext
 }
 
 function sentenceOf(index: NodeIndex, source: WbNode, interaction: Interaction): string {
-  const trigger = `${nodeName(source, index.naming.get(source.id))} ${TRIGGER_VERBS[interaction.on] ?? interaction.on} 시`
+  const trigger = `${nodeName(source, index.naming.get(source.id), index.codes)} ${TRIGGER_VERBS[interaction.on] ?? interaction.on} 시`
   const actions = interaction.actions ?? []
   if (actions.length === 0) return `${trigger} 아무 일도 일어나지 않습니다`
   return `${trigger} ${actions.map((action) => actionClause(index, action)).join(', ')}`
@@ -261,7 +263,7 @@ function sentenceOf(index: NodeIndex, source: WbNode, interaction: Interaction):
 function targetName(index: NodeIndex, target: string): string {
   if (typeof target !== 'string' || target.trim().length === 0) return UNSET_NODE
   const node = index.nodes.get(target)
-  return node === undefined ? MISSING_NODE : nodeName(node, index.naming.get(node.id))
+  return node === undefined ? MISSING_NODE : nodeName(node, index.naming.get(node.id), index.codes)
 }
 
 /** 액션 하나의 절. **5종이 모두 여기 있다** — 유니온이라 빠뜨리면 컴파일러가 잡는다. */
@@ -304,8 +306,8 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
         const name = targetName(index, action.target)
         return `${name}${subjectParticle(name)} 탭으로 열립니다`
       }
-      const tabs = nodeName(at.parent, index.naming.get(at.parent.id))
-      const label = readLabel(target.props, 'label')
+      const tabs = nodeName(at.parent, index.naming.get(at.parent.id), index.codes)
+      const label = readLabel(labelProps(target, index.codes), 'label')
       // 이름을 못 읽으면 차례로 말한다 — 차례는 0부터이고 사람이 세는 것은 1부터다.
       const which = label === undefined ? `${at.index + 1}번째 탭` : `"${label}" 탭`
       return `${tabs}${subjectParticle(tabs)} ${which}${directionParticle(which)} 바뀝니다`
@@ -360,9 +362,13 @@ export function nodeDisplayName(node: WbNode, context?: NamingContext, codes?: C
 function nounName(node: WbNode, codes: CodeIndex | undefined): string {
   const noun = COMPONENT_NOUNS[node.type]
   const base = noun?.name ?? (typeof node.type === 'string' ? node.type : '알 수 없는 노드')
-  const props = (codes === undefined ? null : resolvedCodeProps(node, codes)) ?? node.props
-  const label = noun?.labelProp === undefined ? undefined : readLabel(props, noun.labelProp)
+  const label = noun?.labelProp === undefined ? undefined : readLabel(labelProps(node, codes), noun.labelProp)
   return label === undefined ? base : `${label} ${base}`
+}
+
+/** 라벨을 읽을 props — 표를 받았고 참조가 살아 있으면 표로 푼 것, 아니면 노드의 것(대체 글). */
+function labelProps(node: WbNode, codes: CodeIndex | undefined): WbNode['props'] {
+  return (codes === undefined ? null : resolvedCodeProps(node, codes)) ?? node.props
 }
 
 /** 라벨성 prop의 값. 문자열이 아니거나 비어 있으면 `undefined`다. */

@@ -105,6 +105,40 @@ describe('번들의 공통코드', () => {
     ])
   })
 
+  it('코멘트 칸 · 상호작용 탭이 묶인 노드를 표의 이름으로 부른다 — 표가 없으면 대체 글이다', () => {
+    const page: BundlePage = {
+      title: '이름',
+      document: {
+        version: 1,
+        root: {
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            {
+              id: 'n_btn',
+              type: 'Button',
+              props: { label: '옛 이름' },
+              code: { group: 'MEMBER_KIND', item: 'SURVEY' },
+              marker: 1,
+              interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_btn', value: false }] }],
+            },
+          ],
+        },
+      },
+      comments: [{ nodeId: 'n_btn', body: '확인' }],
+    }
+    const panel = (codes: CodeTable | undefined): string => {
+      const bundle = exportBundle({ pages: [page], runtimeJs: '', ...(codes === undefined ? {} : { codes }) })
+      const html = String(bundle.files.find((file) => file.path === 'index.html')!.content)
+      // 페이지 데이터 JSON 은 문서의 대체 글을 품는다 — 우측 칸의 글만 읽는다.
+      return new DOMParser().parseFromString(html, 'text/html').querySelector('.wb-export-panel')!.textContent!
+    }
+    const bound = panel(FIXTURE_CODES)
+    expect(bound).toContain('① 설문 응답 버튼 클릭 시 ① 설문 응답 버튼이 숨겨집니다')
+    expect(bound).not.toContain('옛 이름')
+    expect(panel(undefined)).toContain('① 옛 이름 버튼 클릭 시 ① 옛 이름 버튼이 숨겨집니다')
+  })
+
   it('페이지의 좌측 트리가 «공통코드» 장을 가리킨다 — 표가 빈 번들은 장 · 줄이 없다', () => {
     const nav = (doc: Document): (string | null)[][] =>
       [...doc.querySelectorAll('.wb-export-nav-link')].map((link) => [link.textContent, link.getAttribute('href')])

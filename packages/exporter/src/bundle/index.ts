@@ -45,6 +45,7 @@ import { isPopupDocument, renderDocument, type NodeRenderError } from '@wireboun
 import {
   codeUsage,
   imageIdsIn,
+  indexCodes,
   installCatalog,
   isPageTargetAction,
   pageTargetKey,
@@ -342,7 +343,8 @@ function pageHtml(
 ): string {
   const page = options.pages[index]!
   const nav = navItems(options, paths, at, index)
-  const comments = commentEntries(page.document, page.comments ?? [])
+  const codeIndex = codes === null ? undefined : indexCodes(codes)
+  const comments = commentEntries(page.document, page.comments ?? [], codeIndex)
   const markers: ExportMarker[] = []
   for (const entry of comments) {
     if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
@@ -379,6 +381,7 @@ function pageHtml(
       description: page.description ?? null,
       comments,
       page: page.document,
+      ...(codeIndex === undefined ? {} : { codes: codeIndex }),
       scripts: shellScripts({
         dataJson: scriptJson(data),
         runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
@@ -411,6 +414,7 @@ function codesHtml(options: ExportBundleOptions, paths: readonly string[], codes
   }))
   const groups: CodesChapterGroup[] = codes.map((group) => ({
     group,
+    // 장은 노드 수만 싣는다 — 이름을 안 읽어 표를 넘기지 않는다.
     usage: codeUsage(sources, group.key).map((hit) => ({
       title: hit.title,
       href: bundleHref(CODES_PATH, paths[Number(hit.id)]!),

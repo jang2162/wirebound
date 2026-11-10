@@ -23,7 +23,7 @@
  * 사람이 *"내가 못 찾은 것"*으로 읽는다 — **화면이 못 보는 것을 세어 적고 화면이 그것을
  * 말하게 한다.**
  */
-import { describeNode, namingContexts, type PageDocument, type WbNode } from '@wirebound/schema'
+import { describeNode, namingContexts, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
 import { eachNode } from '../nodes'
 
 /**
@@ -86,7 +86,7 @@ function markerOf(node: WbNode): number | null {
  * 문서에 있는 노드가 먼저고, 고아 코멘트가 뒤다 — 그것들은 문서에 자리가 없으므로
  * **입력 순서**말고 줄 세울 근거가 없다. 같은 노드에 달린 코멘트끼리도 입력 순서다.
  */
-export function commentEntries(page: PageDocument, comments: readonly BundleComment[]): CommentEntry[] {
+export function commentEntries(page: PageDocument, comments: readonly BundleComment[], codes?: CodeIndex): CommentEntry[] {
   const byNode = new Map<string, BundleComment[]>()
   for (const comment of comments) {
     const list = byNode.get(comment.nodeId)
@@ -96,13 +96,13 @@ export function commentEntries(page: PageDocument, comments: readonly BundleComm
 
   const entries: CommentEntry[] = []
   const inTree = new Set<string>()
-  // 이름은 그 노드가 속한 상태를 붙인다 — 문장 · 화면과 같은 이름(`namingContexts`).
+  // 이름은 그 노드가 속한 상태를 붙인다 — 문장 · 화면과 같은 이름(`namingContexts`). 묶인 노드는 표(`codes`)의 이름으로 부른다.
   const naming = namingContexts(page)
 
   for (const node of eachNode(page.root)) {
     if (typeof node.id !== 'string') continue
     inTree.add(node.id)
-    const label = describeNode(node, naming.get(node.id))
+    const label = describeNode(node, naming.get(node.id), codes)
     const marker = markerOf(node)
     const own = byNode.get(node.id)
     if (own === undefined) {

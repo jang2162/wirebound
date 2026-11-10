@@ -41,6 +41,7 @@
 import {
   DEFAULT_VIEW_STATE,
   type CodeGroup,
+  type CodeIndex,
   viewStateName,
   viewStateOrder,
   type InteractionSentence,
@@ -91,6 +92,8 @@ export interface ShellInput {
   comments: readonly CommentEntry[]
   /** 문장화의 재료. 셸이 문서를 받아 스스로 문장을 만든다 — 호출자가 두 번 순회하지 않는다. */
   page: PageDocument
+  /** 공통코드 표 — 문장이 묶인 노드를 표의 이름으로 부른다(코멘트 칸의 이름과 같은 표). */
+  codes?: CodeIndex
   /** `<body>` 끝에 얹을 `<script>` 들. `shellScripts`가 만든다. */
   scripts: ReactNode
 }
@@ -270,7 +273,7 @@ export function codesBody(input: { nav: readonly ShellNavItem[]; codesHref: stri
 
 /** `<body>` 안 전부. */
 export function shellBody(input: ShellInput): ReactElement {
-  const sentences = pageSentences(input.page)
+  const sentences = pageSentences(input.page, input.codes)
   return (
     <>
       <div className="wb-export">

@@ -183,7 +183,7 @@ export function pageView(input: PageViewInput): PageView {
         createdAt: comment.createdAt,
       }
     }),
-    interactions: listInteractionSentences(input.document),
+    interactions: listInteractionSentences(input.document, input.codes),
   }
 }
 

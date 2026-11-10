@@ -55,6 +55,7 @@ import {
   getComponent,
   listInteractionSentences,
   namingContexts,
+  type CodeIndex,
   type EditorField,
   type Interaction,
   type InteractionAction,
@@ -65,6 +66,7 @@ import {
 } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import type { TreeMenuNode } from '../api/types'
+import { useProjectCodes } from '../codes/project-codes'
 import { pageTargetsOf } from '../edit/paste-ops'
 import { useEditCommit } from '../edit/use-edit-commit'
 import { walkSafely } from '../edit/safe-walk'
@@ -141,6 +143,7 @@ export function InteractionPanel(props: {
 }): ReactElement {
   const store = useEditorStoreInstance()
   const doc = useOpenDocument(props.pageId)
+  const codes = useProjectCodes().index
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const many = useEditorStore(store, (s) => s.selectedNodeIds.length > 1)
   // 속성 패널과 같은 관례 — 페이지가 없으면 `''`를 주고, 그러면 편집이 나갈 길이 없다.
@@ -157,7 +160,7 @@ export function InteractionPanel(props: {
   }
 
   const node = selectedNodeId === null ? undefined : findSafely(doc, selectedNodeId)
-  const sentences = listInteractionSentences(doc)
+  const sentences = listInteractionSentences(doc, codes)
   /**
    * **이 탭도 «고른 노드»가 단위다** — 근거는 `./property-panel.tsx`의 `lock` 선언이
    * 소유한다. 나가는 op이 `…/interactions`라 잠금 판정이 속성과 **같은 값**이기도 하다
@@ -232,8 +235,10 @@ function NodeRules(props: {
   const interactions = Array.isArray(node.interactions) ? node.interactions : []
   // 이름은 그 노드가 속한 상태를 붙인다 — 문장(`listInteractionSentences`)과 같은 이름이다(`namingContexts`).
   const naming = namingContexts(doc)
-  const choices = nodeChoices(doc, naming)
-  const title = describeNode(node, naming.get(node.id))
+  // 묶인 노드는 표의 이름으로 부른다 — 제목 · 대상 목록 · 문장이 같은 표를 읽어야 셋이 같은 이름이다.
+  const codes = useProjectCodes().index
+  const choices = nodeChoices(doc, naming, codes)
+  const title = describeNode(node, naming.get(node.id), codes)
 
   /** 규칙 하나를 바꿔 통째로 낸다. `interactionsOps`가 배열을 통째 다루므로 짝이 맞는다. */
   const replaceAt = (index: number, next: Interaction): void => {
@@ -280,7 +285,7 @@ function NodeRules(props: {
 
           {/* **문장이 여기 있는 것이 요점이다**(「자동 문장화」). 저작하는 사람이 자기가 만든 규칙이
               설계서에서 어떻게 읽히는지를 그 자리에서 본다. */}
-          <p className="wb-shell-interaction-sentence">{describeInteraction(doc, node, interaction)}</p>
+          <p className="wb-shell-interaction-sentence">{describeInteraction(doc, node, interaction, codes)}</p>
 
           {(interaction.actions ?? []).map((action, actionIndex) => (
             <ActionRow
@@ -689,10 +694,14 @@ function TextField(props: {
  * 이름은 문장과 **같은 함수**가 만든다(`describeNode`) — 목록에서 고른 이름과 문장에
  * 나오는 이름이 갈리면 사용자가 둘을 잇지 못한다.
  */
-function nodeChoices(doc: PageDocument, naming: ReadonlyMap<string, NamingContext>): { id: string; type: string; label: string }[] {
+function nodeChoices(
+  doc: PageDocument,
+  naming: ReadonlyMap<string, NamingContext>,
+  codes: CodeIndex | undefined,
+): { id: string; type: string; label: string }[] {
   const out: { id: string; type: string; label: string }[] = []
   for (const visit of walkSafely(doc.root)) {
-    out.push({ id: visit.node.id, type: String(visit.node.type), label: describeNode(visit.node, naming.get(visit.node.id)) })
+    out.push({ id: visit.node.id, type: String(visit.node.type), label: describeNode(visit.node, naming.get(visit.node.id), codes) })
   }
   return out
 }
