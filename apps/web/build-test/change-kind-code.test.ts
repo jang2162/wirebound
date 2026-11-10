@@ -8,7 +8,7 @@
  * | 못 받는 종류로(셀렉트 → 여러 줄 입력) | 서버가 편집을 거절한다(`patch-error`) · 서버 문서에 `code` 가 남는다 · «공통코드 묶음을 풀었습니다» 가 안 선다 |
  * | 하나 고르는 종류로(체크박스 고름 둘 → 라디오 묶음) | 서버가 거절한다 · 고름이 첫 값 하나로 안 줄어든다 · 묶음이 풀린다 |
  */
-import type { Page } from 'playwright'
+import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
