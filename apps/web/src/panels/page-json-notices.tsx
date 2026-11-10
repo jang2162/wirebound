@@ -22,8 +22,11 @@
  * 꼴) — 문장의 글자가 곧 통지다.
  */
 import { useMemo, useState, type ReactElement } from 'react'
+import type { WbNode } from '@wirebound/schema'
 import type { PageImported } from '../api/types'
 import { shellIcon } from '../shell/icons'
+import { useProjectCodes } from '../codes/project-codes'
+import { brokenCodesNotice, countBrokenCodes } from '../codes/broken-codes'
 
 export interface PageJsonNotices {
   imported: PageImported | null
@@ -46,6 +49,9 @@ export function PageJsonNoticeList(props: { notices: PageJsonNotices }): ReactEl
 /** 가져온 뒤에 말해야 하는 것 — 성공 통지이지만 `role="status"` 한 줄로 끝나지 않는다(머리말). */
 function PageImportedNotice(props: { imported: PageImported; onDismiss: () => void }): ReactElement {
   const { imported } = props
+  // 가져온 문서의 공통코드는 이 프로젝트의 표로 본다 — 키가 없으면 끊긴 채 들어왔다(`codes/broken-codes.ts`).
+  const root = (imported.page.schema as { root?: WbNode } | undefined)?.root
+  const broken = brokenCodesNotice(countBrokenCodes(root === undefined ? [] : [root], useProjectCodes().index))
   return (
     <div className="wb-shell-pagejson-notice-row">
       <div className="wb-shell-pagejson-notice">
@@ -57,6 +63,7 @@ function PageImportedNotice(props: { imported: PageImported; onDismiss: () => vo
             그중 {imported.comments.dangling}개는 가리키던 노드가 파일에 없어 <strong>&ldquo;사라진 노드&rdquo;</strong>로 들어갔습니다.
           </p>
         )}
+        {broken !== '' && <p className="wb-shell-pagejson-notice-line">{broken}</p>}
         {imported.ignoredLayoutRef !== undefined && (
           <p className="wb-shell-pagejson-notice-line">
             레이아웃 <code>{imported.ignoredLayoutRef}</code>은 쓰지 않았습니다 — 이 페이지는 프로젝트의 기본 레이아웃으로 열립니다.

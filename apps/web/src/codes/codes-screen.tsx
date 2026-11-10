@@ -431,7 +431,7 @@ function UsageList(props: {
   )
   const title = item === undefined ? `«${isolate(group.name)}» 을(를) 쓰는 곳` : `«${isolate(item.name)}» 을(를) 쓰는 곳`
   return (
-    <section className="wb-shell-codes-usage-section" aria-label="사용처">
+    <section className="wb-shell-codes-group" aria-label="사용처">
       <div className="wb-shell-admin-bar">
         <h3 className="wb-shell-codes-subtitle">{title}</h3>
         {item !== undefined && (

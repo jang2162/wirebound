@@ -331,7 +331,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   updateCodeItem: ['../src/codes/codes-screen.tsx'],
   deleteCodeItem: ['../src/codes/codes-screen.tsx'],
   codeUsage: ['../src/codes/codes-screen.tsx'],
-  codeUsageCounts: ['../src/codes/codes-screen.tsx'],
+  // 속성 패널의 «이 코드를 쓰는 곳 N» 도 그 수를 읽는다.
+  codeUsageCounts: ['../src/codes/codes-screen.tsx', '../src/panels/code-binding.tsx'],
 }
 
 describe('ApiClient의 소비자', () => {

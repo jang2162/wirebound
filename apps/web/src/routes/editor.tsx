@@ -86,7 +86,7 @@ import {
 } from '../store/editor-store'
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK } from '../store/loss-notice'
-import { EditorStoreProvider, useEditorStore, useEditorStoreInstance } from '../store/use-editor-store'
+import { EditorStoreProvider, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
@@ -554,10 +554,10 @@ function useNodeFromAddress(pageId: string | undefined): void {
   const store = useEditorStoreInstance()
   const [params, setParams] = useSearchParams()
   const wanted = params.get('node')
-  const document = useEditorStore(store, (s) => s.document)
-  const openPageId = useEditorStore(store, (s) => s.openPageId)
+  // 주소의 페이지와 대조한 문서다 — 다른 페이지의 문서에서 고르지 않는다.
+  const document = useOpenDocument(pageId)
   useEffect(() => {
-    if (wanted === null || document === null || pageId === undefined || openPageId !== pageId) return
+    if (wanted === null || document === null) return
     if (findNode(document.root, wanted) !== undefined) store.selectNode(wanted)
     setParams(
       (prev) => {
@@ -567,7 +567,7 @@ function useNodeFromAddress(pageId: string | undefined): void {
       },
       { replace: true },
     )
-  }, [wanted, document, openPageId, pageId, store, setParams])
+  }, [wanted, document, store, setParams])
 }
 
 function EditorShell(props: {

@@ -109,7 +109,13 @@ interface MarkerBox {
 const NO_MARKERS: MarkerBox[] = []
 
 /** SDK 기본 뷰의 CSS — 테마 시트보다 **먼저** 와야 같은 특이도에서 테마가 이긴다. 판과 무관해 한 번만 짓는다. */
-const BASE_SHEET: CanvasSheet = { id: 'base', css: defaultViewsCss() }
+/**
+ * **끊긴 공통코드 참조의 표지** — 렌더러가 단 `data-wb-code-broken`(테마 어휘가 아니다 · `packages/renderer` 의 `CodeBrokenAttrs`)에 점선 외곽을 긋는다.
+ * 테마가 겨냥하지 않는 속성이라 셸이 기본 시트에 얹어 그린다 — 테마 · 토큰 시트보다 앞이어도 그 속성을 덮는 규칙이 없다. 외곽선이라 자리를 안 바꾼다.
+ */
+const CODE_MARK_CSS = '[data-wb-code-broken] { outline: 2px dashed #b54708; outline-offset: 2px; }'
+
+const BASE_SHEET: CanvasSheet = { id: 'base', css: `${defaultViewsCss()}\n${CODE_MARK_CSS}` }
 
 /**
  * 캔버스 iframe 머리의 시트 — `base`(SDK 기본 뷰) → `theme`(그 판의 `theme.css` — `<link>` 라 자산 경로가 파일 주소 기준으로 풀린다) →

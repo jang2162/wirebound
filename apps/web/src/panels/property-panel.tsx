@@ -45,6 +45,7 @@ import {
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { useProjectTheme } from '../theme/project-theme'
 import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
+import { CodeBindingField, codeLockedProp } from './code-binding'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
@@ -425,7 +426,8 @@ export function PropertyPanel(props: {
                     field={field}
                     def={def}
                     value={readProp(node, field.prop)}
-                    disabled={blocked}
+                    // 공통코드에 묶인 동안 그 prop(대표 글 · 선택지)은 표가 정한다 — 칸을 잠근다(`./code-binding.tsx`).
+                    disabled={blocked || field.prop === codeLockedProp(node)}
                     clearable={clearableProp(def, field.prop)}
                     image={{ projectId: props.projectId, place: (assetId) => placeImage(props.pageId, node.id, field.prop, assetId) }}
                     onCommit={(value) => {
@@ -446,6 +448,25 @@ export function PropertyPanel(props: {
         </>
       )}
       <dl className="wb-shell-props">
+        {/* **공통코드 칸은 컴포넌트 속성 칸들 바로 아래다** — 묶는 대상이 그 prop 이다(`./code-binding.tsx`). 묶이는 타입에만 선다. */}
+        {doc !== null && (
+          <CodeBindingField
+            key={`${node.id}:code`}
+            projectId={props.projectId}
+            document={doc}
+            node={node}
+            disabled={blocked}
+            commit={(ops) => {
+              if (blocked) return
+              const blocker = store.editBlockedBy(ops)
+              if (blocker !== null) {
+                store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+                return
+              }
+              commitOps(ops)
+            }}
+          />
+        )}
         {/* **그리드 행의 «행 내용» 은 컴포넌트 속성 칸들 바로 아래다** — prop 이 아니라 칸 유무를 비추는 화면 명령이다(`./row-content-field.tsx`). */}
         {doc !== null && type === 'GridRow' && (
           <RowContentField

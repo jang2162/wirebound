@@ -6388,3 +6388,56 @@
 .wb-shell-codes-usage-link {
   color: var(--wb-shell-accent);
 }
+
+/* 속성 패널의 «공통코드» 칸(`panels/code-binding.tsx`). */
+.wb-shell-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wb-shell-code-line {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 끊긴 참조 · 표에 없는 고름 — 캔버스의 점선 외곽(`canvas/canvas.tsx` 의 `CODE_MARK_CSS`)과 같은 주황이다. */
+.wb-shell-code-broken {
+  color: #b54708;
+}
+
+.wb-shell-code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.wb-shell-code-usage {
+  color: var(--wb-shell-accent);
+  font-size: 12px;
+}
+
+.wb-shell-code-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.wb-shell-code-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-code-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

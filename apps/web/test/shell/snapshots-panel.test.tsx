@@ -313,6 +313,8 @@ describe('복원', () => {
     // 무엇을 되돌리는지 문장이 말한다 — 줄이 여럿인 목록에서 어느 줄에 답하는지 알 수 있어야 한다.
     expect(screen.getByRole('alert').textContent).toContain('v1')
     expect(screen.getByRole('alert').textContent).toContain('프로젝트 전체가 바뀝니다')
+    // 공통코드 표도 함께 돌아갈 수 있다는 것을 말한다 — 표를 담은 판만 덮으므로 조건으로 말한다.
+    expect(screen.getByRole('alert').textContent).toContain('공통코드 표를 담은 스냅샷이면 공통코드 표도 그 시점으로 돌아갑니다')
   })
 
   it('취소하면 부르지 않고 확인만 닫는다', async () => {

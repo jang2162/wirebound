@@ -515,7 +515,11 @@ function SnapshotsScreen(props: {
                     <span className="wb-shell-snapshots-confirm">
                       {/* **무엇을 되돌리는지 문장에 태그가 들어간다.** 줄이 여럿인 목록에서
                           "정말 되돌립니까?"만으로는 어느 줄에 답하는지 알 수 없다. */}
-                      <span role="alert">{snapshot.tag}(으)로 되돌립니다. 프로젝트 전체가 바뀝니다.</span>
+                      {/* 공통코드 표는 표를 담은 스냅샷(payload 판 4 이상)에서만 덮인다 — 목록 응답에 판이 없어 조건으로 말한다. */}
+                      <span role="alert">
+                        {snapshot.tag}(으)로 되돌립니다. 프로젝트 전체가 바뀝니다. 공통코드 표를 담은 스냅샷이면 공통코드 표도 그 시점으로
+                        돌아갑니다.
+                      </span>
                       <button type="button" disabled={restoring !== null} onClick={() => void runRestore(snapshot)}>
                         되돌린다
                       </button>

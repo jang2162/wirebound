@@ -930,3 +930,28 @@ describe('내보내기 — 페이지 줄 `…` 이 여는 상자', () => {
     expect(screen.queryByRole('dialog', { name: /^JSON 내보내기 — / })).toBeNull()
   })
 })
+
+describe('공통코드 — 표에 없는 키를 든 페이지 JSON', () => {
+  it('거절 없이 가져오고 하단 바에 «끊긴 공통코드 1개» 를 말한다(Review Focus 1)', async () => {
+    const detail = pageDetail('pg-new', '가져온 목록')
+    const withCode: PageDetail = {
+      ...detail,
+      schema: {
+        ...detail.schema,
+        root: {
+          id: 'n_00000000000a',
+          type: 'Page',
+          children: [{ id: 'n_00000000000c', type: 'Affix', code: { group: 'NOT_HERE', item: 'X' } }],
+        },
+      },
+    }
+    const api = await open({
+      importPage: vi.fn(async () => imported({ page: withCode })),
+      listCodes: async () => [{ key: 'ORDER_STATUS', name: '주문 상태', items: [] }],
+    })
+    paste(JSON.stringify(file()))
+    fireEvent.click(importButton())
+    await waitFor(() => expect(api.importPage).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(footer().textContent).toContain('끊긴 공통코드 1개'))
+  })
+})
