@@ -381,6 +381,26 @@ const PROBES: Probe[] = [
     restoreWrites: false,
     blocked: false,
   },
+  // **공통코드 쓰기 여섯** — 복원이 표를 통째로 덮으므로(`services/restore.ts`) `restoreWrites` 가 참이다. 쓰기는 프로젝트 행을
+  // `FOR NO KEY UPDATE` 로 먼저 잡아(`routes/codes.ts` 머리말 «잠금 순서») 복원의 `FOR UPDATE` 뒤에 선다.
+  ...(
+    [
+      ['POST /:projectId/codes', '공통코드 그룹 만들기', 'POST', 'codes', { key: 'NEW', name: '새 그룹' }],
+      ['PATCH /:projectId/codes/:key', '공통코드 그룹 고치기', 'PATCH', 'codes/S', { name: '바꿈' }],
+      ['DELETE /:projectId/codes/:key', '공통코드 그룹 지우기', 'DELETE', 'codes/S', undefined],
+      ['POST /:projectId/codes/:key/items', '공통코드 항목 만들기', 'POST', 'codes/S/items', { value: 'NEW', name: '새 항목' }],
+      ['PATCH /:projectId/codes/:key/items/:value', '공통코드 항목 고치기', 'PATCH', 'codes/S/items/A', { active: false }],
+      ['DELETE /:projectId/codes/:key/items/:value', '공통코드 항목 지우기', 'DELETE', 'codes/S/items/A', undefined],
+    ] as const
+  ).map(([route, label, method, path, body]): Probe => ({
+    route,
+    label,
+    method,
+    url: (ids) => `/api/projects/${ids.projectId}/${path}`,
+    ...(body === undefined ? {} : { payload: () => ({ ...body }) }),
+    restoreWrites: true,
+    blocked: true,
+  })),
   {
     // **그림 쓰기 둘** — 둘 다 소유 행을 넣기 전에 프로젝트 행을 `KEY SHARE` 로 먼저 잡는다(`routes/assets.ts` · `lockProjectShared`). **막힌다** — 복원은 그림을
     // 되돌리지 않지만(그림은 프로젝트와 함께만 지운다) 모듈 저장과 같은 부수 효과다.
@@ -485,6 +505,14 @@ async function fixture(app: FastifyInstance): Promise<Ids> {
     payload: { name: '대상 모듈', nodes: [{ id: 'm_a', type: 'Button', props: { label: '저장' } }] },
   })
   if (moduleRes.statusCode !== 201) throw new Error(`모듈 픽스처 실패: ${moduleRes.body}`)
+
+  for (const [url, payload] of [
+    ['codes', { key: 'S', name: '상태' }],
+    ['codes/S/items', { value: 'A', name: '가' }],
+  ] as const) {
+    const codeRes = await app.inject({ method: 'POST', url: `/api/projects/${project.id}/${url}`, cookies: owner.cookie, payload })
+    if (codeRes.statusCode !== 201) throw new Error(`공통코드 픽스처 실패: ${codeRes.body}`)
+  }
 
   const tokenRes = await app.inject({
     method: 'POST',

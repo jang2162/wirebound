@@ -283,6 +283,29 @@ export interface ModulesTable {
   updated_at: Generated<Date>
 }
 
+/** 공통코드 그룹(`0036-common-codes`). `key` 는 만든 뒤 안 바뀐다 — 노드가 그 값으로 가리킨다. */
+export interface CodeGroupsTable {
+  id: Generated<string>
+  project_id: string
+  key: string
+  name: string
+  sort_order: number
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
+/** 공통코드 항목(`0036-common-codes`). `value` 는 만든 뒤 안 바뀐다. */
+export interface CodeItemsTable {
+  id: Generated<string>
+  group_id: string
+  value: string
+  name: string
+  sort_order: number
+  active: Generated<boolean>
+  created_at: Generated<Date>
+  updated_at: Generated<Date>
+}
+
 /**
  * 개인 모듈(`0026-personal-modules`). 설계 spec `2026-10-20-personal-modules-design.md` — 사람 하나가 소유하는 노드 묶음이다. 칸의 뜻은
  * `ModulesTable` 과 같고, 프로젝트 칸 · 만든 사람 칸 대신 소유자(`owner_id`)가 있다.
@@ -421,6 +444,8 @@ export interface Database {
   snapshots: SnapshotsTable
   modules: ModulesTable
   personal_modules: PersonalModulesTable
+  code_groups: CodeGroupsTable
+  code_items: CodeItemsTable
   api_tokens: ApiTokensTable
   theme_packages: ThemePackagesTable
   asset_blobs: AssetBlobsTable

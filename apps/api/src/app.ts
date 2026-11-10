@@ -16,6 +16,7 @@ import { inviteSignupRoutes } from './routes/invite-signup'
 import { passwordResetRoutes } from './routes/password-reset'
 import { adminThemeRoutes } from './routes/admin-themes'
 import { authRoutes } from './routes/auth'
+import { codeRoutes } from './routes/codes'
 import { commentRoutes } from './routes/comments'
 import { exportRoutes } from './routes/export'
 import { healthRoutes } from './routes/health'
@@ -277,6 +278,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   // 모듈도 프로젝트 아래에 산다(`/:projectId/modules`) — 모듈은 프로젝트가 소유한다(설계서 「모듈」). 개인 모듈은 사람이 소유해 프로젝트
   // 밖에 산다(`/api/me/modules` — `routes/personal-modules.ts`). 세션으로만 부른다.
   await app.register(moduleRoutes(), { prefix: '/api/projects' })
+  await app.register(codeRoutes(), { prefix: '/api/projects' })
   await app.register(personalModuleRoutes(), { prefix: '/api/me' })
   // 그림 — 프로젝트의 그림(올리기 · 목록 · 읽기 · 가져오기)과 사람의 몫(`routes/assets.ts` 머리말).
   await app.register(assetRoutes(config.assetLimits), { prefix: '/api/projects' })

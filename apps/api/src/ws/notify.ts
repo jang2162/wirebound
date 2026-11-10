@@ -203,6 +203,19 @@ export function notifyCommentsChanged(app: FastifyInstance, input: { projectId: 
     })
 }
 
+/**
+ * 프로젝트의 공통코드 표가 바뀌었다 — 표 쓰기(`routes/codes.ts`)와 표를 덮는 복원이 **커밋 뒤에** 부른다(`protocol.ts`의 `codes-changed`).
+ * 신호만 싣는다. `origin` 을 주면 낸 연결을 뺀다(`notifyCommentsChanged` 와 같다). 던지지 않는다 — 쓰기는 이미 커밋됐다.
+ */
+export function notifyCodesChanged(app: FastifyInstance, input: { projectId: string; origin?: BroadcastOrigin }): void {
+  const { origin, ...frame } = input
+  void app.realtime.broadcast
+    .send(input.projectId, { type: 'codes-changed', ...frame }, origin === undefined ? undefined : { except: origin })
+    .catch((error: unknown) => {
+      app.log.error({ err: error, projectId: input.projectId }, 'codes-changed 알림 실패')
+    })
+}
+
 export interface ThemeChangedInput {
   projectId: string
   themeId: string
