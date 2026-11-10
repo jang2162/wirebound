@@ -85,14 +85,14 @@ function restore(ctx: TestContext, fx: Fixture, snapshotId: string) {
 }
 
 describe('캡처', () => {
-  it('판 3 이고 지금 바인딩을 싣는다', async () => {
+  it('판 4 이고 지금 바인딩을 싣는다', async () => {
     await withApi(async (ctx) => {
       const fx = await fixture(ctx)
       await putTheme(ctx, fx, { themeId: 'system-admin', version: SYSTEM_ADMIN.version, tokens: { [SYSTEM_ADMIN.color.key]: '#123456' } })
       const outcome = await captureSnapshot(ctx.db, fx.projectId)
       if (outcome.kind !== 'captured') throw new Error(outcome.kind)
-      expect(SNAPSHOT_PAYLOAD_VERSION).toBe(3)
-      expect(outcome.payload.payloadVersion).toBe(3)
+      expect(SNAPSHOT_PAYLOAD_VERSION).toBe(4)
+      expect(outcome.payload.payloadVersion).toBe(4)
       expect(outcome.payload.theme).toEqual({
         themeId: 'system-admin',
         version: SYSTEM_ADMIN.version,

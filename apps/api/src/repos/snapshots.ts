@@ -381,7 +381,9 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  *
  * ---
  *
- * # 테마 바인딩도 덮는다
+ * # 테마 바인딩 · 공통코드 표도 덮는다
+ *
+ * 공통코드는 행을 그대로 담는다(이름 · 차례 · 사용 여부 — 짧은 값이다). 표에는 revision 이 없어 번호로 갈음할 수 없다.
  *
  * `projects` 의 바인딩 칸 넷(토큰은 해시로)이다. `theme_rev` 만 담으면 «바인딩이 바뀌면 번호가 오른다»는 다른 파일의 불변식
  * (`repos/projects.ts`의 `updateProjectTheme` · `restoreProjectTheme`)에 기대게 된다 — 페이지 문서를 해시로 담는 것과 같은 판정이다.
@@ -425,6 +427,16 @@ export async function readCaptureFingerprint(db: DbHandle, projectId: string): P
       'theme', (
         select json_build_array(pr.theme_id, pr.theme_version, md5(pr.theme_tokens::text), pr.theme_rev)
         from projects pr where pr.id = ${projectId}
+      ),
+      'codes', (
+        select coalesce(
+          json_agg(json_build_array(g.id, g.key, g.name, g.sort_order, g.updated_at, (
+            select coalesce(json_agg(json_build_array(i.id, i.value, i.name, i.sort_order, i.active) order by i.id), '[]'::json)
+            from code_items i where i.group_id = g.id
+          )) order by g.id),
+          '[]'::json
+        )
+        from code_groups g where g.project_id = ${projectId}
       )
     )::text as fingerprint
   `.execute(db)

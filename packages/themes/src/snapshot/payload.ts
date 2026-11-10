@@ -73,22 +73,37 @@
  *
  * ---
  *
+ * # 공통코드 표 — 판 4
+ *
+ * 프로젝트의 공통코드 표를 통째로 싣는다(`codes` — 그룹 · 항목 차례대로). 페이지의 노드가 «그룹 키 · 코드값»으로 표를 가리키므로, 페이지를
+ * 되돌리면서 표를 지금 것으로 두면 되돌린 페이지의 참조가 엇갈린다 — 판 4 의 복원은 표를 그 판으로 덮는다(`apps/api`의
+ * `services/restore.ts`). **판 3 이하에는 키가 없고 그 복원은 표를 건드리지 않는다.** 판 4 를 이 판보다 앞선 `wireb` 는 못 읽는다.
+ *
+ * ---
+ *
  * # 겹layer(런타임 상태)를 담지 않는다
  *
- * payload 가 담는 것은 메뉴·페이지·레이아웃·코멘트와 테마 바인딩이고 그 밖은 없다. 겹layer를
+ * payload 가 담는 것은 메뉴·페이지·레이아웃·코멘트와 테마 바인딩 · 공통코드 표이고 그 밖은 없다. 겹layer를
  * 넣으면 *"버튼을 눌러 둔 상태"*가 복원되어 **문서에 없는 것이 문서에서 온 것처럼 보인다.**
  * 아래 `SnapshotPayloadSchema`가 `z.strictObject`인 것이 그 규칙을 실행으로 지키는 자리다 —
  * 선언되지 않은 절이 payload에 실리면 그 자리에서 파싱이 죽는다.
  */
 import { z } from 'zod'
-import { DocumentEnvelopeSchema, PageEnvelopeSchema, type LayoutDocument, type PageDocument } from '@wirebound/schema'
+import {
+  CodeTableSchema,
+  DocumentEnvelopeSchema,
+  PageEnvelopeSchema,
+  type CodeTable,
+  type LayoutDocument,
+  type PageDocument,
+} from '@wirebound/schema'
 
 /**
  * 이 코드가 만드는 payload의 형식 버전. **올리는 것은 payload의 모양이 바뀔 때뿐이다** —
  * 자원이 늘거나, 필드의 뜻이 바뀌거나, 절이 사라질 때. 값이 늘어나는 것(예: 페이지가 하나
  * 더 생기는 것)은 형식 변경이 아니다.
  */
-export const SNAPSHOT_PAYLOAD_VERSION = 3
+export const SNAPSHOT_PAYLOAD_VERSION = 4
 
 /** 메뉴 트리 노드 하나. 트리로 접지 않고 **평평하게** 담는다 — `parentId`가 구조를 나른다. */
 export interface SnapshotMenuNode {
@@ -162,6 +177,8 @@ export interface SnapshotPayload {
   comments: SnapshotComment[]
   /** 판 3 부터. 판 2 이하에는 키가 없다. 캡처 때 바인딩이 비어 있었으면 `null`. */
   theme?: SnapshotTheme | null
+  /** 판 4 부터 — 공통코드 표(그룹 · 항목 차례대로). 판 3 이하에는 키가 없다(아래 「공통코드 표 — 판 4」 절). */
+  codes?: CodeTable
 }
 
 const MenuNodeSchema = z.strictObject({
@@ -223,6 +240,8 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
   comments: z.array(CommentSchema),
   // 판 2 이하 payload 에는 없다 — 선택이다(위 「테마는 참조로 얼린다」 절).
   theme: ThemeSchema.nullable().optional(),
+  // 판 3 이하 payload 에는 없다 — 선택이다(위 「공통코드 표 — 판 4」 절).
+  codes: CodeTableSchema.optional(),
 }) as z.ZodType<SnapshotPayload>
 
 /**

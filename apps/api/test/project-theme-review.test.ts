@@ -175,7 +175,8 @@ describe('복원은 토큰을 검증하지 않는다', () => {
       const id = snap.json().id as string
       const row = await ctx.db.selectFrom('snapshots').select('payload').where('id', '=', id).executeTakeFirstOrThrow()
       const payload = row.payload as unknown as Record<string, unknown>
-      expect(payload.payloadVersion).toBe(3)
+      // 테마 절은 판 3 부터 — 지금 판(4)도 그 절을 든다.
+      expect(payload.payloadVersion).toBeGreaterThanOrEqual(3)
       await ctx.db
         .updateTable('snapshots')
         .set({

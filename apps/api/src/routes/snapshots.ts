@@ -92,7 +92,7 @@ import { captureSnapshot, type CaptureHooks } from '../services/snapshot-capture
 import { runConfirmedTransaction } from '../services/lost-commit'
 import { restoreSnapshot, type RestoreOutcome, type RestoreResult } from '../services/restore'
 import { releaseLocksOnPages } from '../ws/lock'
-import { clientRestoreId, notifyMenuChanged, notifyRestored, notifyThemeChanged } from '../ws/notify'
+import { clientRestoreId, notifyCodesChanged, notifyMenuChanged, notifyRestored, notifyThemeChanged } from '../ws/notify'
 import { bumpMenuRev } from '../repos/menu'
 
 const ProjectIdParams = z.object({ projectId: z.uuid() })
@@ -380,6 +380,7 @@ interface RestoreBody {
  * | `restored` | 받는 쪽이 다시 읽는다(`apps/web`의 `shell/remote-alert.tsx` — 사람이 배너의 단추를 눌러야). 낸 탭도 받는다(`ws/notify.ts`의 `notifyRestored`) |
  * | `menu-changed` | 트리가 그때까지 옛 판이면 그 위에서 내는 트리 쓰기(끌기 · 연쇄 상자)가 옛 차례 · 옛 목록으로 선다 |
  * | 지운 페이지 잠금 놓기 | 페이지 삭제 · 연쇄 삭제와 같다(`ws/lock.ts`의 `releaseLocksOnPages`) |
+ * | `codes-changed` | **판 4 는 공통코드 표도 덮었다** — 받는 화면이 표를 다시 읽고 캔버스를 다시 그린다. 낸 탭도 받는다(복원은 연결을 안 뺀다) |
  * | `theme-changed` | **판 3 은 테마 바인딩도 되돌렸다** — 값이 같아도 `theme_rev` 가 올랐으므로 늘 알린다(spec 「스냅샷」). 캔버스는 `restored`로 문서를 다시 읽고 테마는 이 프레임으로 다시 싣는다 — 받는 자리가 다르다(`ws/protocol.ts`) |
  *
  * 던지지 않는다 — 알림은 저마다 실패를 로그로 남긴다(`ws/notify.ts` 머리말). 잰 값은 `test/late-commit-stale.test.ts`의 «늦게 커밋된 복원».
@@ -395,6 +396,7 @@ function announceRestore(app: FastifyInstance, request: FastifyRequest, projectI
   })
   notifyMenuChanged(app, { projectId, rev: body.menuRev })
   releaseLocksOnPages(app, projectId, result.deletedPageIds)
+  if (result.codesRestored) notifyCodesChanged(app, { projectId })
   const theme = result.theme
   if (theme !== null && theme.themeId !== null && theme.version !== null) {
     notifyThemeChanged(app, {
