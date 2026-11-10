@@ -10,6 +10,7 @@ import {
   type ApiClient,
   type ApiErrorCode,
   type ApiErrorIssue,
+  type CodeUsageCounts,
   type MenuCascadeResult,
   type ReadOptions,
   type WriteOptions,
@@ -54,6 +55,7 @@ import type {
   TreeRead,
 } from './types'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
+import type { CodeGroup, CodeItem, UsageHit } from '@wirebound/schema'
 
 const API_PREFIX = '/api'
 
@@ -737,6 +739,31 @@ const SHAPES = {
     ),
   /** `{ modules }` — 프로젝트 모듈 목록. */
   moduleListEnvelope: (value) => isRecord(value) && isArrayOf(value['modules'], isModule),
+  /** 공통코드 표 — 화면이 키 · 이름 · 항목을 그린다. 모양이 틀리면 표를 못 푼다. */
+  codeTable: (value) => isRecord(value) && isArrayOf(value['groups'], isCodeGroup),
+  codeGroupEnvelope: (value) => isRecord(value) && isCodeGroup(value['group']),
+  codeItemEnvelope: (value) => isRecord(value) && isCodeItem(value['item']),
+  codeUsage: (value) =>
+    isRecord(value) &&
+    isArrayOf(
+      value['usage'],
+      (hit) =>
+        isRecord(hit) &&
+        (hit['kind'] === 'page' || hit['kind'] === 'layout' || hit['kind'] === 'module') &&
+        typeof hit['id'] === 'string' &&
+        typeof hit['title'] === 'string' &&
+        isArrayOf(hit['nodes'], (node) => isRecord(node) && typeof node['nodeId'] === 'string' && typeof node['name'] === 'string'),
+    ),
+  codeUsageCounts: (value) =>
+    isRecord(value) &&
+    isRecord(value['counts']) &&
+    Object.values(value['counts']).every(
+      (count) =>
+        isRecord(count) &&
+        typeof count['group'] === 'number' &&
+        isRecord(count['items']) &&
+        Object.values(count['items']).every((n) => typeof n === 'number'),
+    ),
   restoreResult: isRestoreResult,
   exportPreview: isExportPreview,
   /**
@@ -948,6 +975,14 @@ function isSnapshot(value: unknown): boolean {
 }
 
 /** 모듈 하나의 모양 — 카드가 그리는 이름 · 수와 넣기가 쓰는 노드 · 경로에 실리는 id. */
+function isCodeItem(value: unknown): boolean {
+  return isRecord(value) && typeof value['value'] === 'string' && typeof value['name'] === 'string' && typeof value['active'] === 'boolean'
+}
+
+function isCodeGroup(value: unknown): boolean {
+  return isRecord(value) && typeof value['key'] === 'string' && typeof value['name'] === 'string' && isArrayOf(value['items'], isCodeItem)
+}
+
 function isModule(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -1207,6 +1242,10 @@ const BODY_KEYS = {
   // `createdBy` 가 그 자리다** — 응답 객체를 고쳐 되보내는 실수가 실제로 있을 법하다(`createSnapshot` 이 같은 자리에서 같은 판단).
   createModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createModule']>[1], true>,
   renameModule: { name: true } satisfies Record<keyof Parameters<ApiClient['renameModule']>[2], true>,
+  createCodeGroup: { key: true, name: true } satisfies Record<keyof Parameters<ApiClient['createCodeGroup']>[1], true>,
+  updateCodeGroup: { name: true, sortOrder: true } satisfies Record<keyof Parameters<ApiClient['updateCodeGroup']>[2], true>,
+  createCodeItem: { value: true, name: true, active: true } satisfies Record<keyof Parameters<ApiClient['createCodeItem']>[2], true>,
+  updateCodeItem: { name: true, sortOrder: true, active: true } satisfies Record<keyof Parameters<ApiClient['updateCodeItem']>[3], true>,
   // 개인 모듈 — 서버가 같은 본문(`ModuleBody` · `RenameBody`)을 쓴다. 같은 까닭으로 선언한 키만 싣는다.
   createMyModule: { name: true, nodes: true } satisfies Record<keyof Parameters<ApiClient['createMyModule']>[0], true>,
   renameMyModule: { name: true } satisfies Record<keyof Parameters<ApiClient['renameMyModule']>[1], true>,
@@ -1457,6 +1496,10 @@ export function createHttpClient(
   const modulesPath = (projectId: string): string => `${projectPath(projectId)}/modules`
   const modulePath = (projectId: string, moduleId: string): string => `${modulesPath(projectId)}/${encodeURIComponent(moduleId)}`
   const myModulePath = (moduleId: string): string => `/me/modules/${encodeURIComponent(moduleId)}`
+  const codesPath = (projectId: string): string => `${projectPath(projectId)}/codes`
+  const codeGroupPath = (projectId: string, key: string): string => `${codesPath(projectId)}/${encodeURIComponent(key)}`
+  const codeItemPath = (projectId: string, key: string, value: string): string =>
+    `${codeGroupPath(projectId, key)}/items/${encodeURIComponent(value)}`
 
   const commentsPath = (projectId: string, pageId: string): string => `${pagePath(projectId, pageId)}/comments`
 
@@ -1651,6 +1694,62 @@ export function createHttpClient(
         )
       ).module,
     deleteModule: (projectId, moduleId) => request<void>('DELETE', modulePath(projectId, moduleId), SHAPES.noBody),
+    // 공통코드 — 봉투(`{ groups }` · `{ group }` · `{ item }` · `{ usage }` · `{ counts }`)를 여기서 벗긴다.
+    listCodes: async (projectId, options) =>
+      (await request<{ groups: CodeGroup[] }>('GET', codesPath(projectId), SHAPES.codeTable, undefined, options)).groups,
+    createCodeGroup: async (projectId, body) =>
+      (
+        await request<{ group: CodeGroup }>(
+          'POST',
+          codesPath(projectId),
+          SHAPES.codeGroupEnvelope,
+          declaredOnly(body, BODY_KEYS.createCodeGroup),
+        )
+      ).group,
+    updateCodeGroup: async (projectId, key, body) =>
+      (
+        await request<{ group: CodeGroup }>(
+          'PATCH',
+          codeGroupPath(projectId, key),
+          SHAPES.codeGroupEnvelope,
+          declaredOnly(body, BODY_KEYS.updateCodeGroup),
+        )
+      ).group,
+    deleteCodeGroup: (projectId, key) => request<void>('DELETE', codeGroupPath(projectId, key), SHAPES.noBody),
+    createCodeItem: async (projectId, key, body) =>
+      (
+        await request<{ item: CodeItem }>(
+          'POST',
+          `${codeGroupPath(projectId, key)}/items`,
+          SHAPES.codeItemEnvelope,
+          declaredOnly(body, BODY_KEYS.createCodeItem),
+        )
+      ).item,
+    updateCodeItem: async (projectId, key, value, body) =>
+      (
+        await request<{ item: CodeItem }>(
+          'PATCH',
+          codeItemPath(projectId, key, value),
+          SHAPES.codeItemEnvelope,
+          declaredOnly(body, BODY_KEYS.updateCodeItem),
+        )
+      ).item,
+    deleteCodeItem: (projectId, key, value) => request<void>('DELETE', codeItemPath(projectId, key, value), SHAPES.noBody),
+    codeUsage: async (projectId, group, item, options) => {
+      const query = new URLSearchParams({ group, ...(item === undefined ? {} : { item }) })
+      return (await request<{ usage: UsageHit[] }>('GET', `${codesPath(projectId)}/usage?${query}`, SHAPES.codeUsage, undefined, options))
+        .usage
+    },
+    codeUsageCounts: async (projectId, options) =>
+      (
+        await request<{ counts: CodeUsageCounts }>(
+          'GET',
+          `${codesPath(projectId)}/usage-counts`,
+          SHAPES.codeUsageCounts,
+          undefined,
+          options,
+        )
+      ).counts,
     // 개인 모듈 — 봉투 · 검사가 프로젝트 모듈과 같다(같은 꼴을 낸다).
     listMyModules: async (options) =>
       (await request<{ modules: PersonalModule[] }>('GET', '/me/modules', SHAPES.moduleListEnvelope, undefined, options)).modules,

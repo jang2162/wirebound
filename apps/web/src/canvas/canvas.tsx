@@ -74,6 +74,7 @@ import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-g
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
 import { useProjectTheme, type ProjectThemeState } from '../theme/project-theme'
+import { useProjectCodes } from '../codes/project-codes'
 // 카탈로그·구조 구현체가 없으면 모든 노드가 폴백으로 그려진다. 설치는 import만으로
 // 끝난다 — 그 모듈의 주석 참고.
 import '../catalog-setup'
@@ -325,6 +326,7 @@ export function Canvas(props: {
    */
   const api = useApi()
   const popupStack = usePopupStack()
+  const codes = useProjectCodes()
   useLayoutEffect(() => {
     popupStack.clear()
   }, [runtimeKey, popupStack.clear])
@@ -669,7 +671,15 @@ export function Canvas(props: {
                   projectId={props.projectId}
                 />
               </KeepDropPlace>
-              {mode === 'view' && <PopupLayer stack={popupStack} theme={definition} area={popupArea} onEvent={onPopupEvent} />}
+              {mode === 'view' && (
+                <PopupLayer
+                  stack={popupStack}
+                  theme={definition}
+                  area={popupArea}
+                  onEvent={onPopupEvent}
+                  {...(codes.index === undefined ? {} : { codes: codes.index })}
+                />
+              )}
             </ThemeProvider>
           )}
         </CanvasIframe>
@@ -827,6 +837,7 @@ function CanvasDocument(props: {
    * 렌더마다 새 배열이므로 StrictMode의 이중 렌더에서도 누적되지 않는다.
    */
   const errors: NodeRenderError[] = []
+  const codes = useProjectCodes().index
   const tree = renderDocument(props.doc, {
     theme: props.theme,
     viewState: props.viewState,
@@ -838,6 +849,8 @@ function CanvasDocument(props: {
     ...(props.emptyZones === undefined || props.emptyZones === null ? {} : { emptyZones: props.emptyZones }),
     ...(props.reveal === undefined ? {} : { reveal: props.reveal }),
     assetUrl: (id) => projectAssetUrl(props.projectId, id),
+    // 공통코드에 묶인 노드는 셸의 표로 — 표가 없으면(읽기 전 · 실패) prop 의 글이다(`codes/project-codes.tsx`).
+    ...(codes === undefined ? {} : { codes }),
   })
 
   return (

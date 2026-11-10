@@ -177,6 +177,8 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/pages/${PAGE_ID}/comments`]: COMMENTS,
     [`${project}/pages/${OTHER_PAGE_ID}/comments`]: COMMENTS,
     [`${project}/modules`]: { modules: [] },
+    // 공통코드 표 — 셸이 열 때 읽는다(`codes/project-codes.tsx`).
+    [`${project}/codes`]: { groups: [] },
     // 개인 모듈(`/api/me/modules`) — 하단 판은 넣을 수 없는 판에도 서서 이 목록을 읽는다.
     '/api/me/modules': { modules: [] },
     [`${project}/snapshots`]: SNAPSHOTS,

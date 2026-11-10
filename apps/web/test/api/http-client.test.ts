@@ -293,6 +293,9 @@ function asApiError(value: unknown): ApiError {
 
 type Client = ReturnType<typeof createHttpClient>
 
+/** 공통코드 표의 그룹 하나 — 경로 표 · 응답 모양 케이스가 함께 쓴다. */
+const CODE_GROUP = { key: 'S', name: '상태', items: [{ value: 'A', name: '가', active: true }] }
+
 /**
  * **경로·메서드 표.** 각 `ApiClient` 메서드가 어느 URL에 어느 HTTP 메서드로 가는가.
  *
@@ -554,6 +557,58 @@ const ENDPOINTS: Array<{
     method: 'DELETE',
     body: null,
     call: (c) => c.deleteModule('p1', 'm1'),
+  },
+  // **공통코드 아홉.** 키 · 값은 경로 조각이라 감싼다(`encodeURIComponent` — 코드값에 `/` · 한글이 든다).
+  { client: 'listCodes', url: '/api/projects/p1/codes', method: 'GET', body: { groups: [CODE_GROUP] }, call: (c) => c.listCodes('p1') },
+  {
+    client: 'createCodeGroup',
+    url: '/api/projects/p1/codes',
+    method: 'POST',
+    body: { group: CODE_GROUP },
+    call: (c) => c.createCodeGroup('p1', { key: 'S', name: '상태' }),
+  },
+  {
+    client: 'updateCodeGroup',
+    url: '/api/projects/p1/codes/S',
+    method: 'PATCH',
+    body: { group: CODE_GROUP },
+    call: (c) => c.updateCodeGroup('p1', 'S', { name: '상태' }),
+  },
+  { client: 'deleteCodeGroup', url: '/api/projects/p1/codes/S', method: 'DELETE', body: null, call: (c) => c.deleteCodeGroup('p1', 'S') },
+  {
+    client: 'createCodeItem',
+    url: '/api/projects/p1/codes/S/items',
+    method: 'POST',
+    body: { item: CODE_GROUP.items[0] },
+    call: (c) => c.createCodeItem('p1', 'S', { value: 'A', name: '가' }),
+  },
+  {
+    client: 'updateCodeItem',
+    url: '/api/projects/p1/codes/S/items/%EA%B0%80%2F1',
+    method: 'PATCH',
+    body: { item: CODE_GROUP.items[0] },
+    call: (c) => c.updateCodeItem('p1', 'S', '가/1', { active: false }),
+  },
+  {
+    client: 'deleteCodeItem',
+    url: '/api/projects/p1/codes/S/items/A',
+    method: 'DELETE',
+    body: null,
+    call: (c) => c.deleteCodeItem('p1', 'S', 'A'),
+  },
+  {
+    client: 'codeUsage',
+    url: '/api/projects/p1/codes/usage?group=S&item=A',
+    method: 'GET',
+    body: { usage: [] },
+    call: (c) => c.codeUsage('p1', 'S', 'A'),
+  },
+  {
+    client: 'codeUsageCounts',
+    url: '/api/projects/p1/codes/usage-counts',
+    method: 'GET',
+    body: { counts: {} },
+    call: (c) => c.codeUsageCounts('p1'),
   },
   // **개인 모듈 다섯.** 프로젝트 밖(`/api/me`)에 산다 — 사람이 소유한다. 봉투 · 응답 꼴이 프로젝트 모듈과 같다.
   {
@@ -956,6 +1011,37 @@ const SHAPE_CASES: Array<{
     broken: { claimed: [], failed: [{ id: 'b'.repeat(64), reason: 'gone' }] },
     ok: assetClaim,
     call: (c) => c.claimMyAssets(['b'.repeat(64)], 'p2'),
+  },
+  // --- 공통코드. 표를 못 풀면 묶인 노드가 대체 글로 서므로 모양이 틀린 답은 실패로 낸다. ---
+  {
+    shape: 'codeTable',
+    broken: { groups: [{ ...CODE_GROUP, items: [{ value: 'A' }] }] },
+    ok: { groups: [CODE_GROUP] },
+    call: (c) => c.listCodes('p1'),
+  },
+  {
+    shape: 'codeGroupEnvelope',
+    broken: { group: { key: 'S' } },
+    ok: { group: CODE_GROUP },
+    call: (c) => c.createCodeGroup('p1', { key: 'S', name: '상태' }),
+  },
+  {
+    shape: 'codeItemEnvelope',
+    broken: { item: { value: 'A', name: '가', active: 'yes' } },
+    ok: { item: CODE_GROUP.items[0] },
+    call: (c) => c.createCodeItem('p1', 'S', { value: 'A', name: '가' }),
+  },
+  {
+    shape: 'codeUsage',
+    broken: { usage: [{ kind: 'page', id: 'pg', title: '목록', nodes: [{ nodeId: 'n' }] }] },
+    ok: { usage: [{ kind: 'page', id: 'pg', title: '목록', nodes: [{ nodeId: 'n', name: '이름' }] }] },
+    call: (c) => c.codeUsage('p1', 'S'),
+  },
+  {
+    shape: 'codeUsageCounts',
+    broken: { counts: { S: { group: 1, items: { A: '1' } } } },
+    ok: { counts: { S: { group: 1, items: { A: 1 } } } },
+    call: (c) => c.codeUsageCounts('p1'),
   },
   {
     shape: 'moduleListEnvelope',

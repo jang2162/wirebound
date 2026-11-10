@@ -120,6 +120,7 @@ const NODE_FIELDS: Record<string, string> = {
   visibility: `\`{ mode: "only" | "except", states: [...] }\` — show the node only in (or hide it in) those view states and their descendants. \`"${DEFAULT_VIEW_STATE}"\` is the base screen. Omitted: visible in every state.`,
   marker: 'Comment number (positive integer). The server assigns it when the first comment lands on the node; do not invent one.',
   interactions: 'What happens on user events (see Interactions).',
+  code: "`{ group, item?, selected? }` — bind the node to the project's common code table by group key and code value. Choice widgets (`Select`, `CheckboxGroup`, `RadioGroup`) take `group` and pick values in `selected`; text components take `group` + `item` and show that item's name. Keep the bound text in props too — it is the fallback when the reference breaks.",
   children: 'Child nodes in the body zone. Only components that declare a `body` zone take them.',
   zones:
     'Named child zones: `{ <zone name>: [nodes] }`. Only the zones a component declares (see the catalog); a missing key is an empty zone. Patch paths: `…/zones/<zone name>/<index>` (add a first node with `…/zones/<zone name>` and value `[node]`, or `…/zones` with `{ <zone name>: [node] }` when the node has no `zones`).',

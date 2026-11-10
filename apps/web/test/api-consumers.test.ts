@@ -80,6 +80,15 @@ const METHODS = [
   'createModule',
   'renameModule',
   'deleteModule',
+  'listCodes',
+  'createCodeGroup',
+  'updateCodeGroup',
+  'deleteCodeGroup',
+  'createCodeItem',
+  'updateCodeItem',
+  'deleteCodeItem',
+  'codeUsage',
+  'codeUsageCounts',
   'listMyModules',
   'getMyModule',
   'createMyModule',
@@ -313,6 +322,16 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listAdminProjects: ['../src/admin/projects-section.tsx', '../src/admin/users-section.tsx'],
   transferProjectOwner: ['../src/admin/projects-section.tsx'],
   listAudit: ['../src/admin/audit-section.tsx'],
+  // 공통코드 — 셸의 표(`codes/project-codes.tsx`)가 읽는다. 쓰기 · 사용처는 공통코드 화면 · 속성 패널이 서면 적는다.
+  listCodes: ['../src/codes/project-codes.tsx'],
+  createCodeGroup: [],
+  updateCodeGroup: [],
+  deleteCodeGroup: [],
+  createCodeItem: [],
+  updateCodeItem: [],
+  deleteCodeItem: [],
+  codeUsage: [],
+  codeUsageCounts: [],
 }
 
 describe('ApiClient의 소비자', () => {

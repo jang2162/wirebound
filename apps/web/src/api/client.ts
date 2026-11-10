@@ -5,7 +5,7 @@
  *
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
-import type { PatchOp, WbNode } from '@wirebound/schema'
+import type { CodeGroup, CodeItem, PatchOp, UsageHit, WbNode } from '@wirebound/schema'
 import type {
   AdminInvite,
   AdminProject,
@@ -64,6 +64,9 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
  * 첫 보내기의 연결을 싣는다(`panels/comment-panel.tsx`의 `submit`). 지금 연결을 실으면 그 사이 셸이
  * 바뀌었을 때 서버가 **새 셸의** 연결을 방송에서 빼서 번호가 새 셸에 안 선다.
  */
+/** 공통코드 사용 수(`ApiClient.codeUsageCounts`) — 그룹 키 → 그 그룹을 가리키는 노드 수 · 코드값마다 그 항목을 가리키는 노드 수. */
+export type CodeUsageCounts = Record<string, { group: number; items: Record<string, number> }>
+
 export interface WriteOptions {
   readonly signal?: AbortSignal
   readonly connectionId?: string
@@ -462,6 +465,32 @@ export interface ApiClient {
   renameModule(projectId: string, moduleId: string, body: { name: string }): Promise<ProjectModule>
   /** 지운다. 없으면 404. editor 이상. */
   deleteModule(projectId: string, moduleId: string): Promise<void>
+  /**
+   * **공통코드 표**(`GET …/codes`) — 그룹 · 항목 차례대로. viewer 도 읽는다. 노드는 그룹 키 · 코드값으로 가리킨다(`WbNode.code`). 다시 읽기는
+   * `codes-changed` 프레임이 부른다(`codes/project-codes.tsx`).
+   */
+  listCodes(projectId: string, options?: ReadOptions): Promise<CodeGroup[]>
+  /** 그룹 하나를 만든다. 겹친 키는 409(`code-key-taken`) · 키 꼴 · 상한 위반은 400. editor 이상. */
+  createCodeGroup(projectId: string, body: { key: string; name: string }): Promise<CodeGroup>
+  /** 그룹 이름 · 차례(0 부터의 자리)를 고친다 — 키는 못 바꾼다. editor 이상. */
+  updateCodeGroup(projectId: string, key: string, body: { name?: string; sortOrder?: number }): Promise<CodeGroup>
+  /** 그룹을 항목째 지운다 — 그것을 가리키던 노드는 끊긴 참조로 남는다. editor 이상. */
+  deleteCodeGroup(projectId: string, key: string): Promise<void>
+  /** 항목 하나를 만든다. 겹친 값은 409 · 상한 위반은 400. editor 이상. */
+  createCodeItem(projectId: string, key: string, body: { value: string; name: string; active?: boolean }): Promise<CodeItem>
+  /** 항목의 이름 · 차례 · 사용 여부를 고친다 — 코드값은 못 바꾼다. editor 이상. */
+  updateCodeItem(
+    projectId: string,
+    key: string,
+    value: string,
+    body: { name?: string; sortOrder?: number; active?: boolean },
+  ): Promise<CodeItem>
+  /** 항목을 지운다. editor 이상. */
+  deleteCodeItem(projectId: string, key: string, value: string): Promise<void>
+  /** 그 그룹(· 항목)을 쓰는 페이지 · 레이아웃 · 모듈과 노드(서버가 센다 — `@wirebound/schema` 의 `codeUsage`). viewer 도 읽는다. */
+  codeUsage(projectId: string, group: string, item?: string, options?: ReadOptions): Promise<UsageHit[]>
+  /** 그룹 키마다 사용 수(`{ [key]: { group, items: { [value]: n } } }`). viewer 도 읽는다. */
+  codeUsageCounts(projectId: string, options?: ReadOptions): Promise<CodeUsageCounts>
   /**
    * **내 개인 모듈 전부**(`GET /api/me/modules`) — 프로젝트를 가리지 않는다. 최근 것이 먼저다. 응답 꼴은 프로젝트 모듈과 같다(`createdBy` 는 나).
    * 세션으로만 부른다 · 역할과 무관하다(viewer 도 저장 · 이름 · 삭제한다).

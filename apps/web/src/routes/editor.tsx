@@ -73,6 +73,7 @@ import { projectAbilities } from '../projects/project-actions'
 import { SessionNotices, useLogout } from '../session/session-menu'
 import { useSessionUser } from '../session/session-context'
 import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
+import { ProjectCodesProvider, useProjectCodes } from '../codes/project-codes'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
   EditorStore,
@@ -525,14 +526,17 @@ export function EditorShellRoute(): ReactElement {
       <CanvasDocumentProvider>
         {/* **프로젝트가 고정한 테마**(`theme/project-theme.tsx`) — 캔버스 · 속성 패널이 읽고, 셸이 프레임 · 다시 읽기로 따라잡게 한다. */}
         <ProjectThemeProvider projectId={state.project.id}>
-          {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
-          <PlacementRegionsProvider>
-            {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
+          {/* **공통코드 표**(`codes/project-codes.tsx`) — 캔버스 · 팝업 층 · 속성 패널이 읽고, 셸이 `codes-changed` 로 다시 읽게 한다. */}
+          <ProjectCodesProvider projectId={state.project.id}>
+            {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
+            <PlacementRegionsProvider>
+              {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
-            <ViewStateProvider pageId={params.pageId}>
-              <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
-            </ViewStateProvider>
-          </PlacementRegionsProvider>
+              <ViewStateProvider pageId={params.pageId}>
+                <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
+              </ViewStateProvider>
+            </PlacementRegionsProvider>
+          </ProjectCodesProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
     </EditorStoreProvider>
@@ -699,6 +703,7 @@ function EditorShell(props: {
    * 사람의 화면도 맞춰진다.
    */
   const theme = useProjectTheme()
+  const codes = useProjectCodes()
   useRealtime(
     props.project.id,
     useCallback(() => setResyncToken((token) => token + 1), []),
@@ -706,6 +711,7 @@ function EditorShell(props: {
     props.onMembership,
     theme.applyFrame,
     onMenuChanged,
+    codes.reload,
   )
   /**
    * **테마를 따라잡는다** — 라우트의 다시 읽기(룸에 듦 · 다시 붙음 · 멤버십 신호)가 받은 `themeRev` 가 쥔 바인딩보다 새것이면 다시 읽는다.
