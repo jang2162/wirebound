@@ -32,7 +32,7 @@ import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK, type LossPart } from '../store/loss-notice'
 import { interactionsOps, propOps, variantOps } from './ops'
 import { walkSafely } from './safe-walk'
-import { customRowLeads, type FirstRowLead } from './first-row-ask'
+import { customRowLeads, type FirstRowLead, type FirstRowOutcome } from './first-row-ask'
 
 /**
  * 그 편집이 커스텀 행을 첫 자리로 데려오는가(`./first-row-ask.ts`). 행이 든 그리드가 없는 문서는 적용해 보지 않는다 — 묻는 판은 편집 앞에 있던 그리드의
@@ -368,6 +368,8 @@ export interface CommitOptions {
    * — 그 판은 부른 쪽이 반환값으로 한다.
    */
   after?: () => void
+  /** **물은 편집의 결말을 받는다**(`./first-row-ask.ts` 의 `FirstRowOutcome`) — 끌기 진단 줄이 물음과 그 결말을 따로 적으려고 준다(`drag/use-placement.ts`). */
+  onAskSettled?: (outcome: FirstRowOutcome) => void
 }
 
 export interface EditCommit {
@@ -992,7 +994,7 @@ export function useEditCommit(props: { projectId: string; pageId: string }): Edi
       if (options.firstRowAsked !== true) {
         const lead = firstRowLead(open.document, ops)
         if (lead !== null) {
-          store.askFirstRow({ rowId: lead.rowId, ops, after: options.after ?? null })
+          store.askFirstRow({ rowId: lead.rowId, ops, after: options.after ?? null, settled: options.onAskSettled ?? null })
           return false
         }
       }

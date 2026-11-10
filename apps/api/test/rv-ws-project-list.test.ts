@@ -40,6 +40,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** 목록 줄을 `id` 오름차순으로 — uuid 글자 차례는 pg 의 `uuid` 차례와 같다(소문자 16진수 · 붙임표 자리가 고정). */
+function byId(rows: Array<[string, string, number]>): Array<[string, string, number]> {
+  return [...rows].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+}
+
 describe('RV-WS 항목 1 — 목록의 두 칸은 내가 멤버인 프로젝트의 것만 · 그 프로젝트의 수', () => {
   it('멤버 여럿 · 프로젝트 여럿 · 내가 viewer 인 판 — 남의 프로젝트는 목록에 없고, 수는 프로젝트마다 그 프로젝트의 멤버 행 수다', async () => {
     await withApi(async (ctx) => {
@@ -61,27 +66,34 @@ describe('RV-WS 항목 1 — 목록의 두 칸은 내가 멤버인 프로젝트�
       const bobs = await createProject(ctx, bob.cookie)
       await addMember(ctx, bobs.id, dave.user.id, 'editor')
 
+      // 롤백 하네스라 `created_at` 이 모두 같아 목록은 `id` 차례다(`project-list-order.test.ts`) — 기대값도 그 차례로 늘어놓는다.
       const seenByAlice = await list(ctx, alice.cookie)
-      expect(seenByAlice.map((p) => [p.id, p.role, p.memberCount])).toEqual([
-        [solo.id, 'owner', 1],
-        [three.id, 'owner', 3],
-        [four.id, 'owner', 4],
-      ])
+      expect(seenByAlice.map((p) => [p.id, p.role, p.memberCount])).toEqual(
+        byId([
+          [solo.id, 'owner', 1],
+          [three.id, 'owner', 3],
+          [four.id, 'owner', 4],
+        ]),
+      )
 
       // bob 은 three 의 viewer · four 의 editor · bobs 의 owner — solo 는 안 보인다.
       const seenByBob = await list(ctx, bob.cookie)
-      expect(seenByBob.map((p) => [p.id, p.role, p.memberCount])).toEqual([
-        [three.id, 'viewer', 3],
-        [four.id, 'editor', 4],
-        [bobs.id, 'owner', 2],
-      ])
+      expect(seenByBob.map((p) => [p.id, p.role, p.memberCount])).toEqual(
+        byId([
+          [three.id, 'viewer', 3],
+          [four.id, 'editor', 4],
+          [bobs.id, 'owner', 2],
+        ]),
+      )
 
       // dave 는 viewer · editor 둘 — 내 역할이 갈려도 수는 그 프로젝트의 것이다.
       const seenByDave = await list(ctx, dave.cookie)
-      expect(seenByDave.map((p) => [p.id, p.role, p.memberCount])).toEqual([
-        [four.id, 'viewer', 4],
-        [bobs.id, 'editor', 2],
-      ])
+      expect(seenByDave.map((p) => [p.id, p.role, p.memberCount])).toEqual(
+        byId([
+          [four.id, 'viewer', 4],
+          [bobs.id, 'editor', 2],
+        ]),
+      )
     })
   })
 

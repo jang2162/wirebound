@@ -165,6 +165,9 @@ export function projectActivityColumns(table: string) {
  * 사용자가 멤버인 프로젝트만 조회한다(`project_members`를 조인한다). 각 행에
  * 그 사용자 자신의 역할을 함께 싣는다 — `GET /api/projects` 응답이 메뉴를
  * 그리려면 role이 필요하다(설계서 「권한 모델」). 멤버 수 · 최근 수정은 `projectActivityColumns` 다.
+ *
+ * 차례는 `created_at` 오름차순이고 같으면 `id` 다 — 한 트랜잭션에서 만든 프로젝트는 `created_at`(`now()`)이 같아, 둘째 열쇠가 없으면
+ * 차례가 질의 계획에 따라 갈린다(`apps/api/test/project-list-order.test.ts`).
  */
 export async function listProjectsForUser(db: DbHandle, userId: string): Promise<ProjectListEntry[]> {
   const rows = await db
@@ -174,6 +177,7 @@ export async function listProjectsForUser(db: DbHandle, userId: string): Promise
     .select(['projects.id', 'projects.name', 'projects.slug', 'projects.description', 'project_members.role'])
     .select(projectActivityColumns('projects'))
     .orderBy('projects.created_at', 'asc')
+    .orderBy('projects.id', 'asc')
     .execute()
   return rows.map((row) => ({ ...row, memberCount: Number(row.memberCount) }))
 }

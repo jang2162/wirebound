@@ -10,16 +10,18 @@
  * | 꺼진 판 | `[wb-drag]` 줄이 하나라도 선다 · 진단 전용 리스너(창 잃음 · 캡처 · 전역 누름)를 건다 · 놓기가 켠 판과 다르다 |
  * | `null` 판 | 놓을 자리가 없는 까닭(`why=`)이 줄에 없다 — 판정(`not-container`)과 `canvasHitAt`(`outside-canvas`) 둘 다 |
  * | 움직임 | 같은 답 위의 움직임마다 `over` 줄이 선다(바뀔 때만이어야 한다) |
+ * | 첫 행 확인 | 물은 놓기가 `drop result=refused` 로 선다 · 상자의 결말(계속 · 취소)이 `ask` 줄로 안 선다 · 계속이 낸 편집이 없다 |
  *
  * **`vi.mock`은 이 파일에 있어야 한다** — 호이스팅이 그것이 적힌 파일에서만 일어난다(`editor-harness.tsx` 머리말).
  */
-import { act, fireEvent, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { PageDocument, PatchOp } from '@wirebound/schema'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import type { ApiClient } from '../../src/api/client'
 import type { PatchResult } from '../../src/api/types'
 import type { CanvasHit } from '../../src/canvas/canvas-drop'
 import { DRAG_DEBUG_STORAGE_KEY, dragDebug, readDragDebugSwitch } from '../../src/drag/drag-debug'
+import { FIRST_ROW_ASK_CONFIRM, FIRST_ROW_ASK_TITLE } from '../../src/edit/first-row-ask'
 import { EditorStore } from '../../src/store/editor-store'
 import { PAGE_ID, openPage, pageDoc } from '../editor-harness'
 import { installPointerEvents } from '../pointer-events'
@@ -88,9 +90,9 @@ function recordingPatchOps(): { sent: PatchOp[][]; patchOps: ApiClient['patchOps
   return { sent, patchOps }
 }
 
-async function openWithPalette(): Promise<PatchOp[][]> {
+async function openWithPalette(doc: PageDocument = DOC): Promise<PatchOp[][]> {
   const { sent, patchOps } = recordingPatchOps()
-  await openPage(DOC, { apiOverrides: { patchOps } })
+  await openPage(doc, { apiOverrides: { patchOps } })
   fireEvent.click(within(screen.getByRole('contentinfo', { name: '하단 바' })).getByRole('button', { name: '컴포넌트' }))
   return sent
 }
@@ -224,6 +226,71 @@ describe('켠 판', () => {
       last: 'end',
     })
     expect(dragLines().at(-1)).toMatch(/ end why=escape started=true$/)
+  })
+})
+
+/**
+ * 기본 행 둘 뒤에 커스텀 행 — 기본인 첫 행(`n-r1`) 안에 칸을 놓으면 첫 행이 커스텀이 되고 기본 행(`n-r2`)이 남아 묻는다(`src/edit/first-row-ask.ts`).
+ */
+const GRID_DOC: PageDocument = pageDoc({
+  id: 'n-root',
+  type: 'Page',
+  children: [
+    {
+      id: 'n-grid',
+      type: 'DataGrid',
+      children: [{ id: 'n-c1', type: 'GridColumn', props: { label: '이름' } }],
+      zones: {
+        rows: [
+          { id: 'n-r1', type: 'GridRow' },
+          { id: 'n-r2', type: 'GridRow' },
+        ],
+      },
+    },
+  ],
+})
+const ON_FIRST_ROW_INSIDE: CanvasHit = { overId: 'n-r1', band: 'inside', rect: RECT, layout: { axis: 'y', reversed: false } }
+
+describe('첫 행 확인으로 물은 놓기', () => {
+  /** 칸 카드를 첫 행 안에 놓고 상자의 단추 하나를 누른다 — 놓은 뒤 · 누른 뒤의 `drop` · `ask` 줄과 낸 편집 수. */
+  async function dropThenAnswer(answer: string): Promise<{ afterDrop: string[]; afterAnswer: string[]; dialog: boolean; sent: number }> {
+    const sent = await openWithPalette(GRID_DOC)
+    switchOn()
+    hitPlan = ON_FIRST_ROW_INSIDE
+    info.mockClear()
+    await dragCard('GridCell', [{ x: 60, y: 690 }])
+    const tail = (): string[] =>
+      dragLines()
+        .filter((text) => / (drop|ask) /.test(text))
+        .map((text) => text.replace(/^.* \+\d+ms /, ''))
+    const afterDrop = tail()
+    const dialog = screen.queryByRole('dialog', { name: FIRST_ROW_ASK_TITLE }) !== null
+    await act(async () => {
+      fireEvent.click(within(screen.getByRole('dialog', { name: FIRST_ROW_ASK_TITLE })).getByRole('button', { name: answer }))
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: FIRST_ROW_ASK_TITLE })).toBeNull())
+    return { afterDrop, afterAnswer: tail(), dialog, sent: sent.length }
+  }
+
+  it('놓기는 `drop result=asked` 로 서고, «계속» 은 `ask result=continued` 와 낸 편집 하나', async () => {
+    expect(await dropThenAnswer(FIRST_ROW_ASK_CONFIRM)).toEqual({
+      afterDrop: ['drop result=asked parent=n-r1 index=0 placing=new:GridCell'],
+      afterAnswer: [
+        'drop result=asked parent=n-r1 index=0 placing=new:GridCell',
+        'ask result=continued parent=n-r1 index=0 placing=new:GridCell',
+      ],
+      dialog: true,
+      sent: 1,
+    })
+  })
+
+  it('«취소» 는 `ask result=cancelled` 이고 낸 편집이 없다', async () => {
+    expect(await dropThenAnswer('취소')).toEqual({
+      afterDrop: ['drop result=asked parent=n-r1 index=0 placing=new:GridCell'],
+      afterAnswer: ['drop result=asked parent=n-r1 index=0 placing=new:GridCell', 'ask result=cancelled'],
+      dialog: true,
+      sent: 0,
+    })
   })
 })
 
