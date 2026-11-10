@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, type ApiClient } from '../../src/api/client'
 import type { PatchResult, PersonalModule, ProjectModule } from '../../src/api/types'
 import { PALETTE_VIEW_KEY } from '../../src/palette/component-palette'
+import { FIRST_ROW_ASK_CONFIRM, FIRST_ROW_ASK_TITLE } from '../../src/edit/first-row-ask'
 import { MODULE_GONE_NOTICE, NO_PERSONAL_MODULES, NO_PROJECT_MODULES, copiedNotice } from '../../src/palette/module-tab'
 import { lockedNotice } from '../../src/panels/property-panel'
 import { EditorStore } from '../../src/store/editor-store'
@@ -93,15 +94,17 @@ interface Server {
   modules: ProjectModule[]
   personal: PersonalModule[]
   api: Partial<ApiClient>
+  /** 연 문서 — 대역이 처음 든 문서와 같다. */
+  start: PageDocument
 }
 
 /** 편집을 받아 문서를 진행시키고 모듈 목록 · 하나를 내는 대역. */
-function server(initial: ProjectModule[] = [], mine: PersonalModule[] = []): Server {
+function server(initial: ProjectModule[] = [], mine: PersonalModule[] = [], start: PageDocument = DOC): Server {
   const sent: PatchOp[][] = []
   const calls: Server['calls'] = { list: 0, mine: 0, get: [], getMine: [], created: [], createdMine: [], renamedMine: [], deletedMine: [] }
   const modules = [...initial]
   const personal = [...mine]
-  let held = DOC
+  let held = start
   let seq = HEAD_SEQ
   const patchOps: ApiClient['patchOps'] = async (_projectId, _pageId, body) => {
     sent.push(body.ops)
@@ -164,7 +167,7 @@ function server(initial: ProjectModule[] = [], mine: PersonalModule[] = []): Ser
     },
     getProjectTheme: async () => adminThemeView(),
   }
-  return { sent, held: () => held, calls, modules, personal, api }
+  return { sent, held: () => held, calls, modules, personal, api, start }
 }
 
 /** 가짜가 내는 프로젝트 — 역할만 바꾼다(`editor-harness.tsx` 의 `PROJECT` 와 같은 값). */
@@ -182,7 +185,7 @@ function asRole(role: 'owner' | 'viewer'): Partial<ApiClient> {
 }
 
 async function openWithPalette(fake: Server, role: 'owner' | 'viewer' = 'owner'): Promise<void> {
-  await openPage(DOC, { apiOverrides: { ...fake.api, ...(role === 'viewer' ? asRole('viewer') : {}) } })
+  await openPage(fake.start, { apiOverrides: { ...fake.api, ...(role === 'viewer' ? asRole('viewer') : {}) } })
   fireEvent.click(within(footer()).getByRole('button', { name: role === 'viewer' ? '모듈' : '컴포넌트' }))
 }
 
@@ -445,6 +448,58 @@ describe('넣기', () => {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 50)))
     expect(fake.sent).toEqual([])
     expect(fake.held()).toEqual(DOC)
+  })
+})
+
+describe('넣기 — 첫 행 확인(`src/edit/first-row-ask.ts`)', () => {
+  /** 기본 행 둘인 그리드 — 기본인 첫 행(`n-r1`)을 고르고 «칸» 모듈을 넣으면 그 행 안 끝에 들어가 첫 행이 커스텀이 되고 `n-r2` 가 기본으로 남는다. */
+  const GRID: PageDocument = pageDoc({
+    id: 'n-root',
+    type: 'Page',
+    children: [
+      {
+        id: 'n-grid',
+        type: 'DataGrid',
+        children: [{ id: 'n-c1', type: 'GridColumn', props: { label: '이름' } }],
+        zones: {
+          rows: [
+            { id: 'n-r1', type: 'GridRow' },
+            { id: 'n-r2', type: 'GridRow' },
+          ],
+        },
+      },
+    ],
+  })
+  const cellModule = (): ProjectModule => ({
+    ...projectModule('m-cell', '칸 묶음'),
+    nodes: [{ id: 'm_cell', type: 'GridCell', children: [{ id: 'm_cell_text', type: 'Text', props: { content: '값' } }] }],
+    nodeCount: 2,
+  })
+  const asking = (): HTMLElement | null => screen.queryByRole('dialog', { name: FIRST_ROW_ASK_TITLE })
+
+  it('기본인 첫 행을 고르고 «칸» 모듈을 넣으면 묻는다 · 취소면 편집 0 · 계속이면 한 편집으로 넣고 넣은 노드를 고른다', async () => {
+    const fake = server([cellModule()], [], GRID)
+    await openWithPalette(fake)
+    await openModules()
+    await select('n-r1')
+    await insert('칸 묶음')
+    await waitFor(() => expect(asking()).not.toBeNull())
+    expect(fake.sent).toHaveLength(0)
+    fireEvent.click(within(asking()!).getByRole('button', { name: '취소' }))
+    await act(async () => {})
+    expect({ 상자: asking() !== null, 보냄: fake.sent.length }).toEqual({ 상자: false, 보냄: 0 })
+
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 600)))
+    await insert('칸 묶음')
+    await waitFor(() => expect(asking()).not.toBeNull())
+    fireEvent.click(within(asking()!).getByRole('button', { name: FIRST_ROW_ASK_CONFIRM }))
+    await waitFor(() => expect(fake.sent).toHaveLength(1))
+    const first = fake.held().root.children![0]!.zones!.rows![0]!
+    expect({ 첫행: first.id, 칸: first.children?.map((node) => node.type), 고른: shellStore().getState().selectedNodeIds }).toEqual({
+      첫행: 'n-r1',
+      칸: ['GridCell'],
+      고른: [first.children![0]!.id],
+    })
   })
 })
 
