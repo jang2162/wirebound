@@ -218,3 +218,7 @@ export type { CodeIndex, ResolvedChoices, ResolvedCode } from './codes-resolve'
 export { indexCodes, isCodeBroken, resolveChoices, resolveCode, resolvedCodeProps, resolveLabel } from './codes-resolve'
 export type { CodeUsageCount, UsageHit, UsageSource } from './codes-usage'
 export { codeUsage, codeUsageCounts } from './codes-usage'
+
+// 코멘트 토큰 — 본문 글 안의 `[글](wb:…)` 를 가르고 푼다(설계 `docs/superpowers/specs/2026-11-11-comment-tokens-design.md`).
+export type { CommentSegment, CommentTokenTarget } from './comment-tokens'
+export { formatCommentToken, parseCommentBody } from './comment-tokens'
