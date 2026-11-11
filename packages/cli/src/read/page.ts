@@ -29,6 +29,8 @@
  * *"`payloadVersion`은 `PageDocument.version`과 다른 축이다"* 절과 같은 근거).
  */
 import {
+  buildMarkerIndex,
+  commentTokenPages,
   duplicateTargets,
   indexCodes,
   matchPageTargets,
@@ -37,6 +39,7 @@ import {
   pageTargetPath,
   pageView,
   targetedPages,
+  type CommentTokenContext,
   type PageDocument,
   type PageKind,
   type PageView,
@@ -174,7 +177,22 @@ export function lookupPage(payload: SnapshotPayload, path: string): PageLookup {
         })),
       // 공통코드 표(payload 판 4 이상) — 묶인 노드의 이름을 표로 읽고 `nodes[].code.resolved` 를 싣는다. 옛 판 payload 는 표가 없다.
       ...(payload.codes === undefined ? {} : { codes: indexCodes(payload.codes) }),
+      // 코멘트 토큰 — 그 프로젝트의 payload 로만 푼다(남의 id 는 끊김).
+      tokens: tokenContext(payload, ordered, record.id),
     }),
+  }
+}
+
+/** 코멘트 토큰을 풀 자료 — payload 의 모든 페이지 문서(지금 판으로 올린 것)와 공통코드 표. 올리지 못한 문서의 노트는 그 페이지 몫이 아니라 버린다. */
+function tokenContext(payload: SnapshotPayload, ordered: readonly TargetedPage[], currentPageId: string): CommentTokenContext {
+  const codes = payload.codes === undefined ? undefined : indexCodes(payload.codes)
+  const scratch: string[] = []
+  const documents = payload.pages.map((page) => ({ id: page.id, document: currentDocument(page.schema, page.title, scratch) }))
+  return {
+    currentPageId,
+    pages: commentTokenPages(ordered),
+    markers: buildMarkerIndex(documents, codes),
+    ...(codes === undefined ? {} : { codes }),
   }
 }
 

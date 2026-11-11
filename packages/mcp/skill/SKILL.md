@@ -186,6 +186,18 @@
 
 `nodeId`는 `get_page` 응답의 `nodes[].id`다. 없는 노드면 `reason: "no-such-node"`가 온다.
 
+**다른 페이지 · 번호 · 공통코드를 가리킬 때는 토큰을 넣는다** — 읽는 자리(에디터 · 번들 · PPTX · `get_page`)마다 지금의 이름 · 번호로 풀리고,
+에디터와 번들에서는 눌러 그 자리로 간다. 보이는 글은 대상이 사라졌을 때만 보이는 대체 글이다.
+
+| 가리킬 것 | 토큰 |
+|---|---|
+| 페이지 | `[회원 상세](wb:page/<pageId>)` |
+| 번호(그 노드의 코멘트 묶음) | `[회원 상세 #2](wb:comment/<pageId>/<nodeId>)` |
+| 공통코드 그룹 · 항목 | `[회원 상태](wb:code/STATUS)` · `[활성](wb:code/STATUS/ACTIVE)`(코드값은 퍼센트 인코딩 — `/` · 공백 · 괄호) |
+
+페이지 id 는 `list_pages` 의 `pages[].id`, `nodeId` 는 `get_page` 의 `nodes[].id` 다. `get_page` 의 `comments[].resolved` 는 풀린 글 뒤에 대상을
+괄호로 싣는다(`회원 상세 #2 (comment:<pageId>/<nodeId>)`) — 끊긴 토큰은 `대체 글 (찾을 수 없음)` 이다. 원문은 `comments[].body` 다.
+
 ## 검사할 때 (`validate`)
 
 **`failing`만 읽지 마라.** `failing`은 *"`error` 등급 결함이 있는가"*이고, 그것이 `false`라고

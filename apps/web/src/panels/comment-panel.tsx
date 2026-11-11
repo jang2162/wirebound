@@ -140,8 +140,12 @@
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는
  * `walkSafely`를 쓴다.
  */
-import { useCallback, useEffect, useRef, type ReactElement } from 'react'
-import { nodeAlias, type PageDocument } from '@wirebound/schema'
+import { useCommentIndex, useCommentTokenContext } from '../comments/comment-index'
+import { COMMENT_FLASH_MS, useCommentFocus } from '../comments/comment-focus'
+import { CommentBody } from './comment-body'
+import { useTokenPicker } from './comment-token-picker'
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { COMMENT_BODY_MAX_LENGTH, nodeAlias, refreshCommentTokenLabels, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
@@ -672,8 +676,65 @@ export function CommentPanel(props: {
   const [refreshing, setRefreshing] = usePanelSlot(REFRESH)
 
   const { projectId, pageId } = props
+  // 본문의 토큰을 지금의 이름 · 번호로 푼다(`panels/comment-body.tsx`).
+  const tokenContext = useCommentTokenContext(pageId)
+  /**
+   * **번호 토큰이 데려온 묶음**(`comments/comment-focus.tsx`) — 목록에 그 노드의 묶음이 서면 한 번 굴려 `COMMENT_FLASH_MS` 동안 강조한다. 목록이
+   * 아직이면 설 때까지 기다린다(`at` 으로 한 번만). 그 노드에 코멘트가 없으면(번호가 걷힘) 노드를 고른 것으로 끝난다.
+   */
+  const focus = useCommentFocus()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const flashed = useRef(0)
+  const [flash, setFlash] = useState<{ nodeId: string; at: number } | null>(null)
+  const listed = state.status === 'ready' ? state.comments : null
+  useEffect(() => {
+    if (focus === null || flashed.current === focus.at || listed === null) return
+    if (!listed.some((comment) => comment.nodeId === focus.nodeId)) return
+    flashed.current = focus.at
+    setFlash({ nodeId: focus.nodeId, at: focus.at })
+  }, [focus, listed])
+  useEffect(() => {
+    if (flash === null) return
+    const row = [...(rootRef.current?.querySelectorAll<HTMLElement>('[data-comment-node]') ?? [])].find(
+      (element) => element.dataset['commentNode'] === flash.nodeId,
+    )
+    row?.scrollIntoView?.({ block: 'nearest' })
+    const timer = setTimeout(() => setFlash(null), COMMENT_FLASH_MS)
+    return () => clearTimeout(timer)
+  }, [flash])
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
   const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
+  const tokenIndex = useCommentIndex().index
+  /**
+   * 저장 직전에 토큰의 라벨을 지금 이름으로 다시 적는다(`refreshCommentTokenLabels`) — 라벨은 대체 글이라 마지막으로 산 이름이 남아야 한다.
+   * 다시 적어 길이 한도를 넘으면 친 그대로 보낸다(대체 글이 조금 낡을 뿐이다).
+   */
+  const withLiveLabels = (text: string): string => {
+    if (tokenContext === null) return text
+    const next = refreshCommentTokenLabels(text, tokenContext)
+    return next.length > COMMENT_BODY_MAX_LENGTH ? text : next
+  }
+  // `#` 자동완성(`./comment-token-picker.tsx`) — 새 코멘트 상자와 고치는 상자에 하나씩.
+  const draftInput = useRef<HTMLTextAreaElement>(null)
+  const editInput = useRef<HTMLTextAreaElement>(null)
+  const draftPicker = useTokenPicker({
+    id: 'wb-comment-draft',
+    value: draft,
+    setValue: (text) => {
+      if (selectedNodeId !== null) setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+    },
+    inputRef: draftInput,
+    context: tokenContext,
+    index: tokenIndex,
+  })
+  const editPicker = useTokenPicker({
+    id: 'wb-comment-edit',
+    value: editDraft,
+    setValue: setEditDraft,
+    inputRef: editInput,
+    context: tokenContext,
+    index: tokenIndex,
+  })
 
   /**
    * **쓰기 뒤의 목록 다시 받기 — 잠금 밖이다.** 이것을 쓰기의 뒷일 안에서 기다리면,
@@ -905,7 +966,7 @@ export function CommentPanel(props: {
 
   const submit = (): void => {
     const nodeId = selectedNodeId
-    const body = draft.trim()
+    const body = withLiveLabels(draft.trim())
     if (body === '' || nodeId === null) return
     const hadMarker = numbered(nodeId)
     // **같은 글이면 같은 키**(위 `POST_KEYS`). 보내기 **전에** 적는다 — 응답이 오기 전에 탭을 오가도
@@ -1049,7 +1110,7 @@ export function CommentPanel(props: {
   const saveEdit = (commentId: string): void => {
     // 그리는 갈래와 **같은 값**이다(`editing`) — 상자가 안 선 글은 보내지도 않는다.
     if (editing !== commentId) return
-    const body = editDraft.trim()
+    const body = withLiveLabels(editDraft.trim())
     if (body === '') return
 
     perform({
@@ -1124,7 +1185,7 @@ export function CommentPanel(props: {
   const refreshNotice = refreshing !== null && refreshing.at > state.at ? refreshing : null
 
   return (
-    <div className="wb-shell-comments">
+    <div className="wb-shell-comments" ref={rootRef}>
       {/* **폼째 뺀다**(`canEdit`). 폼 안의 통지(실패 · 확인 중 · 어긋남)도 함께 가는데, 그것들은 전부 **내가 낸 쓰기**의
           뒷말이다. viewer 가 쓰기를 못 내는 것은 폼만의 일이 아니다 — 줄마다의 수정 상자도 `editing`(위)이 막아야 참이다.
           막지 않으면 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 내고, 그 실패가 설 자리는 뺀 폼 안이다.
@@ -1156,12 +1217,16 @@ export function CommentPanel(props: {
             // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
             // 않는다 — 서버도 `nodeId` 없는 본문을 400으로 막는다.
             disabled={selectedNodeId === null || busy}
+            ref={draftInput}
+            {...draftPicker.inputProps}
             onChange={(event) => {
               if (selectedNodeId === null) return
               const text = event.target.value
               setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+              draftPicker.sync(text, event.target.selectionStart ?? text.length)
             }}
           />
+          {draftPicker.list}
           {selectedNodeId === null && <p className="wb-shell-panel-notice">{many ? MANY_TARGETS : NO_TARGET}</p>}
           <div className="wb-shell-comment-actions">
             <button type="submit" className="wb-shell-comment-submit" disabled={selectedNodeId === null || busy || draft.trim() === ''}>
@@ -1232,6 +1297,8 @@ export function CommentPanel(props: {
             <li
               key={group.nodeId}
               className="wb-shell-comment-group"
+              data-comment-node={group.nodeId}
+              {...(flash?.nodeId === group.nodeId ? { 'data-flash': '' } : {})}
               // 고른 노드의 무리에 표시를 단다. `aria-current`는 "여럿 중 지금 것"을
               // 뜻하는 표준 자리라 보조 기술도 그대로 읽는다.
               {...(group.nodeId === selectedNodeId ? { 'aria-current': true as const } : {})}
@@ -1261,8 +1328,14 @@ export function CommentPanel(props: {
                           value={editDraft}
                           rows={3}
                           disabled={busy}
-                          onChange={(event) => setEditDraft(event.target.value)}
+                          ref={editInput}
+                          {...editPicker.inputProps}
+                          onChange={(event) => {
+                            setEditDraft(event.target.value)
+                            editPicker.sync(event.target.value, event.target.selectionStart ?? event.target.value.length)
+                          }}
                         />
+                        {editPicker.list}
                         <button
                           type="button"
                           className="wb-shell-comment-save"
@@ -1277,7 +1350,7 @@ export function CommentPanel(props: {
                       </>
                     ) : (
                       <>
-                        <p className="wb-shell-comment-body">{comment.body}</p>
+                        <CommentBody body={comment.body} context={tokenContext} projectId={projectId} />
                         {/* **수정은 작성자만 부를 수 있다**(남이 부르면 서버가
                             403으로 막는다). 눌러 봐야 실패할 버튼을 두지 않는다. */}
                         {props.canEdit && currentUser !== null && comment.authorId === currentUser.id && (

@@ -291,6 +291,54 @@ describe('GET /:projectId/export', () => {
   })
 
   /**
+   * **코멘트 토큰** — 내려받은 zip(워커가 조립한 번들)에서 잰다. 같은 스레드의 `exportProjectBundle` 만 부르면 워커가 페이지 id 를 빈 값으로
+   * 조립해도 초록이다(AGENTS.md «`ExportRows` 에 칸을 더하면 …» 의 같은 까닭). 남의 프로젝트 id 를 든 토큰은 그 제목을 내지 않는다(Review Focus 2).
+   */
+  it('코멘트 토큰이 내려받은 번들 · pptx 에서 풀린다 — 남의 id 는 끊김', async () => {
+    await withApi(async (ctx) => {
+      const fixture = await 설계서(ctx, 'tk-zip')
+      const other = await createProject(ctx, fixture.cookie, { name: '남', slug: 'tk-other' })
+      const otherMenu = await createMenuNode(ctx, fixture.cookie, other.id, { title: '남메뉴' })
+      const otherPage = await createPage(ctx, fixture.cookie, other.id, otherMenu.id, { title: '남의 비밀 페이지' })
+      const body = `보세요 [옛](wb:page/${fixture.pageIds.상세}) · [남의 것](wb:page/${otherPage.id})`
+      const posted = await ctx.app.inject({
+        method: 'POST',
+        url: `/api/projects/${fixture.projectId}/pages/${fixture.pageIds.목록}/comments`,
+        cookies: fixture.cookie,
+        payload: { nodeId: 'n_lb', body },
+      })
+      expect(posted.statusCode, posted.body).toBe(201)
+
+      const res = await ctx.app.inject({ method: 'GET', url: `/api/projects/${fixture.projectId}/export`, cookies: fixture.cookie })
+      expect(res.statusCode).toBe(200)
+      const files = unzipSync(new Uint8Array(res.rawPayload))
+      const list = Object.entries(files).find(([name]) => name.includes('/pages/') && name.includes('목록'))
+      expect(list, Object.keys(files).join(', ')).toBeDefined()
+      const html = strFromU8(list![1])
+      // 코멘트 칸의 본문만 잰다 — 페이지 데이터 JSON 은 문서만 싣지만, 칸 밖 글로 맞지 않게 본문 문단을 떼어 본다.
+      const entry = /<p class="wb-export-entry-body">(.*?)<\/p>/s.exec(html)?.[1] ?? ''
+      expect(entry).toMatch(
+        /^보세요 <a class="wb-export-token" href="[^"]+\.html">상세<\/a> · <span class="wb-export-token-broken">남의 것/,
+      )
+      expect(entry).not.toContain('남의 비밀 페이지')
+      expect(entry).not.toContain(otherPage.id)
+
+      const pptx = await ctx.app.inject({
+        method: 'GET',
+        url: `/api/projects/${fixture.projectId}/export?format=pptx`,
+        cookies: fixture.cookie,
+      })
+      expect(pptx.statusCode).toBe(200)
+      const slides = Object.entries(unzipSync(new Uint8Array(pptx.rawPayload)))
+        .filter(([name]) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+        .map(([, bytes]) => strFromU8(bytes))
+        .join('')
+      expect(slides).toContain('보세요 상세 · 남의 것 (찾을 수 없음)')
+      expect(slides).not.toContain('wb:page')
+    })
+  })
+
+  /**
    * **zip 엔트리 → 그 파일의 내용**. 이름과 내용이 어긋나도 눈으로는
    * 그럴듯하므로, 페이지 셋을 넣고 **자리마다** 견준다.
    */

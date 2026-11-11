@@ -11,14 +11,28 @@
  * **화면 상태는 주소 해시가 든다**(`#state=<id>` — `STATE_HASH_PREFIX`). 처음 그릴 때 해시의 상태로 그리고, 셸의 전환기를 고르면 다시
  * 그리며 해시를 바꿔 쓴다(`replaceState` — 상태 전환은 이동이 아니라 뒤로 가기가 그것을 하나씩 밟지 않는다). 해시가 바뀌면(주소를 고침 ·
  * 같은 페이지의 링크) 그 상태로 다시 그린다. 목록에 없는 id 는 기본이다 — 렌더러도 기본으로 그리지만(`renderDocument`) 전환기가 그 id 를
- * 못 고르므로 여기서 먼저 기본으로 접는다.
+ * 못 고르므로 여기서 먼저 기본으로 접는다. **`#state=` 아닌 해시(번호 닻 · 화면 모드)는 상태를 안 건드린다** — 같은 장의 번호 토큰을 누르면
+ * 해시가 바뀌는데 그것이 고른 상태를 기본으로 되돌리면 안 된다. 빈 해시는 기본이다(뒤로 가기로 해시가 빠진 판).
+ *
+ * **번호 닻 해시(`#wb-marker-<nodeId>` — 코멘트 토큰의 번들 주소)로 열리거나 해시가 그리로 바뀌면 «코멘트» 탭을 고르고 그 줄로 굴린다** — 탭은
+ * 라디오 + CSS 라 그 줄이 닫힌 탭 안이면 브라우저의 해시 이동이 아무것도 못 보인다. 그 노드의 줄이 없으면(코멘트가 다 지워져 번호가 걷힌 노드)
+ * 목업의 그 노드로 굴린다 — 그 노드도 지금 상태에 안 그려졌으면 아무것도 안 한다(장 머리에 남는다). 스크립트가 없는 판은 장 머리다.
  */
 import { NO_THEME } from '@wirebound/renderer'
 import { DEFAULT_VIEW_STATE, indexCodes, type PageDocument } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
-import { PAGE_DATA_ID, SCREEN_HASH, STATE_HASH_PREFIX, STATE_SELECT_ID, THEME_SCRIPT_ID, type ExportPageData } from '../page-data'
+import {
+  COMMENTS_TAB_RADIO_ID,
+  MARKER_ANCHOR_PREFIX,
+  PAGE_DATA_ID,
+  SCREEN_HASH,
+  STATE_HASH_PREFIX,
+  STATE_SELECT_ID,
+  THEME_SCRIPT_ID,
+  type ExportPageData,
+} from '../page-data'
 import { mountExportDocument, type ExportMount } from './mount'
 import { FAILED_ATTRIBUTE, fontsSettled, imagesSettled, nextFrame, READY_ATTRIBUTE, SCREEN_CLASS, sheetSettled } from './ready'
 
@@ -100,9 +114,11 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),
     })
     const unwire = wireStatePicker(win, mount, states)
+    const unfollow = wireMarkerHash(win, canvas)
     const unmount = mount.unmount
     mount.unmount = () => {
       unwire()
+      unfollow()
       unmount()
     }
     if (mount.thrown.length > 0) {
@@ -112,6 +128,8 @@ export async function boot(env: BootEnv): Promise<BootResult> {
 
     await sheetSettled(doc.querySelector<HTMLLinkElement>(THEME_SHEET_SELECTOR), win)
     mount.remeasure()
+    // 시트가 서서 자리가 굳은 뒤에 굴린다 — 그 앞에 굴리면 뒤에 실린 시트가 줄을 밀어낸다.
+    followMarkerHash(win, canvas)
     return await finish(mount)
   } catch (error) {
     failures.push(`번들 페이지를 세우지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
@@ -159,7 +177,9 @@ function wireStatePicker(win: Window, mount: ExportMount, ids: ReadonlySet<strin
     )
   }
   const onHash = (): void => {
-    const state = stateFromHash(win.location.hash, ids)
+    const hash = win.location.hash
+    if (hash !== '' && hash !== '#' && !hash.startsWith(STATE_HASH_PREFIX)) return
+    const state = stateFromHash(hash, ids)
     select.value = state ?? DEFAULT_VIEW_STATE
     mount.setViewState(state)
   }
@@ -169,6 +189,44 @@ function wireStatePicker(win: Window, mount: ExportMount, ids: ReadonlySet<strin
     select.removeEventListener('change', onChange)
     win.removeEventListener('hashchange', onHash)
   }
+}
+
+/** 해시가 번호 닻이면 그 노드 id. 아니면 `null`. */
+function markerFromHash(hash: string): string | null {
+  const prefix = `#${MARKER_ANCHOR_PREFIX}`
+  if (!hash.startsWith(prefix)) return null
+  try {
+    return decodeURIComponent(hash.slice(prefix.length))
+  } catch {
+    return null
+  }
+}
+
+/** 머리말 «번호 닻 해시». */
+function followMarkerHash(win: Window, canvas: Element): void {
+  const nodeId = markerFromHash(win.location.hash)
+  if (nodeId === null) return
+  const doc = win.document
+  const row = doc.getElementById(`${MARKER_ANCHOR_PREFIX}${nodeId}`)
+  if (row !== null) {
+    const radio = doc.getElementById(COMMENTS_TAB_RADIO_ID)
+    // 다른 창(realm)의 요소라 `instanceof` 를 안 쓴다 — 케이스는 jsdom 창을 넘긴다.
+    if (radio !== null && radio.tagName === 'INPUT') (radio as HTMLInputElement).checked = true
+    // jsdom 에는 없다(케이스 판) — 없으면 탭만 고른다.
+    row.scrollIntoView?.({ block: 'center' })
+    return
+  }
+  for (const element of Array.from(canvas.querySelectorAll('[data-wb-id]'))) {
+    if (element.getAttribute('data-wb-id') !== nodeId) continue
+    element.scrollIntoView?.({ block: 'center' })
+    return
+  }
+}
+
+function wireMarkerHash(win: Window, canvas: Element): () => void {
+  const onHash = (): void => followMarkerHash(win, canvas)
+  win.addEventListener('hashchange', onHash)
+  return () => win.removeEventListener('hashchange', onHash)
 }
 
 function readPageData(doc: Document): ExportPageData | null {

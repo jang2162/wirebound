@@ -68,6 +68,7 @@ const METHODS = [
   'listMyRevisions',
   'listRevisionsBefore',
   'listComments',
+  'commentIndex',
   'createComment',
   'updateComment',
   'deleteComment',
@@ -247,6 +248,8 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   // 노드가 나른다 — 설계서 「페이지 JSON」). 셋째 소비자가 생기면 이 줄이 먼저 죽는다 —
   // 그때 그것이 번호와 본문을 잇는지 본다.
   listComments: ['../src/panels/comment-panel.tsx', '../src/panels/page-json-export.ts'],
+  // 번호 색인은 셸의 공급자 하나가 읽는다 — 패널 · 자동완성은 그 값을 받는다(`comments/comment-index.tsx`).
+  commentIndex: ['../src/comments/comment-index.tsx'],
   createComment: ['../src/panels/comment-panel.tsx'],
   updateComment: ['../src/panels/comment-panel.tsx'],
   deleteComment: ['../src/panels/comment-panel.tsx'],

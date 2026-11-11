@@ -46,10 +46,11 @@ export interface LintPage {
   document: PageDocument
 }
 
-/** 코멘트 하나. **번호는 없다** — 번호는 노드가 든다. lint가 읽는 것은 자리뿐이다. */
+/** 코멘트 하나. **번호는 없다** — 번호는 노드가 든다. lint가 읽는 것은 자리와 본문(토큰 — `comment-token-broken`)이다. */
 export interface LintComment {
   pageId: string
   nodeId: string
+  body: string
 }
 
 /** 설계서 규칙이 보는 프로젝트 하나. */

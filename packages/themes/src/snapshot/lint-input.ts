@@ -102,6 +102,7 @@ export function snapshotToLintInput(payload: SnapshotPayload, config?: LintConfi
   const comments: LintComment[] = payload.comments.map((comment) => ({
     pageId: comment.pageId,
     nodeId: comment.nodeId,
+    body: comment.body,
   }))
 
   // 판 4 의 공통코드 표 — 판 3 이하는 표가 없어 공통코드 규칙이 안 돈다(`LintProject.codes`).

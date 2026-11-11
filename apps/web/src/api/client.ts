@@ -13,6 +13,7 @@ import type {
   AuditPage,
   AuditQuery,
   Comment,
+  CommentIndex,
   CreatedInvite,
   CreatedResetLink,
   ExportFormat,
@@ -395,6 +396,10 @@ export interface ApiClient {
    * `viewer`도 읽는다 — 막는 것은 쓰기 넷이다(「권한 모델」).
    */
   listComments(projectId: string, pageId: string, options?: ReadOptions): Promise<Comment[]>
+  /**
+   * 코멘트 토큰을 푸는 번호 색인(`GET …/comments/index`) — 셸이 들고(`comments/comment-index.tsx`) 패널이 토큰을 지금의 이름 · 번호로 푼다. viewer 도 읽는다.
+   */
+  commentIndex(projectId: string, options?: ReadOptions): Promise<CommentIndex>
   /**
    * 코멘트를 단다. **그 노드에 번호가 없으면 서버가 번호를 붙이고 revision을 남긴다**
    * (`marker`는 페이지 문서의 값이므로 편집 파이프라인을 지나야 한다).

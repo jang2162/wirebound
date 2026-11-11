@@ -27,6 +27,7 @@ import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContex
 import { pageKindOf, type PageKind } from './new-page'
 import { pageTargetPath } from './page-target'
 import { BODY_ZONE } from './component/define'
+import { commentTokenText, unresolvedCommentText, type CommentTokenContext } from './comment-tokens'
 import { walkNodes } from './tree'
 import { zoneDefs } from './zones'
 
@@ -41,7 +42,12 @@ export interface PageViewComment {
    * 상호작용 문장이 같은 상태를 부르는 말과 같다(`interaction/describe.ts`).
    */
   nodeName: string
+  /** 본문 원문 — 코멘트 토큰(`[글](wb:…)`)이 그대로 든다. */
   body: string
+  /** 토큰을 지금의 이름 · 번호로 푼 글 — 사람 출력(`wireb page get`)이 싣는다(`commentTokenText` · 대상 없음). */
+  text: string
+  /** 같은 풀린 글에 토큰의 대상을 괄호로 붙인 것(`회원 목록 #3 (comment:<pageId>/<nodeId>)`) — MCP `get_page` · `--json` 의 에이전트가 다음 호출에 쓴다. */
+  resolved: string
   authorName: string
   createdAt: string
 }
@@ -102,6 +108,8 @@ export interface PageViewInput {
   comments: readonly PageViewCommentInput[]
   /** 프로젝트의 공통코드 표. 주면 묶인 노드의 이름 · `rowLabel` 이 표의 이름이고 `nodes[].code.resolved` 가 선다. */
   codes?: CodeIndex
+  /** 코멘트 토큰을 풀 자료(그 프로젝트의 페이지 · 번호 · 공통코드). 없으면 토큰은 대체 글로만 선다(끊겼다고 단언하지 않는다). */
+  tokens?: CommentTokenContext
 }
 
 export interface PageView {
@@ -179,12 +187,21 @@ export function pageView(input: PageViewInput): PageView {
         nodeId: comment.nodeId,
         nodeName: node === undefined ? MISSING_NODE_NAME : describeNode(node, naming.get(comment.nodeId), input.codes),
         body: comment.body,
+        ...tokenTexts(comment.body, input.tokens),
         authorName: comment.authorName,
         createdAt: comment.createdAt,
       }
     }),
     interactions: listInteractionSentences(input.document, input.codes),
   }
+}
+
+function tokenTexts(body: string, tokens: CommentTokenContext | undefined): { text: string; resolved: string } {
+  if (tokens === undefined) {
+    const text = unresolvedCommentText(body)
+    return { text, resolved: text }
+  }
+  return { text: commentTokenText(body, tokens, false), resolved: commentTokenText(body, tokens, true) }
 }
 
 function aliasEntry(node: WbNode): { alias?: string } {

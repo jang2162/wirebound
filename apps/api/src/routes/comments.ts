@@ -162,6 +162,7 @@ import {
 } from '../repos/comments'
 import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
+import { readCommentIndex } from '../services/comment-index'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { NO_REVISION, runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
 import { broadcastOrigin, notifyCommentsChanged, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
@@ -325,6 +326,7 @@ function markerRevision(result: { seq: number; revisionId?: string } | 'not-foun
 }
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
+const ProjectParams = z.object({ projectId: z.uuid() })
 const CommentParams = z.object({ projectId: z.uuid(), pageId: z.uuid(), commentId: z.uuid() })
 
 /**
@@ -588,6 +590,14 @@ function renumberOps(document: PageDocument): PatchOp[] {
 /** `app.ts`가 `app.register(commentRoutes(), { prefix: '/api/projects' })`로 등록하는 팩토리. */
 export function commentRoutes() {
   return async function plugin(app: FastifyInstance): Promise<void> {
+    /**
+     * 프로젝트 전체의 번호 색인 — 코멘트 토큰을 푸는 자료(`services/comment-index.ts`). 읽기만 하므로 viewer 다.
+     */
+    app.get('/:projectId/comments/index', { preHandler: projectGuard('viewer') }, async (request) => {
+      const { projectId } = parseParams(ProjectParams, request.params)
+      return readCommentIndex(app.db, projectId)
+    })
+
     /**
      * 그 페이지의 코멘트 전부(설계서 「설계서 화면 구조」의 목록이 **전부**를 보인다).
      * 정렬은 저장소의 계약이다(`created_at` 오름차순). 번호 순으로 묶는 것은 문서를
@@ -958,6 +968,9 @@ export function commentRoutes() {
       )
 
       if (broadcast) notifyMarkerChange(app, request, projectId, pageId, result)
+      // 행은 그대로지만 번호가 바뀌었다 — 다른 페이지의 코멘트 토큰(«상세 #2»)은 이 페이지의 `page-changed` 를 안 받는 화면에서도 번호를 풀어
+      // 보인다. 그 화면이 번호 색인을 다시 읽게 신호를 낸다(`apps/web/src/comments/comment-index.tsx`). 바꾼 것이 없으면 안 낸다.
+      if (result.markerOps.length > 0) notifyCommentsChanged(app, { projectId, pageId, origin: broadcastOrigin(request) })
 
       return { seq: result.seq, markerOps: result.markerOps }
     })

@@ -49,7 +49,8 @@ import {
   type ViewState,
 } from '@wirebound/schema'
 import type { ReactElement, ReactNode } from 'react'
-import type { CommentEntry } from './comments'
+import { COMMENT_TOKEN_BROKEN_TEXT, type CommentTokenTarget, type ResolvedSegment } from '@wirebound/schema'
+import { codeAnchor, markerAnchor, type CommentEntry } from './comments'
 // **문장화는 `../sentences`가 한 자리에서 한다** — 여기서 다시 짜면 PPTX와 갈린다.
 import {
   EMPTY_COMMENTS,
@@ -90,6 +91,8 @@ export interface ShellInput {
    */
   description: string | null
   comments: readonly CommentEntry[]
+  /** 코멘트 토큰이 갈 주소(이 파일에서 본 상대 경로 + 닻). `null` 이면 그 토큰은 글로만 선다. 없으면 모든 토큰이 글이다. */
+  tokenHref?: (target: CommentTokenTarget) => string | null
   /** 문장화의 재료. 셸이 문서를 받아 스스로 문장을 만든다 — 호출자가 두 번 순회하지 않는다. */
   page: PageDocument
   /** 공통코드 표 — 문장이 묶인 노드를 표의 이름으로 부른다(코멘트 칸의 이름과 같은 표). */
@@ -227,7 +230,7 @@ export function codesBody(input: { nav: readonly ShellNavItem[]; codesHref: stri
       <main className="wb-export-codes">
         <h1 className="wb-export-codes-title">{CODES_HEADING}</h1>
         {input.groups.map(({ group, usage }) => (
-          <section key={group.key} className="wb-export-codes-group" aria-label={group.name}>
+          <section key={group.key} id={codeAnchor(group.key)} className="wb-export-codes-group" aria-label={group.name}>
             <h2 className="wb-export-codes-name">
               {group.name} <code className="wb-export-codes-key">{group.key}</code>
             </h2>
@@ -241,7 +244,7 @@ export function codesBody(input: { nav: readonly ShellNavItem[]; codesHref: stri
               </thead>
               <tbody>
                 {group.items.map((item) => (
-                  <tr key={item.value}>
+                  <tr key={item.value} id={codeAnchor(group.key, item.value)}>
                     <td>
                       <code>{item.value}</code>
                     </td>
@@ -310,7 +313,7 @@ export function shellBody(input: ShellInput): ReactElement {
             <DescriptionTab description={input.description} viewStates={input.page.viewStates} />
           </section>
           <section className="wb-export-tabpanel" id={panelId('comments')}>
-            <CommentTab entries={input.comments} />
+            <CommentTab entries={input.comments} tokenHref={input.tokenHref} />
           </section>
           <section className="wb-export-tabpanel" id={panelId('interactions')}>
             <InteractionTab sentences={sentences} />
@@ -390,13 +393,22 @@ function DescriptionTab({
  * 코멘트 탭. **고아 마커도 줄을 갖는다** — 목업에 ①이 찍혀 있는데 목록이 비어 있으면
  * 읽는 사람이 *"내가 못 찾은 것"*으로 읽는다.
  */
-function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactElement {
+function CommentTab({
+  entries,
+  tokenHref,
+}: {
+  entries: readonly CommentEntry[]
+  tokenHref: ((target: CommentTokenTarget) => string | null) | undefined
+}): ReactElement {
   if (entries.length === 0) return <p className="wb-export-empty">{EMPTY_COMMENTS}</p>
+  // 번호 토큰의 닻은 그 노드의 첫 줄에 단다(`markerAnchor`).
+  const anchored = new Set<string>()
   return (
     <ul className="wb-export-list">
       {entries.map((entry, index) => (
         <li
           key={`${entry.nodeId}-${index}`}
+          {...(anchored.has(entry.nodeId) ? {} : (anchored.add(entry.nodeId), { id: markerAnchor(entry.nodeId) }))}
           className="wb-export-entry"
           data-wb-marker-for={entry.nodeId}
           data-wb-marker={entry.marker === null ? undefined : String(entry.marker)}
@@ -406,13 +418,48 @@ function CommentTab({ entries }: { entries: readonly CommentEntry[] }): ReactEle
             <p className="wb-export-entry-meta">{MARKER_WITHOUT_COMMENT}</p>
           ) : (
             <>
-              <p className="wb-export-entry-body">{entry.body}</p>
+              <p className="wb-export-entry-body">
+                <TokenSegments segments={entry.segments} tokenHref={tokenHref} />
+              </p>
               <CommentMeta authorName={entry.authorName} createdAt={entry.createdAt} />
             </>
           )}
         </li>
       ))}
     </ul>
+  )
+}
+
+/** 풀린 본문 — 산 토큰은 링크, 끊긴 토큰은 대체 글 + 흐린 «찾을 수 없음»(누를 수 없음). 날 id 는 글자에 없다. */
+function TokenSegments({
+  segments,
+  tokenHref,
+}: {
+  segments: readonly ResolvedSegment[]
+  tokenHref: ((target: CommentTokenTarget) => string | null) | undefined
+}): ReactElement {
+  return (
+    <>
+      {segments.map((segment, index) => {
+        if (segment.type === 'text') return segment.text
+        if (segment.type === 'broken') {
+          return (
+            <span key={index} className="wb-export-token-broken">
+              {segment.text}
+              <span className="wb-export-token-note"> {COMMENT_TOKEN_BROKEN_TEXT}</span>
+            </span>
+          )
+        }
+        const href = tokenHref?.(segment.target) ?? null
+        return href === null ? (
+          segment.text
+        ) : (
+          <a key={index} className="wb-export-token" href={href}>
+            {segment.text}
+          </a>
+        )
+      })}
+    </>
   )
 }
 

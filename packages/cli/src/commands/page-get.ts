@@ -112,7 +112,8 @@ export function renderPageView(view: PageView): string[] {
   if (view.comments.length === 0) lines.push('  (없음)')
   for (const comment of view.comments) {
     lines.push(`  ${comment.nodeName} · ${comment.authorName} · ${comment.createdAt}`)
-    for (const line of comment.body.split('\n')) lines.push(`    ${line}`)
+    // 토큰은 풀린 글로 — 대상(날 id)은 `--json` 만 싣는다(`resolved`).
+    for (const line of comment.text.split('\n')) lines.push(`    ${line}`)
   }
   return lines
 }

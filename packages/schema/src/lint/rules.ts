@@ -217,6 +217,14 @@ export const LINT_RULES = [
     owner: 'schema',
     severity: 'warning',
   },
+  {
+    id: 'comment-token-broken',
+    spec: '코멘트 본문의 끊긴 토큰(가리키는 페이지 · 번호의 노드 · 공통코드가 없음) — 정보',
+    group: 'document',
+    owner: 'schema',
+    // 토큰은 대체 글로 보여 읽기는 선다 — 고칠 것이 없을 수도 있다(지운 페이지를 말하는 옛 코멘트).
+    severity: 'info',
+  },
   // ── 테마 규칙 (「lint 규칙」) ───────────────────────────────────────────────
   {
     id: 'theme-variant',

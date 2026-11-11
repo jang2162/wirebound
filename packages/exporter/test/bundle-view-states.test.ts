@@ -208,6 +208,30 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(canvasText()).toContain('승인')
   })
 
+  it('번호 닻 해시(코멘트 토큰 링크)로 바뀌어도 고른 상태가 그대로다(RV-TK L1)', async () => {
+    load()
+    await run()
+    choose('s_admin')
+    await act(async () => {
+      history.replaceState(null, '', '#wb-marker-n_approve')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(select().value).toBe('s_admin')
+    expect(canvasText()).toContain('승인')
+  })
+
+  it('상태 해시가 빠지면(뒤로 가기) 기본이다', async () => {
+    history.replaceState(null, '', '#state=s_admin')
+    load()
+    await run()
+    expect(select().value).toBe('s_admin')
+    await act(async () => {
+      history.replaceState(null, '', location.pathname)
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(select().value).toBe('default')
+  })
+
   it('상태를 바꾸면 그 상태의 상호작용이 돈다 — 관리자의 단추가 제목을 숨긴다', async () => {
     load()
     await run()
@@ -229,5 +253,38 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(marker()).not.toBeNull()
     choose('default')
     expect(marker()).toBeNull()
+  })
+})
+
+/**
+ * 코멘트 토큰의 번들 주소(`#wb-marker-<nodeId>`)는 «코멘트» 탭 안의 줄을 가리킨다 — 탭은 라디오 + CSS 라 런타임이 그 탭을 골라야 줄이 보인다
+ * (RV-TK M2). 굴러가 창 안에 서는지는 실브라우저 판(`apps/web/build-test/comment-token-bundle.test.ts`)이 잰다 — jsdom 에는 배치가 없다.
+ */
+describe('런타임 — 번호 닻 해시', () => {
+  const checked = (): string | null => document.querySelector<HTMLInputElement>('input.wb-export-tab-radio:checked')?.id ?? null
+
+  it('번호 닻 해시로 열면 «코멘트» 탭이 골라진다', async () => {
+    history.replaceState(null, '', '#wb-marker-n_approve')
+    load()
+    await run()
+    expect(booted?.failures).toEqual([])
+    expect(checked()).toBe('wb-export-tab-comments')
+  })
+
+  it('해시가 번호 닻으로 바뀌면 «코멘트» 탭이 골라진다 — 다른 해시는 탭을 안 건드린다', async () => {
+    load()
+    await run()
+    // 판 카나리아 — 처음은 첫 탭(설명)이다.
+    expect(checked()).toBe('wb-export-tab-description')
+    await act(async () => {
+      history.replaceState(null, '', '#state=s_admin')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(checked()).toBe('wb-export-tab-description')
+    await act(async () => {
+      history.replaceState(null, '', '#wb-marker-n_approve')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    expect(checked()).toBe('wb-export-tab-comments')
   })
 })

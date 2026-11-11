@@ -22,6 +22,7 @@ import type {
   AdminUser,
   AuditPage,
   Comment,
+  CommentIndex,
   CommentCreated,
   CreatedInvite,
   CreatedResetLink,
@@ -671,6 +672,17 @@ const SHAPES = {
    */
   comment: isComment,
   commentList: (value) => isArrayOf(value, isComment),
+  commentIndex: (value) =>
+    isRecord(value) &&
+    isArrayOf(value['pages'], (page) => isRecord(page) && typeof page['id'] === 'string' && typeof page['title'] === 'string') &&
+    isArrayOf(
+      value['markers'],
+      (marker) =>
+        isRecord(marker) &&
+        typeof marker['pageId'] === 'string' &&
+        typeof marker['nodeId'] === 'string' &&
+        typeof marker['nodeName'] === 'string',
+    ),
   /**
    * 코멘트를 만든 결과. `comment` 하나에 **문서 변화 둘**이 더 붙는다.
    *
@@ -1639,6 +1651,8 @@ export function createHttpClient(
     // 프로젝트가 아니라 **페이지의 노드**에 붙는다(노드 id는 그 문서 안에서만 뜻이 있다).
     listComments: (projectId, pageId, options) =>
       request<Comment[]>('GET', commentsPath(projectId, pageId), SHAPES.commentList, undefined, options),
+    commentIndex: (projectId, options) =>
+      request<CommentIndex>('GET', `${projectPath(projectId)}/comments/index`, SHAPES.commentIndex, undefined, options),
     createComment: (projectId, pageId, body, options) =>
       request<CommentCreated>(
         'POST',
