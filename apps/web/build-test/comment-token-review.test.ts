@@ -8,6 +8,7 @@
  * | M3 고치는 상자에서 든 토큰의 라벨 «#1» 뒤로 캐럿만 옮겨도 목록이 서고 Enter 가 후보를 골라 본문을 깬다 |
  * | M3 보통 글 «#12» 뒤로 캐럿을 옮겨 친 Enter 가 줄을 안 바꾸고 후보를 고른다 |
  * | L3 자동완성 덧말의 첫 코멘트 앞머리에 토큰 원문(`wb:` · 날 id)이 보인다 |
+ * | L2 남이 다른 페이지에서 재번호한 뒤에도 열린 탭의 «상세 #2» 가 새 번호로 안 바뀐다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -189,6 +190,51 @@ describe.skipIf(!전제.ok)('코멘트 토큰 리뷰 대응 — 실브라우저'
       expect(hints.length).toBeGreaterThan(0)
       expect(hints.find((hint) => hint.includes('저기'))).toContain('저기 상세 보세요')
       expect(hints.join('\n')).not.toContain('wb:')
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('L2 — 남이 다른 페이지에서 재번호하면 열린 탭의 «상세 #2» 가 곧 «상세 #1» 이 된다', async () => {
+    const p = await project()
+    const list = await page(p.id, p.menu, '목록', [{ id: 'n_a', type: 'Text', props: { content: '목록 글' } }])
+    const detail = await page(p.id, p.menu, '상세', [
+      { id: 'n_top', type: 'Text', props: { content: '위 글' } },
+      { id: 'n_form', type: 'Text', props: { content: '상세 글' } },
+    ])
+    const top = await post(p.id, detail, 'n_top', '위')
+    await post(p.id, detail, 'n_form', '폼')
+    await post(p.id, list, 'n_a', `낡음 [x](wb:comment/${detail}/n_form) 끝`)
+
+    const { context, page: tab } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+    try {
+      let indexReads = 0
+      tab.on('response', (response) => {
+        if (new URL(response.url()).pathname.endsWith(`/projects/${p.id}/comments/index`)) indexReads += 1
+      })
+      await openComments(tab, p.id, list, 'n_a')
+      const link = tab.locator('.wb-shell-comments .wb-shell-comment-body a')
+      await link.waitFor()
+      expect(await link.textContent()).toBe('상세 #2')
+
+      // 지움의 신호로 색인을 다시 읽은 뒤에 재번호한다 — 그 다시 읽기가 재번호 뒤 값을 줍지 않게(판 카나리아 — 신호가 닿는다).
+      const beforeDelete = indexReads
+      expect((await call('DELETE', `/projects/${p.id}/pages/${detail}/comments/${top}`)).status).toBe(200)
+      await poll(
+        '지움의 신호로 다시 읽는다',
+        async () => indexReads,
+        (n) => n > beforeDelete,
+      )
+      await tab.waitForTimeout(300)
+      expect(await link.textContent()).toBe('상세 #2')
+
+      const renumbered = await call('POST', `/projects/${p.id}/pages/${detail}/comments/renumber`, {})
+      expect(renumbered.status).toBe(200)
+      expect(renumbered.body.markerOps.length).toBeGreaterThan(0)
+      // 바뀌기를 기다리되(던지지 않는다) 끝 값으로 단언한다.
+      const until = Date.now() + 5_000
+      while (Date.now() < until && (await link.textContent()) === '상세 #2') await tab.waitForTimeout(100)
+      expect(await link.textContent()).toBe('상세 #1')
     } finally {
       await context.close()
     }

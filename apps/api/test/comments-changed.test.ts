@@ -5,7 +5,7 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
  * | 쓰기마다 | 달기(번호 붙음 · 그대로) · 고치기 · 지우기(마지막 아님 · 마지막) 가운데 하나라도 신호가 없다 · 프레임이 `pageId` 밖의 것(본문 · 작성자)을 싣는다 · 낸 연결이 받는다 |
- * | 재번호 | 행을 안 바꾼 재번호가 신호를 낸다 |
+ * | 재번호 | 번호를 바꾼 재번호가 신호를 안 낸다(다른 페이지의 코멘트 토큰이 옛 번호에 머문다 — RV-TK L2) · 바꿀 것이 없는 재번호가 신호를 낸다 |
  * | 가드 앞 재생 | 같은 키로 다시 보낸 게시가 신호를 안 낸다(앞 요청이 답을 잃었으면 아무 연결에도 안 갔다) · 낸 연결을 뺀다 |
  * | 답을 잃은 게시 | 503 뒤 같은 키 재생이 남에게 신호를 안 낸다 — 가드 앞 재생의 신호를 떼면 «가드 앞 재생» 과 함께 죽는다(그 축은 «가드 앞 재생» 이 소유한다) |
  * | 잠금 안 재생 | 같은 키 둘이 줄을 서 뒤의 것이 잠금 안에서 재생할 때 신호를 안 낸다 |
@@ -146,7 +146,7 @@ describe('comments-changed', () => {
     })
   })
 
-  it('재번호는 신호를 안 낸다 — 행은 그대로다(번호는 `page-changed` 가 나른다)', async () => {
+  it('번호를 바꾼 재번호는 신호를 낸다 — 다른 페이지의 토큰이 번호 색인을 다시 읽는다 · 바꿀 것이 없으면 안 낸다', async () => {
     await withRealApi(async (ctx) => {
       const fx = await fixture(ctx)
       // 문서 차례와 거꾸로 번호를 붙인다 — `n_2` 가 1, `n_1` 이 2.
@@ -161,7 +161,16 @@ describe('comments-changed', () => {
       // 카나리아 — 재번호가 문서를 바꿨다.
       expect(renumbered.json().markerOps).not.toEqual([])
       await fx.watcher.waitFor('page-changed')
-      expect(await since()).toEqual({ author: [], watcher: [], viewer: [] })
+      const one = [{ type: 'comments-changed', projectId: fx.projectId, pageId: fx.pageId }]
+      expect(await since()).toEqual({ author: one, watcher: one, viewer: one })
+
+      // 다시 누르면 바꿀 것이 없다 — 신호도 없다.
+      await fx.watcher.quiet()
+      const again = mark(fx)
+      const nothing = await ctx.app.inject({ method: 'POST', url: `${fx.url}/renumber`, cookies: fx.peer.cookie })
+      expect(nothing.statusCode, nothing.body).toBe(200)
+      expect(nothing.json().markerOps).toEqual([])
+      expect(await again()).toEqual({ author: [], watcher: [], viewer: [] })
     })
   })
 

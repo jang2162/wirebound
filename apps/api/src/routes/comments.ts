@@ -968,6 +968,9 @@ export function commentRoutes() {
       )
 
       if (broadcast) notifyMarkerChange(app, request, projectId, pageId, result)
+      // 행은 그대로지만 번호가 바뀌었다 — 다른 페이지의 코멘트 토큰(«상세 #2»)은 이 페이지의 `page-changed` 를 안 받는 화면에서도 번호를 풀어
+      // 보인다. 그 화면이 번호 색인을 다시 읽게 신호를 낸다(`apps/web/src/comments/comment-index.tsx`). 바꾼 것이 없으면 안 낸다.
+      if (result.markerOps.length > 0) notifyCommentsChanged(app, { projectId, pageId, origin: broadcastOrigin(request) })
 
       return { seq: result.seq, markerOps: result.markerOps }
     })
