@@ -212,7 +212,8 @@ function pageHrefs(content: string | Uint8Array): Record<string, string | null> 
  */
 function commentEntries(content: string): { nodeId: string; label: string; body: string | null; meta: string | null }[] {
   const entries: { nodeId: string; label: string; body: string | null; meta: string | null }[] = []
-  const re = /<li class="wb-export-entry" data-wb-marker-for="([^"]*)"[^>]*>(.*?)<\/li>/gs
+  // 노드의 첫 줄은 번호 닻(`id="wb-marker-…"` — 코멘트 토큰이 오는 자리)을 앞에 단다.
+  const re = /<li(?: id="[^"]*")? class="wb-export-entry" data-wb-marker-for="([^"]*)"[^>]*>(.*?)<\/li>/gs
   for (const match of content.matchAll(re)) {
     const inner = match[2]!
     entries.push({

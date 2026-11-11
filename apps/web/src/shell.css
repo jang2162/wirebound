@@ -2158,6 +2158,10 @@
   outline: 1px solid var(--wb-shell-accent);
 }
 
+.wb-shell-comment-picker-label {
+  font-weight: 600;
+}
+
 .wb-shell-comment-picker-group,
 .wb-shell-comment-picker-hint {
   font-size: 11px;
