@@ -50,6 +50,8 @@ import {
   isPageTargetAction,
   pageTargetKey,
   type CodeTable,
+  type CommentTokenContext,
+  type CommentTokenTarget,
   type PageDocument,
 } from '@wirebound/schema'
 import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
@@ -58,13 +60,22 @@ import { eachNode } from '../nodes'
 import { DEFAULT_LANG, renderHtmlDocument } from '../page'
 import { IMAGES_DIRECTORY, RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData, type ExportPopup } from '../page-data'
 import { scriptJson } from '../script-json'
-import { commentEntries, type BundleComment } from './comments'
+import { codeAnchor, commentEntries, exportTokenBase, markerAnchor, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
 import { SHELL_CSS, SHELL_CSS_PATH } from './shell-css'
 import { codesBody, shellBody, shellHead, shellScripts, type CodesChapterGroup, type ShellNavItem } from './shell'
 
 /** 번들에 실을 페이지 하나. */
 export interface BundlePage {
+  /**
+   * 페이지 id — 코멘트 토큰(`wb:page/<id>` · `wb:comment/<id>/…`)이 이 페이지를 찾는 열쇠다. 없으면 이 페이지로 가는 토큰은 끊김이고, 이 페이지의
+   * 코멘트 토큰은 대체 글로만 선다.
+   */
+  id?: string
+  /** 조상 메뉴 이름(`TargetedPage.menuPath`) — 같은 제목의 페이지를 토큰이 «메뉴 › 제목» 으로 가른다. */
+  menuPath?: readonly string[]
+  /** 페이지의 제목 그대로(`TargetedPage.title`) — 토큰이 부르는 이름이다. `title` 은 조상이 붙은 번들 이름일 수 있다. 없으면 `title`. */
+  pageTitle?: string
   /** `<title>`·좌측 트리의 이름이자 **파일 이름의 재료**다. */
   title: string
   /** 그릴 문서. 페이지 문서다 — 레이아웃을 합성하지 않는다(캔버스가 그리는 것과 같다). */
@@ -210,11 +221,12 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
   )
 
   const codes = (options.codes ?? []).length > 0 ? options.codes! : null
+  const tokens = exportTokenBase(pages, codes === null ? undefined : indexCodes(codes))
   const files: BundleFile[] = [
-    { path: INDEX_PATH, content: pageHtml(options, paths, targets, popupDocs, 0, INDEX_PATH, lang, codes) },
+    { path: INDEX_PATH, content: pageHtml(options, paths, targets, popupDocs, 0, INDEX_PATH, lang, codes, tokens) },
     ...pages.map((_page, index) => ({
       path: paths[index]!,
-      content: pageHtml(options, paths, targets, popupDocs, index, paths[index]!, lang, codes),
+      content: pageHtml(options, paths, targets, popupDocs, index, paths[index]!, lang, codes, tokens),
     })),
     ...(codes === null ? [] : [{ path: CODES_PATH, content: codesHtml(options, paths, codes, lang) }]),
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
@@ -340,11 +352,21 @@ function pageHtml(
   at: string,
   lang: string,
   codes: CodeTable | null,
+  tokens: Omit<CommentTokenContext, 'currentPageId'> | null,
 ): string {
   const page = options.pages[index]!
   const nav = navItems(options, paths, at, index)
   const codeIndex = codes === null ? undefined : indexCodes(codes)
-  const comments = commentEntries(page.document, page.comments ?? [], codeIndex)
+  const context = tokens === null || page.id === undefined ? undefined : { ...tokens, currentPageId: page.id }
+  const comments = commentEntries(page.document, page.comments ?? [], codeIndex, context)
+  const pathById = new Map(options.pages.flatMap((item, position) => (item.id === undefined ? [] : [[item.id, paths[position]!] as const])))
+  /** 토큰 → 이 파일에서 본 주소(설계 «이동» 의 HTML 번들 줄) — 페이지 장 · 그 장의 번호 닻 · «공통코드» 장의 닻. */
+  const tokenHref = (target: CommentTokenTarget): string | null => {
+    if (target.kind === 'code') return codes === null ? null : `${bundleHref(at, CODES_PATH)}#${codeAnchor(target.group, target.item)}`
+    const path = pathById.get(target.pageId)
+    if (path === undefined) return null
+    return target.kind === 'page' ? bundleHref(at, path) : `${bundleHref(at, path)}#${markerAnchor(target.nodeId)}`
+  }
   const markers: ExportMarker[] = []
   for (const entry of comments) {
     if (entry.marker !== null) markers.push({ nodeId: entry.nodeId, marker: String(entry.marker) })
@@ -380,6 +402,7 @@ function pageHtml(
       ...(codes === null ? {} : { codesNav: { href: bundleHref(at, CODES_PATH), current: false } }),
       description: page.description ?? null,
       comments,
+      tokenHref,
       page: page.document,
       ...(codeIndex === undefined ? {} : { codes: codeIndex }),
       scripts: shellScripts({

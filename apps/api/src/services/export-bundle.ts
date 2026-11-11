@@ -150,6 +150,10 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
      * 붙이면 「HTML 정적 번들」의 예시 파일 이름(`관리자-회원-목록.html`)과도 같아진다.
      */
     title: page.bundleTitle,
+    // 코멘트 토큰을 푸는 열쇠 — 내보내는 페이지들이 곧 풀 자료다(남의 프로젝트 id 는 여기 없어 끊김이다).
+    id: page.id,
+    menuPath: page.menuPath,
+    pageTitle: page.title,
     document: documentById.get(page.id)!,
     description: descriptionById.get(page.id) ?? null,
     comments: commentsById.get(page.id) ?? [],

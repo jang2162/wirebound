@@ -59,7 +59,7 @@
  * 값으로, `test/duplicate-census.test.ts`가 소스로 그것을 지킨다.
  */
 import { indexCodes, type CodeTable, type PageDocument } from '@wirebound/schema'
-import { commentEntries, type BundleComment, type CommentEntry } from '../bundle/comments'
+import { commentEntries, exportTokenBase, type BundleComment, type CommentEntry } from '../bundle/comments'
 import {
   EMPTY_COMMENTS,
   EMPTY_DESCRIPTION,
@@ -76,6 +76,10 @@ import { image, notesXml, placeholder, pt, slideXml, textBox, type Line } from '
 
 /** 슬라이드 하나가 될 페이지. */
 export interface PptxPage {
+  /** 페이지 id · 조상 메뉴 이름 — 코멘트 토큰을 푼다(`BundlePage.id` · `menuPath` 와 같은 계약). */
+  id?: string
+  menuPath?: readonly string[]
+  pageTitle?: string
   /**
    * 슬라이드 제목이자 `screenless`에 실릴 이름.
    *
@@ -155,8 +159,11 @@ export function exportPptx(options: ExportPptxOptions): ExportedPptx {
 
   const codes = options.codes === undefined ? undefined : indexCodes(options.codes)
   const screenless: string[] = []
+  // 코멘트 토큰은 풀린 글만 싣는다 — 슬라이드 사이 링크는 걸지 않는다(설계 «이동» 의 PPTX 줄).
+  const tokens = exportTokenBase(pages, codes)
   const slides: SlideSource[] = pages.map((page, index) => {
-    const entries = commentEntries(page.document, page.comments ?? [], codes)
+    const context = tokens === null || page.id === undefined ? undefined : { ...tokens, currentPageId: page.id }
+    const entries = commentEntries(page.document, page.comments ?? [], codes, context)
     const sentences = pageSentences(page.document, codes).map((sentence) => sentence.text)
     const screen = page.screen ?? null
     if (screen === null) screenless.push(page.title)
@@ -246,7 +253,7 @@ function commentLines(entries: readonly CommentEntry[]): Line[] {
     const meta = [entry.authorName, entry.createdAt].filter((part): part is string => part !== null)
     return [
       head,
-      { text: entry.body, size: ENTRY_SIZE, indent: 1 },
+      { text: entry.text, size: ENTRY_SIZE, indent: 1 },
       // **둘 다 없으면 줄 자체를 안 그린다** — 번들의 `CommentMeta`와 같은 규칙이다.
       ...(meta.length === 0 ? [] : [{ text: meta.join(' · '), size: META_SIZE, color: META_COLOR, indent: 1 }]),
     ]

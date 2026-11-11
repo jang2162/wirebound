@@ -109,6 +109,9 @@ export async function buildProjectPptx(rows: ExportRows, screenSource: PptxScree
   const pages: PptxPage[] = ordered.map((page) => ({
     /** **번들과 같은 이름이다**(`bundleTitle` — 조상 메뉴가 붙어 있다). */
     title: page.bundleTitle,
+    id: page.id,
+    menuPath: page.menuPath,
+    pageTitle: page.title,
     document: documentById.get(page.id)!,
     description: descriptionById.get(page.id) ?? null,
     comments: commentsById.get(page.id) ?? [],

@@ -41,6 +41,8 @@
  * 공통코드를 들이며 «넓은 표본»(과 그 사본 `index.html`)만 다시 지었다 — 픽스처의 칩 하나가 `code`(공통코드 참조)를 싣게 바뀌어 문서 JSON 이 그만큼
  * 길다. 표를 넘기지 않는 번들이라 페이지 데이터에 `codes` 키 · 좌측 트리의 «공통코드» 절 · `codes.html` 이 없고, 나머지 페이지 · 시트는 그대로다(다시 재는 법:
  * `test-support/fixtures.ts` 의 그 칩에서 `code` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-10-cc-report.md`).
+ * 코멘트 토큰을 들이며 «글» 만 다시 지었다 — 코멘트 칸의 줄이 번호 닻(`id="wb-marker-<노드 id>"` — 토큰이 그 번호로 오는 자리)을 단다. 코멘트가 없는
+ * 페이지 · 시트는 그대로다(다시 재는 법: `bundle/shell.tsx` 의 `CommentTab` 에서 `id` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-11-tk-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -84,7 +86,7 @@ const BEFORE = {
     'index.html': 'ebdc496710f6b83e',
     'pages/넓은-표본.html': '1c4cbaf5bb10306b',
     'pages/슬롯.html': '8f223165d94d90d6',
-    'pages/글.html': '34fd83c19f5e64dd',
+    'pages/글.html': 'c4aeb6bc5b0d7710',
     'pages/깨진-문서.html': '1e6593b7b432956c',
     'assets/views.css': '556341d0b9e1bbc4',
   },
@@ -92,7 +94,7 @@ const BEFORE = {
     'index.html': '4e93060ac265781e',
     'pages/넓은-표본.html': '50102e11ed7df659',
     'pages/슬롯.html': '5a47bcdcb93ed712',
-    'pages/글.html': 'e4417938f0971101',
+    'pages/글.html': '2c70d28e00b44d47',
     'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
     'assets/views.css': '556341d0b9e1bbc4',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
@@ -129,17 +131,18 @@ describe('상태 없는 페이지의 번들 바이트', () => {
     expect(html(empty).replace(',"viewStates":[]', '')).toBe(html(without))
   })
 
-  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…) · 목차의 팝업 표지(.wb-export-nav-kind · .wb-export-hidden) · «공통코드» 장을 겨누는 것뿐이다', () => {
+  it('assets/shell.css 는 옛 글자가 그대로 앞에 서고, 뒤에 붙은 규칙은 전환기(.wb-export-state…) · 목차의 팝업 표지(.wb-export-nav-kind · .wb-export-hidden) · «공통코드» 장 · 코멘트 토큰(.wb-export-token…)을 겨누는 것뿐이다', () => {
     const css = String(exportBundle({ pages: pages(), runtimeJs: '' }).files.find((file) => file.path === 'assets/shell.css')!.content)
     expect(hash(css.slice(0, SHELL_CSS_BEFORE.length))).toBe(SHELL_CSS_BEFORE.hash)
     const added = css.slice(SHELL_CSS_BEFORE.length)
     const selectors = [...added.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{[^}]*\}/g)].map((match) => match[1]!.trim())
     expect(selectors.length).toBeGreaterThan(0)
     // 팝업 표지는 팝업 페이지 줄에만 선다 — 그 클래스는 다른 줄에 안 붙는다(`bundle/shell.tsx`).
-    // «공통코드» 장의 규칙은 표가 있는 번들에만 서는 요소(좌측 트리의 둘째 절 · `codes.html`)를 겨눈다.
+    // «공통코드» 장의 규칙은 표가 있는 번들에만 서는 요소(좌측 트리의 둘째 절 · `codes.html`)를 겨눈다. 코멘트 토큰의 규칙은 본문에 토큰이 든 코멘트에만
+    // 서는 요소(`bundle/shell.tsx` 의 `TokenSegments`)를 겨눈다.
     for (const selector of selectors) {
       expect(selector).toMatch(
-        /\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$|^\.wb-export-(codes|chapter|nav-heading-next)\b/,
+        /\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$|^\.wb-export-(codes|chapter|nav-heading-next)\b|^\.wb-export-token(-broken|-note)?$/,
       )
     }
   })

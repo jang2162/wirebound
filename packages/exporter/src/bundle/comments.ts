@@ -23,7 +23,19 @@
  * 사람이 *"내가 못 찾은 것"*으로 읽는다 — **화면이 못 보는 것을 세어 적고 화면이 그것을
  * 말하게 한다.**
  */
-import { describeNode, namingContexts, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
+import {
+  buildMarkerIndex,
+  COMMENT_TOKEN_BROKEN_TEXT,
+  describeNode,
+  namingContexts,
+  parseCommentBody,
+  resolveCommentTokens,
+  type CodeIndex,
+  type CommentTokenContext,
+  type PageDocument,
+  type ResolvedSegment,
+  type WbNode,
+} from '@wirebound/schema'
 import { eachNode } from '../nodes'
 
 /**
@@ -54,6 +66,10 @@ export type CommentEntry =
       label: string
       marker: number | null
       body: string
+      /** 본문을 토큰까지 푼 조각(`resolveCommentTokens`) — 번들이 링크로 그린다. 풀 자료가 없으면 토큰은 대체 글의 글 조각이다. */
+      segments: ResolvedSegment[]
+      /** 조각을 글 한 줄로 편 것 — PPTX 가 싣는다(끊김은 `대체 글 (찾을 수 없음)`). */
+      text: string
       authorName: string | null
       createdAt: string | null
     }
@@ -86,7 +102,12 @@ function markerOf(node: WbNode): number | null {
  * 문서에 있는 노드가 먼저고, 고아 코멘트가 뒤다 — 그것들은 문서에 자리가 없으므로
  * **입력 순서**말고 줄 세울 근거가 없다. 같은 노드에 달린 코멘트끼리도 입력 순서다.
  */
-export function commentEntries(page: PageDocument, comments: readonly BundleComment[], codes?: CodeIndex): CommentEntry[] {
+export function commentEntries(
+  page: PageDocument,
+  comments: readonly BundleComment[],
+  codes?: CodeIndex,
+  tokens?: CommentTokenContext,
+): CommentEntry[] {
   const byNode = new Map<string, BundleComment[]>()
   for (const comment of comments) {
     const list = byNode.get(comment.nodeId)
@@ -111,25 +132,78 @@ export function commentEntries(page: PageDocument, comments: readonly BundleComm
       }
       continue
     }
-    for (const comment of own) entries.push(commentLine(node.id, label, marker, comment))
+    for (const comment of own) entries.push(commentLine(node.id, label, marker, comment, tokens))
   }
 
   for (const comment of comments) {
     if (inTree.has(comment.nodeId)) continue
-    entries.push(commentLine(comment.nodeId, MISSING_NODE_LABEL, null, comment))
+    entries.push(commentLine(comment.nodeId, MISSING_NODE_LABEL, null, comment, tokens))
   }
 
   return entries
 }
 
-function commentLine(nodeId: string, label: string, marker: number | null, comment: BundleComment): CommentEntry {
+function commentLine(
+  nodeId: string,
+  label: string,
+  marker: number | null,
+  comment: BundleComment,
+  tokens: CommentTokenContext | undefined,
+): CommentEntry {
+  const segments = commentSegments(comment.body, tokens)
   return {
     kind: 'comment',
     nodeId,
     label,
     marker,
     body: comment.body,
+    segments,
+    text: segmentsText(segments),
     authorName: comment.authorName ?? null,
     createdAt: comment.createdAt ?? null,
   }
+}
+
+/**
+ * 내보내는 페이지들로 지은 토큰 풀 자료 — 번들 · PPTX 가 내보내는 때의 프로젝트 자료로 푼다(설계 `docs/superpowers/specs/2026-11-11-comment-tokens-design.md`).
+ * `id` 가 없는 페이지는 토큰이 가리킬 수 없다(그 페이지로 가는 토큰은 끊김). 하나도 없으면 `null` — 토큰은 대체 글로만 선다.
+ */
+export function exportTokenBase(
+  pages: readonly { id?: string; title: string; pageTitle?: string; menuPath?: readonly string[]; document: PageDocument }[],
+  codes: CodeIndex | undefined,
+): Omit<CommentTokenContext, 'currentPageId'> | null {
+  const known = pages.filter((page): page is typeof page & { id: string } => typeof page.id === 'string')
+  if (known.length === 0) return null
+  return {
+    pages: new Map(known.map((page) => [page.id, { title: page.pageTitle ?? page.title, menuPath: (page.menuPath ?? []).join(' › ') }])),
+    markers: buildMarkerIndex(known, codes),
+    ...(codes === undefined ? {} : { codes }),
+  }
+}
+
+function commentSegments(body: string, tokens: CommentTokenContext | undefined): ResolvedSegment[] {
+  if (tokens !== undefined) return resolveCommentTokens(body, tokens)
+  const text = parseCommentBody(body)
+    .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
+    .join('')
+  return text === '' ? [] : [{ type: 'text', text }]
+}
+
+function segmentsText(segments: readonly ResolvedSegment[]): string {
+  return segments.map((segment) => (segment.type === 'broken' ? `${segment.text} (${COMMENT_TOKEN_BROKEN_TEXT})` : segment.text)).join('')
+}
+
+/** «공통코드» 장의 그룹 · 항목 닻 — 코드값은 아무 글자나 들 수 있어 UTF-8 바이트를 16진으로 적는다(닻 글자가 늘 안전하다). */
+export function codeAnchor(group: string, item?: string): string {
+  if (item === undefined) return `wb-code-${group}`
+  // `TextEncoder` 는 이 패키지의 lib 에 없다 — `encodeURIComponent` 가 UTF-8 바이트를 `%XX` 로 낸다.
+  const hex = encodeURIComponent(item).replace(/%([0-9A-F]{2})|./g, (match, byte: string | undefined) =>
+    (byte ?? match.charCodeAt(0).toString(16).padStart(2, '0')).toLowerCase(),
+  )
+  return `wb-code-${group}--${hex}`
+}
+
+/** 페이지 장 코멘트 칸의 번호 닻. 노드 id 는 `NODE_ID_PATTERN` 이라 그대로 쓴다. */
+export function markerAnchor(nodeId: string): string {
+  return `wb-marker-${nodeId}`
 }

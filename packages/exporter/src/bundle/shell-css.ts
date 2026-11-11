@@ -489,4 +489,17 @@ body {
   margin: 0.25rem 0;
   color: #6b7280;
 }
+
+/* 코멘트 토큰 — 산 것은 링크, 끊긴 것은 흐린 대체 글 + «찾을 수 없음»(누를 수 없음). */
+.wb-export-token {
+  color: #2f6fed;
+}
+
+.wb-export-token-broken {
+  color: #6b7280;
+}
+
+.wb-export-token-note {
+  font-size: 0.75rem;
+}
 `
