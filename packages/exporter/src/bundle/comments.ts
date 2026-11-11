@@ -37,6 +37,7 @@ import {
   type WbNode,
 } from '@wirebound/schema'
 import { eachNode } from '../nodes'
+import { MARKER_ANCHOR_PREFIX } from '../page-data'
 
 /**
  * 번들이 받는 코멘트 하나.
@@ -203,5 +204,5 @@ export function codeAnchor(group: string, item?: string): string {
 
 /** 페이지 장 코멘트 칸의 번호 닻. 노드 id 는 `NODE_ID_PATTERN` 이라 그대로 쓴다. */
 export function markerAnchor(nodeId: string): string {
-  return `wb-marker-${nodeId}`
+  return `${MARKER_ANCHOR_PREFIX}${nodeId}`
 }

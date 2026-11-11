@@ -30,6 +30,15 @@ export const STATE_SELECT_ID = 'wb-export-state'
  */
 export const STATE_HASH_PREFIX = '#state='
 
+/**
+ * 코멘트 칸 번호 줄의 닻 머리 — `#wb-marker-<nodeId>`(`bundle/comments.ts` 의 `markerAnchor` · 코멘트 토큰의 번들 주소). 런타임이 이 해시로 «코멘트» 탭을
+ * 열고 그 줄로 굴린다(`browser/boot.tsx`).
+ */
+export const MARKER_ANCHOR_PREFIX = 'wb-marker-'
+
+/** «코멘트» 탭의 라디오 id(`bundle/shell.tsx` 의 `radioId('comments')`) — 탭은 라디오 + CSS 라 이것을 골라야 그 칸이 보인다. */
+export const COMMENTS_TAB_RADIO_ID = 'wb-export-tab-comments'
+
 /** 번들 안에서 런타임이 사는 자리. */
 export const RUNTIME_JS_PATH = 'assets/runtime.js'
 

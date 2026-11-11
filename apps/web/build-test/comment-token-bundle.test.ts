@@ -6,6 +6,9 @@
  * | 무엇이 거짓이면 죽나 |
  * |---|
  * | M1 페이지 제목의 방향 제어 글자(RLO)가 번들 코멘트의 토큰 뒤 글(«끝 글»)까지 뒤집는다 |
+ * | M2 다른 장의 번호 닻(`#wb-marker-…`)으로 연 장에서 그 줄이 닫힌 «코멘트» 탭 안이라 안 보인다 · 창 밖이다 |
+ * | L1 같은 장의 번호 토큰을 누르면 고른 화면 상태가 기본으로 돌아간다 |
+ * | L4 번호 걷힌 노드로 가는 닻으로 연 장이 목업의 그 노드로 안 간다 |
  */
 import { pathToFileURL } from 'node:url'
 import type { BrowserContext, Page } from 'playwright-core'
@@ -127,6 +130,56 @@ describe.skipIf(!전제.ok)('코멘트 토큰 번들 — 실브라우저', () =>
       expect(order.links).toBe(1)
       expect(order.at).toBeGreaterThanOrEqual(0)
       expect(order.end).toBeLessThan(order.geul)
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('M2 — 다른 장의 번호 토큰을 누르면 그 장이 «코멘트» 탭으로 서고 그 줄이 창 안에 보인다', async () => {
+    const { context, page } = await open(listFile)
+    try {
+      await page.click('label.wb-export-tab-comments')
+      const link = page.locator('.wb-export-entry-body a', { hasText: `상세 #${FILLER}` })
+      await link.click()
+      await page.waitForURL((url) => url.hash === `#wb-marker-n_f${FILLER - 1}`)
+      await page.waitForSelector('html[data-wb-ready]', { state: 'attached', timeout: 15_000 })
+      // 판 카나리아 — 그 장의 그 줄이다.
+      expect(decodeURIComponent(new URL(page.url()).pathname)).toContain('상세')
+      expect(await checkedTab(page)).toBe('wb-export-tab-comments')
+      expect(await shown(page, `#wb-marker-n_f${FILLER - 1}`)).toEqual({ exists: true, visible: true })
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('L1 — 같은 장의 번호 토큰을 누르면 고른 화면 상태가 그대로이고 그 줄이 보인다', async () => {
+    const { context, page } = await open(detailFile)
+    try {
+      await page.selectOption('#wb-export-state', 's_admin')
+      // 판 카나리아 — 상태가 섰다(해시가 따라왔다).
+      expect(new URL(page.url()).hash).toBe('#state=s_admin')
+      await page.click('label.wb-export-tab-comments')
+      await page.locator('.wb-export-entry-body a', { hasText: `#${FILLER}` }).click()
+      await page.waitForURL((url) => url.hash === `#wb-marker-n_f${FILLER - 1}`)
+      await page.waitForTimeout(200)
+      expect(await page.$eval('#wb-export-state', (select) => (select as HTMLSelectElement).value)).toBe('s_admin')
+      expect(await shown(page, `#wb-marker-n_f${FILLER - 1}`)).toEqual({ exists: true, visible: true })
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('L4 — 번호 걷힌 노드의 닻으로 연 장은 목업의 그 노드로 간다', async () => {
+    const { context, page } = await open(detailFile, '#wb-marker-n_bare')
+    try {
+      // 판 카나리아 — 그 노드에는 코멘트 줄(닻)이 없다 · 처음 자리(맨 위)에서는 창 밖이다.
+      expect(await page.$('#wb-marker-n_bare')).toBeNull()
+      expect(await shown(page, '.wb-export-canvas [data-wb-id="n_bare"]')).toEqual({ exists: true, visible: true })
+      await page.evaluate(() => {
+        window.scrollTo(0, 0)
+        for (const el of document.querySelectorAll('*')) if (el.scrollTop > 0) el.scrollTop = 0
+      })
+      expect(await shown(page, '.wb-export-canvas [data-wb-id="n_bare"]')).toEqual({ exists: true, visible: false })
     } finally {
       await context.close()
     }
