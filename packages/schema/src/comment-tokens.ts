@@ -141,6 +141,13 @@ export type ResolvedSegment =
   | { type: 'link'; text: string; target: CommentTokenTarget }
   | { type: 'broken'; text: string }
 
+/** `CommentTokenContext.pages` 를 `targetedPages` 의 결과(조상 메뉴 이름 배열)에서 짓는다 — 소비자마다 경로 글을 따로 잇지 않게. */
+export function commentTokenPages(
+  pages: readonly { id: string; title: string; menuPath: readonly string[] }[],
+): Map<string, { title: string; menuPath: string }> {
+  return new Map(pages.map((page) => [page.id, { title: page.title, menuPath: page.menuPath.join(' › ') }]))
+}
+
 export function markerKey(pageId: string, nodeId: string): string {
   return `${pageId}/${nodeId}`
 }

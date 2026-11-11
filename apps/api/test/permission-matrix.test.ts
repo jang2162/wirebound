@@ -445,6 +445,12 @@ const CASES: Case[] = [
     allowed: ['owner', 'editor'],
     setup: 페이지하나,
   },
+  {
+    label: '코멘트 번호 색인',
+    method: 'GET',
+    url: '/api/projects/:projectId/comments/index',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
   { label: '트리 조회', method: 'GET', url: '/api/projects/:projectId/tree', allowed: ['owner', 'editor', 'viewer'] },
   {
     // **스냅샷 생성은 editor다**(설계서 「권한 모델」 — *"editor: … 스냅샷 생성 (복원 불가)"*). 복원이

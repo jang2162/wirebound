@@ -162,6 +162,7 @@ import {
 } from '../repos/comments'
 import { findPageById, lockPageForEdit, lockPageShared } from '../repos/pages'
 import { lockProjectShared } from '../repos/projects'
+import { readCommentIndex } from '../services/comment-index'
 import { applyEdit, type EditOutcome } from '../services/edit-pipeline'
 import { NO_REVISION, runRevisionTransaction, type Settled, type WrittenRevision } from '../services/lost-commit'
 import { broadcastOrigin, notifyCommentsChanged, notifyPageChanged, pageStaleOnLateCommit } from '../ws/notify'
@@ -325,6 +326,7 @@ function markerRevision(result: { seq: number; revisionId?: string } | 'not-foun
 }
 
 const PageParams = z.object({ projectId: z.uuid(), pageId: z.uuid() })
+const ProjectParams = z.object({ projectId: z.uuid() })
 const CommentParams = z.object({ projectId: z.uuid(), pageId: z.uuid(), commentId: z.uuid() })
 
 /**
@@ -588,6 +590,14 @@ function renumberOps(document: PageDocument): PatchOp[] {
 /** `app.ts`가 `app.register(commentRoutes(), { prefix: '/api/projects' })`로 등록하는 팩토리. */
 export function commentRoutes() {
   return async function plugin(app: FastifyInstance): Promise<void> {
+    /**
+     * 프로젝트 전체의 번호 색인 — 코멘트 토큰을 푸는 자료(`services/comment-index.ts`). 읽기만 하므로 viewer 다.
+     */
+    app.get('/:projectId/comments/index', { preHandler: projectGuard('viewer') }, async (request) => {
+      const { projectId } = parseParams(ProjectParams, request.params)
+      return readCommentIndex(app.db, projectId)
+    })
+
     /**
      * 그 페이지의 코멘트 전부(설계서 「설계서 화면 구조」의 목록이 **전부**를 보인다).
      * 정렬은 저장소의 계약이다(`created_at` 오름차순). 번호 순으로 묶는 것은 문서를

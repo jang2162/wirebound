@@ -224,6 +224,7 @@ export type { CommentSegment, CommentTokenContext, CommentTokenTarget, ResolvedS
 export {
   buildMarkerIndex,
   COMMENT_TOKEN_BROKEN_TEXT,
+  commentTokenPages,
   commentTokenTargetText,
   commentTokenText,
   formatCommentToken,
