@@ -140,11 +140,12 @@
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는
  * `walkSafely`를 쓴다.
  */
-import { useCommentTokenContext } from '../comments/comment-index'
+import { useCommentIndex, useCommentTokenContext } from '../comments/comment-index'
 import { COMMENT_FLASH_MS, useCommentFocus } from '../comments/comment-focus'
 import { CommentBody } from './comment-body'
+import { useTokenPicker } from './comment-token-picker'
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
-import { nodeAlias, type PageDocument } from '@wirebound/schema'
+import { COMMENT_BODY_MAX_LENGTH, nodeAlias, refreshCommentTokenLabels, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
@@ -703,6 +704,37 @@ export function CommentPanel(props: {
   }, [flash])
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
   const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
+  const tokenIndex = useCommentIndex().index
+  /**
+   * 저장 직전에 토큰의 라벨을 지금 이름으로 다시 적는다(`refreshCommentTokenLabels`) — 라벨은 대체 글이라 마지막으로 산 이름이 남아야 한다.
+   * 다시 적어 길이 한도를 넘으면 친 그대로 보낸다(대체 글이 조금 낡을 뿐이다).
+   */
+  const withLiveLabels = (text: string): string => {
+    if (tokenContext === null) return text
+    const next = refreshCommentTokenLabels(text, tokenContext)
+    return next.length > COMMENT_BODY_MAX_LENGTH ? text : next
+  }
+  // `#` 자동완성(`./comment-token-picker.tsx`) — 새 코멘트 상자와 고치는 상자에 하나씩.
+  const draftInput = useRef<HTMLTextAreaElement>(null)
+  const editInput = useRef<HTMLTextAreaElement>(null)
+  const draftPicker = useTokenPicker({
+    id: 'wb-comment-draft',
+    value: draft,
+    setValue: (text) => {
+      if (selectedNodeId !== null) setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+    },
+    inputRef: draftInput,
+    context: tokenContext,
+    index: tokenIndex,
+  })
+  const editPicker = useTokenPicker({
+    id: 'wb-comment-edit',
+    value: editDraft,
+    setValue: setEditDraft,
+    inputRef: editInput,
+    context: tokenContext,
+    index: tokenIndex,
+  })
 
   /**
    * **쓰기 뒤의 목록 다시 받기 — 잠금 밖이다.** 이것을 쓰기의 뒷일 안에서 기다리면,
@@ -934,7 +966,7 @@ export function CommentPanel(props: {
 
   const submit = (): void => {
     const nodeId = selectedNodeId
-    const body = draft.trim()
+    const body = withLiveLabels(draft.trim())
     if (body === '' || nodeId === null) return
     const hadMarker = numbered(nodeId)
     // **같은 글이면 같은 키**(위 `POST_KEYS`). 보내기 **전에** 적는다 — 응답이 오기 전에 탭을 오가도
@@ -1078,7 +1110,7 @@ export function CommentPanel(props: {
   const saveEdit = (commentId: string): void => {
     // 그리는 갈래와 **같은 값**이다(`editing`) — 상자가 안 선 글은 보내지도 않는다.
     if (editing !== commentId) return
-    const body = editDraft.trim()
+    const body = withLiveLabels(editDraft.trim())
     if (body === '') return
 
     perform({
@@ -1185,12 +1217,16 @@ export function CommentPanel(props: {
             // **고른 노드가 없으면 아예 쓸 수 없다.** 눌러 봐야 실패할 자리를 열어 두지
             // 않는다 — 서버도 `nodeId` 없는 본문을 400으로 막는다.
             disabled={selectedNodeId === null || busy}
+            ref={draftInput}
+            {...draftPicker.inputProps}
             onChange={(event) => {
               if (selectedNodeId === null) return
               const text = event.target.value
               setDrafts((prev) => withDraft(prev, selectedNodeId, text))
+              draftPicker.sync(text, event.target.selectionStart ?? text.length)
             }}
           />
+          {draftPicker.list}
           {selectedNodeId === null && <p className="wb-shell-panel-notice">{many ? MANY_TARGETS : NO_TARGET}</p>}
           <div className="wb-shell-comment-actions">
             <button type="submit" className="wb-shell-comment-submit" disabled={selectedNodeId === null || busy || draft.trim() === ''}>
@@ -1292,8 +1328,14 @@ export function CommentPanel(props: {
                           value={editDraft}
                           rows={3}
                           disabled={busy}
-                          onChange={(event) => setEditDraft(event.target.value)}
+                          ref={editInput}
+                          {...editPicker.inputProps}
+                          onChange={(event) => {
+                            setEditDraft(event.target.value)
+                            editPicker.sync(event.target.value, event.target.selectionStart ?? event.target.value.length)
+                          }}
                         />
+                        {editPicker.list}
                         <button
                           type="button"
                           className="wb-shell-comment-save"

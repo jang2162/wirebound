@@ -2131,6 +2131,39 @@
   display: inline-block;
 }
 
+/* 글 상자의 `#` 자동완성(`panels/comment-token-picker.tsx`) — 상자 바로 밑에 선다. */
+.wb-shell-comment-picker {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 3px;
+  background: #fff;
+}
+
+.wb-shell-comment-picker-option {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  padding: 3px 6px;
+  border-radius: 2px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-comment-picker-option[aria-selected='true'] {
+  background: var(--wb-shell-chrome);
+  outline: 1px solid var(--wb-shell-accent);
+}
+
+.wb-shell-comment-picker-group,
+.wb-shell-comment-picker-hint {
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
 /* 번호 토큰이 데려온 묶음 — 잠깐 선다(`comments/comment-focus.tsx` 의 `COMMENT_FLASH_MS`). */
 .wb-shell-comment-group[data-flash] {
   outline: 2px solid var(--wb-shell-accent);

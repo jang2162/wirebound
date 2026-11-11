@@ -224,3 +224,19 @@ export function commentTokenText(body: string, context: CommentTokenContext, wit
     })
     .join('')
 }
+
+/**
+ * 본문의 산 토큰의 라벨(대체 글)을 지금의 이름 · 번호로 다시 적는다 — 웹이 달기 · 고치기 저장 직전에 부른다(서버는 토큰을 고치지 않는다).
+ * 끊긴 토큰 · 보통 글은 원문 그대로다. 그래서 대상이 나중에 끊겨도 마지막으로 산 이름이 대체 글로 남는다.
+ */
+export function refreshCommentTokenLabels(body: string, context: CommentTokenContext): string {
+  const segments = parseCommentBody(body)
+  const resolved = resolveCommentTokens(body, context)
+  return segments
+    .map((segment, i) => {
+      if (segment.type === 'text') return segment.text
+      const now = resolved[i]
+      return now?.type === 'link' ? formatCommentToken(now.text, segment.target) : segment.raw
+    })
+    .join('')
+}

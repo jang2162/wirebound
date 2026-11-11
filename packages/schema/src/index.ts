@@ -230,5 +230,6 @@ export {
   formatCommentToken,
   markerKey,
   parseCommentBody,
+  refreshCommentTokenLabels,
   resolveCommentTokens,
 } from './comment-tokens'

@@ -10,6 +10,7 @@ import {
   indexCodes,
   installCatalog,
   nodeDisplayName,
+  refreshCommentTokenLabels,
   resolveCommentTokens,
   type CommentTokenContext,
   type PageDocument,
@@ -186,5 +187,14 @@ describe('buildMarkerIndex', () => {
     expect(index.get(`${LIST}/n_btn`)).toEqual({ marker: null, nodeName: nodeDisplayName(button) })
     expect(index.get(`${LIST}/n_root`)?.marker).toBeNull()
     expect(index.size).toBe(3)
+  })
+})
+
+describe('refreshCommentTokenLabels', () => {
+  it('산 토큰의 라벨만 지금 이름으로 — 끊김 · 보통 글은 원문', () => {
+    const body = `앞 ${token('옛', { kind: 'comment', pageId: DETAIL, nodeId: 'n_form' })} [링크](https://x.y) ${token('남', { kind: 'page', pageId: FOREIGN })}`
+    expect(refreshCommentTokenLabels(body, context())).toBe(
+      `앞 ${token('회원 상세 #1', { kind: 'comment', pageId: DETAIL, nodeId: 'n_form' })} [링크](https://x.y) ${token('남', { kind: 'page', pageId: FOREIGN })}`,
+    )
   })
 })
