@@ -132,6 +132,8 @@ describe('get_page — 무엇을 싣나', () => {
         nodeId: 'list',
         nodeName: '② 그리드',
         body: '정렬 기준을 정해야 합니다',
+        text: '정렬 기준을 정해야 합니다',
+        resolved: '정렬 기준을 정해야 합니다',
         authorName: '장병현',
         createdAt: '2026-08-16T01:00:00.000Z',
       },

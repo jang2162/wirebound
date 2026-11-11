@@ -139,7 +139,13 @@ export const TOOLS: readonly ToolSpec[] = [
           type: 'string',
           description: '코멘트를 달 노드의 id. get_page 응답의 nodes[].id 입니다.',
         },
-        body: { type: 'string', description: '코멘트 본문.' },
+        body: {
+          type: 'string',
+          description:
+            '코멘트 본문. 다른 페이지 · 번호 · 공통코드를 가리키려면 토큰 `[보이는 글](wb:page/<pageId>)` · `[글](wb:comment/<pageId>/<nodeId>)`(그 노드의 번호) · ' +
+            '`[글](wb:code/<그룹 키>)` · `[글](wb:code/<그룹 키>/<퍼센트 인코딩한 코드값>)` 을 넣습니다 — 읽는 자리마다 지금의 이름 · 번호로 풀립니다. ' +
+            'get_page 의 comments[].resolved 가 풀린 글 뒤에 같은 대상을 괄호로 싣습니다(`(comment:<pageId>/<nodeId>)`).',
+        },
       },
       required: ['path', 'nodeId', 'body'],
       additionalProperties: false,

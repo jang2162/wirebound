@@ -171,7 +171,11 @@ const TOOL_TEXT: Record<string, ToolText> = {
   add_comment: {
     summary:
       'Comment on one node — how an implementer reports back to the design. Numbering a node changes the document and raises `headSeq`.',
-    args: { path: 'Page path.', nodeId: 'Node id from `get_page` `nodes[].id`.', body: 'Comment text.' },
+    args: {
+      path: 'Page path.',
+      nodeId: 'Node id from `get_page` `nodes[].id`.',
+      body: 'Comment text. Reference a page, a comment number or a common code with a token: `[label](wb:page/<pageId>)`, `[label](wb:comment/<pageId>/<nodeId>)`, `[label](wb:code/<GROUP>)` or `[label](wb:code/<GROUP>/<percent-encoded value>)`. Readers resolve tokens to the current name and number; `get_page` `comments[].resolved` shows the target in parentheses.',
+    },
   },
   validate: {
     summary: 'Run the lint rules. Findings are a normal result, not an error. Naming rules come from `.wirebound.json`.',
