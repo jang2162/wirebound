@@ -5,6 +5,7 @@
  * 보이는 글은 대상이 끊겼을 때만 쓰는 대체 글이다. 모르는 종류 · 꼴이 깨진 토큰은 원문 글자 그대로 글 조각이 된다 — 그 꼴로 쓴
  * 보통 글(`[링크](https://…)`)을 망가뜨리지 않는다.
  */
+import { isolateBidi } from './bidi'
 import { CODE_KEY_PATTERN } from './codes'
 import type { CodeIndex } from './codes-resolve'
 import { NODE_ID_PATTERN } from './envelope'
@@ -167,18 +168,30 @@ export function buildMarkerIndex(
   return index
 }
 
-function pageName(pageId: string, context: CommentTokenContext, titleCounts: ReadonlyMap<string, number>): string | null {
+/**
+ * 이름을 글에 잇는 방법 — 보일 글은 `isolateBidi`(방향 제어 글자가 뒤따르는 글까지 뒤집지 않게 — `./bidi.ts` 머리말), 라벨(대체 글)은 원문 그대로다.
+ * 라벨에 격리 글자를 적지 않는 까닭: 라벨은 고칠 때 원문으로 보이는 글이고, 보일 때 다시 가둔다(끊긴 토큰의 대체 글도).
+ */
+type NameText = (name: string) => string
+const AS_IS: NameText = (name) => name
+
+function pageName(pageId: string, context: CommentTokenContext, titleCounts: ReadonlyMap<string, number>, name: NameText): string | null {
   const page = context.pages.get(pageId)
   if (page === undefined) return null
-  return (titleCounts.get(page.title) ?? 0) > 1 && page.menuPath !== '' ? `${page.menuPath} › ${page.title}` : page.title
+  return (titleCounts.get(page.title) ?? 0) > 1 && page.menuPath !== '' ? `${name(page.menuPath)} › ${name(page.title)}` : name(page.title)
 }
 
-function resolveTarget(target: CommentTokenTarget, context: CommentTokenContext, titleCounts: ReadonlyMap<string, number>): string | null {
+function resolveTarget(
+  target: CommentTokenTarget,
+  context: CommentTokenContext,
+  titleCounts: ReadonlyMap<string, number>,
+  name: NameText,
+): string | null {
   switch (target.kind) {
     case 'page':
-      return pageName(target.pageId, context, titleCounts)
+      return pageName(target.pageId, context, titleCounts, name)
     case 'comment': {
-      const page = pageName(target.pageId, context, titleCounts)
+      const page = pageName(target.pageId, context, titleCounts, name)
       const entry = context.markers.get(markerKey(target.pageId, target.nodeId))
       if (page === null || entry === undefined) return null
       if (entry.marker === null) return `${page} › ${entry.nodeName}`
@@ -193,15 +206,29 @@ function resolveTarget(target: CommentTokenTarget, context: CommentTokenContext,
   }
 }
 
-/** 본문을 지금의 이름 · 번호로 푼 조각. 이웃한 글 조각은 하나로 잇지 않는다 — 원문의 조각 차례 그대로다. */
-export function resolveCommentTokens(body: string, context: CommentTokenContext): ResolvedSegment[] {
+function resolveWith(body: string, context: CommentTokenContext, name: NameText): ResolvedSegment[] {
   const titleCounts = new Map<string, number>()
   for (const page of context.pages.values()) titleCounts.set(page.title, (titleCounts.get(page.title) ?? 0) + 1)
   return parseCommentBody(body).map((segment): ResolvedSegment => {
     if (segment.type === 'text') return segment
-    const text = resolveTarget(segment.target, context, titleCounts)
-    return text === null ? { type: 'broken', text: segment.label } : { type: 'link', text, target: segment.target }
+    const text = resolveTarget(segment.target, context, titleCounts, name)
+    return text === null ? { type: 'broken', text: name(segment.label) } : { type: 'link', text, target: segment.target }
   })
+}
+
+/**
+ * 본문을 지금의 이름 · 번호로 푼 조각 — 보일 글이다. 페이지 제목 · 메뉴 경로 · 끊긴 토큰의 대체 글은 방향을 가둔다(`isolateBidi` — 노드 이름은
+ * `nodeDisplayName` 이 이미 가둔다). 이웃한 글 조각은 하나로 잇지 않는다 — 원문의 조각 차례 그대로다.
+ */
+export function resolveCommentTokens(body: string, context: CommentTokenContext): ResolvedSegment[] {
+  return resolveWith(body, context, isolateBidi)
+}
+
+/** 풀 자료가 없을 때 보일 글 — 토큰은 대체 글(방향을 가둔다)이다. 끊겼다고 단언하지 않는다(«찾을 수 없음» 을 안 붙인다). */
+export function unresolvedCommentText(body: string): string {
+  return parseCommentBody(body)
+    .map((segment) => (segment.type === 'text' ? segment.text : isolateBidi(segment.label)))
+    .join('')
 }
 
 /** 에이전트가 다음 호출에 쓰는 대상 꼴 — `page:<id>` · `comment:<pageId>/<nodeId>` · `code:<KEY>[/<인코딩한 값>]`. */
@@ -231,7 +258,7 @@ export function commentTokenText(body: string, context: CommentTokenContext, wit
  */
 export function refreshCommentTokenLabels(body: string, context: CommentTokenContext): string {
   const segments = parseCommentBody(body)
-  const resolved = resolveCommentTokens(body, context)
+  const resolved = resolveWith(body, context, AS_IS)
   return segments
     .map((segment, i) => {
       if (segment.type === 'text') return segment.text

@@ -18,6 +18,7 @@ import { useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type 
 import {
   COMMENT_BODY_MAX_LENGTH,
   formatCommentToken,
+  isolateBidi,
   markerKey,
   type CommentTokenContext,
   type CommentTokenTarget,
@@ -246,7 +247,8 @@ export function useTokenPicker(options: {
                 onClick={() => pick(candidate)}
               >
                 <span className="wb-shell-comment-picker-group">{GROUP_LABEL[candidate.group]}</span>
-                <span className="wb-shell-comment-picker-label">{candidate.label}</span>
+                {/* 라벨은 토큰 원문에 이름 그대로 들고(방향 제어를 안 걷는다) 보일 때만 가둔다 — 풀린 글과 같다(`resolveCommentTokens`). */}
+                <span className="wb-shell-comment-picker-label">{isolateBidi(candidate.label)}</span>
                 {candidate.hint !== '' && <span className="wb-shell-comment-picker-hint">{candidate.hint}</span>}
               </li>
             ))}

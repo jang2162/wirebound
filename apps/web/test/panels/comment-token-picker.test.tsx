@@ -13,6 +13,7 @@ import '../../src/catalog-setup'
 
 const LIST = '11111111-1111-4111-8111-111111111111'
 const DETAIL = '22222222-2222-4222-8222-222222222222'
+const FLIPPED = '33333333-3333-4333-8333-333333333333'
 
 const listDoc = (): PageDocument =>
   pageDoc({
@@ -149,6 +150,19 @@ describe('# 자동완성', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
     await waitFor(() => expect(screen.getByText(PICK_TOO_LONG)).toBeTruthy())
     expect(box.value).toBe(long)
+  })
+  it('후보 라벨의 방향 제어 글자는 보일 때 가두고 토큰 원문에는 이름 그대로 적는다(RV-TK M1)', async () => {
+    const RLO = String.fromCharCode(0x202e)
+    const { box } = await stage({
+      commentIndex: async () => ({
+        pages: [...INDEX.pages, { id: FLIPPED, title: `${RLO}뒤집`, menuPath: '회원' }],
+        markers: INDEX.markers,
+      }),
+    })
+    type(box, '#뒤집')
+    await waitFor(() => expect(options()).toEqual([`${String.fromCharCode(0x2068)}${RLO}뒤집${String.fromCharCode(0x2069)}`]))
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(box.value).toBe(formatCommentToken(`${RLO}뒤집`, { kind: 'page', pageId: FLIPPED })))
   })
 
   it('조합 중(compositionstart ~ end)에는 열지 않고 끝난 뒤 거른다', async () => {

@@ -27,7 +27,7 @@ import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContex
 import { pageKindOf, type PageKind } from './new-page'
 import { pageTargetPath } from './page-target'
 import { BODY_ZONE } from './component/define'
-import { commentTokenText, parseCommentBody, type CommentTokenContext } from './comment-tokens'
+import { commentTokenText, unresolvedCommentText, type CommentTokenContext } from './comment-tokens'
 import { walkNodes } from './tree'
 import { zoneDefs } from './zones'
 
@@ -198,9 +198,7 @@ export function pageView(input: PageViewInput): PageView {
 
 function tokenTexts(body: string, tokens: CommentTokenContext | undefined): { text: string; resolved: string } {
   if (tokens === undefined) {
-    const text = parseCommentBody(body)
-      .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
-      .join('')
+    const text = unresolvedCommentText(body)
     return { text, resolved: text }
   }
   return { text: commentTokenText(body, tokens, false), resolved: commentTokenText(body, tokens, true) }

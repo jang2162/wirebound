@@ -28,7 +28,7 @@ import {
   COMMENT_TOKEN_BROKEN_TEXT,
   describeNode,
   namingContexts,
-  parseCommentBody,
+  unresolvedCommentText,
   resolveCommentTokens,
   type CodeIndex,
   type CommentTokenContext,
@@ -183,9 +183,7 @@ export function exportTokenBase(
 
 function commentSegments(body: string, tokens: CommentTokenContext | undefined): ResolvedSegment[] {
   if (tokens !== undefined) return resolveCommentTokens(body, tokens)
-  const text = parseCommentBody(body)
-    .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
-    .join('')
+  const text = unresolvedCommentText(body)
   return text === '' ? [] : [{ type: 'text', text }]
 }
 

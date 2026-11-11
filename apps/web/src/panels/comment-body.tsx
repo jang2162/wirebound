@@ -9,8 +9,8 @@ import type { MouseEvent, ReactElement } from 'react'
 import { useNavigate } from 'react-router'
 import {
   COMMENT_TOKEN_BROKEN_TEXT,
-  parseCommentBody,
   resolveCommentTokens,
+  unresolvedCommentText,
   type CommentTokenContext,
   type CommentTokenTarget,
 } from '@wirebound/schema'
@@ -34,13 +34,7 @@ export function commentTokenHref(projectId: string, target: CommentTokenTarget):
 export function CommentBody(props: { body: string; context: CommentTokenContext | null; projectId: string }): ReactElement {
   const navigate = useNavigate()
   if (props.context === null) {
-    return (
-      <p className="wb-shell-comment-body">
-        {parseCommentBody(props.body)
-          .map((segment) => (segment.type === 'text' ? segment.text : segment.label))
-          .join('')}
-      </p>
-    )
+    return <p className="wb-shell-comment-body">{unresolvedCommentText(props.body)}</p>
   }
   const follow = (event: MouseEvent<HTMLAnchorElement>, href: string): void => {
     // 새 탭 · 새 창으로 여는 누름은 브라우저에 맡긴다.

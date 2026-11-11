@@ -12,6 +12,7 @@ import {
   nodeDisplayName,
   refreshCommentTokenLabels,
   resolveCommentTokens,
+  unresolvedCommentText,
   type CommentTokenContext,
   type PageDocument,
   type WbNode,
@@ -196,5 +197,50 @@ describe('refreshCommentTokenLabels', () => {
     expect(refreshCommentTokenLabels(body, context())).toBe(
       `앞 ${token('회원 상세 #1', { kind: 'comment', pageId: DETAIL, nodeId: 'n_form' })} [링크](https://x.y) ${token('남', { kind: 'page', pageId: FOREIGN })}`,
     )
+  })
+})
+
+/**
+ * 사람이 지은 이름의 방향 제어 글자(RLO)가 풀린 글 뒤의 글까지 뒤집지 않는다(RV-TK M1). 서버의 페이지 `Title` · 메뉴 제목은 방향 제어를 안 막는다.
+ * 보일 때만 가둔다 — 라벨(대체 글)에는 원문 이름 그대로 적는다. 실브라우저 판은 `apps/web/build-test/comment-token-review.test.ts`.
+ */
+describe('방향 제어 글자를 가둔다', () => {
+  const RLO = String.fromCharCode(0x202e)
+  const FSI = String.fromCharCode(0x2068)
+  const PDI = String.fromCharCode(0x2069)
+  const flipped = (): CommentTokenContext =>
+    context({
+      pages: new Map([
+        [LIST, { title: '회원 목록', menuPath: '관리자 › 회원' }],
+        [DETAIL, { title: `${RLO}상세`, menuPath: '관리자 › 회원' }],
+        [TWIN_A, { title: '목록', menuPath: `관리자 › ${RLO}상품` }],
+        [TWIN_B, { title: '목록', menuPath: '관리자 › 주문' }],
+      ]),
+    })
+
+  it('페이지 제목 · 번호의 페이지 이름 · 메뉴 경로를 가둔다', () => {
+    const body = `${token('a', { kind: 'page', pageId: DETAIL })} ${token('b', { kind: 'comment', pageId: DETAIL, nodeId: 'n_form' })} ${token('c', { kind: 'page', pageId: TWIN_A })} 끝 글`
+    expect(commentTokenText(body, flipped(), false)).toBe(
+      `${FSI}${RLO}상세${PDI} ${FSI}${RLO}상세${PDI} #1 ${FSI}관리자 › ${RLO}상품${PDI} › 목록 끝 글`,
+    )
+  })
+
+  it('끊긴 토큰의 대체 글도 보일 때 가둔다', () => {
+    const body = `${token(`${RLO}옛`, { kind: 'page', pageId: FOREIGN })} 끝`
+    expect(resolveCommentTokens(body, flipped())[0]).toEqual({ type: 'broken', text: `${FSI}${RLO}옛${PDI}` })
+  })
+
+  it('라벨 다시 적기는 가두지 않는다 — 원문 이름 그대로', () => {
+    const body = token('옛', { kind: 'page', pageId: DETAIL })
+    expect(refreshCommentTokenLabels(body, flipped())).toBe(token(`${RLO}상세`, { kind: 'page', pageId: DETAIL }))
+  })
+
+  it('컨텍스트 없이 편 글(대체 글만)도 가둔다', () => {
+    const body = `${token(`${RLO}옛`, { kind: 'page', pageId: FOREIGN })} 끝`
+    expect(unresolvedCommentText(body)).toBe(`${FSI}${RLO}옛${PDI} 끝`)
+  })
+
+  it('방향 제어가 없는 이름은 한 글자도 안 바뀐다', () => {
+    expect(commentTokenText(token('a', { kind: 'comment', pageId: DETAIL, nodeId: 'n_form' }), context(), false)).toBe('회원 상세 #1')
   })
 })

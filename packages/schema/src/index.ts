@@ -219,6 +219,9 @@ export { indexCodes, isCodeBroken, resolveChoices, resolveCode, resolvedCodeProp
 export type { CodeUsageCount, UsageHit, UsageSource } from './codes-usage'
 export { codeUsage, codeUsageCounts } from './codes-usage'
 
+// 사람이 지은 이름을 글에 이을 때 방향을 가둔다 — 풀린 토큰 글과 같은 규칙을 화면이 쓴다(코멘트 토큰 고르개의 라벨).
+export { isolateBidi } from './bidi'
+
 // 코멘트 토큰 — 본문 글 안의 `[글](wb:…)` 를 가르고 푼다(설계 `docs/superpowers/specs/2026-11-11-comment-tokens-design.md`).
 export type { CommentSegment, CommentTokenContext, CommentTokenTarget, ResolvedSegment } from './comment-tokens'
 export {
@@ -232,4 +235,5 @@ export {
   parseCommentBody,
   refreshCommentTokenLabels,
   resolveCommentTokens,
+  unresolvedCommentText,
 } from './comment-tokens'
