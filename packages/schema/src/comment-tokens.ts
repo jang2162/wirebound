@@ -5,8 +5,12 @@
  * 보이는 글은 대상이 끊겼을 때만 쓰는 대체 글이다. 모르는 종류 · 꼴이 깨진 토큰은 원문 글자 그대로 글 조각이 된다 — 그 꼴로 쓴
  * 보통 글(`[링크](https://…)`)을 망가뜨리지 않는다.
  */
-import { NODE_ID_PATTERN } from './envelope'
 import { CODE_KEY_PATTERN } from './codes'
+import type { CodeIndex } from './codes-resolve'
+import { NODE_ID_PATTERN } from './envelope'
+import { nodeDisplayName } from './interaction/describe'
+import type { PageDocument } from './node'
+import { walkNodes } from './tree'
 
 export type CommentTokenTarget =
   | { kind: 'page'; pageId: string }
@@ -115,4 +119,101 @@ function formatTarget(target: CommentTokenTarget): string {
     case 'code':
       return target.item === undefined ? `wb:code/${target.group}` : `wb:code/${target.group}/${encodeCodeValue(target.item)}`
   }
+}
+
+/**
+ * 풀 자료 — 그 코멘트가 사는 프로젝트의 것만 담는다(반-목표 «다른 프로젝트의 것을 보이는 것»). 여기 없는 id 는 까닭을 가르지 않고 끊김이다 —
+ * 가르면 남의 프로젝트 id 의 존재가 샌다.
+ */
+export interface CommentTokenContext {
+  /** 그 코멘트가 달린 페이지 — 같은 페이지의 번호는 «#3» 만 보인다. */
+  currentPageId: string
+  /** `menuPath` 는 조상 메뉴 이름을 ` › ` 로 이은 글 — 같은 제목이 둘일 때만 앞에 붙인다. */
+  pages: ReadonlyMap<string, { title: string; menuPath: string }>
+  /** 열쇠 `${pageId}/${nodeId}`(`markerKey`). 문서에 있는 노드면 번호가 걷혀도 든다 — 번호 없는 노드는 «페이지 › 노드 이름» 으로 이어진다. */
+  markers: ReadonlyMap<string, { marker: number | null; nodeName: string }>
+  /** 없으면 공통코드 토큰은 끊김(대체 글)이다. */
+  codes?: CodeIndex
+}
+
+export type ResolvedSegment =
+  | { type: 'text'; text: string }
+  | { type: 'link'; text: string; target: CommentTokenTarget }
+  | { type: 'broken'; text: string }
+
+export function markerKey(pageId: string, nodeId: string): string {
+  return `${pageId}/${nodeId}`
+}
+
+/** 페이지 문서들의 모든 노드 → 번호 · 이름. 이름은 공통코드 표로 푼다(`nodeDisplayName`). */
+export function buildMarkerIndex(
+  pages: readonly { id: string; document: PageDocument }[],
+  codes?: CodeIndex,
+): Map<string, { marker: number | null; nodeName: string }> {
+  const index = new Map<string, { marker: number | null; nodeName: string }>()
+  for (const page of pages) {
+    for (const { node } of walkNodes(page.document.root)) {
+      const marker = typeof node.marker === 'number' ? node.marker : null
+      index.set(markerKey(page.id, node.id), { marker, nodeName: nodeDisplayName(node, undefined, codes) })
+    }
+  }
+  return index
+}
+
+function pageName(pageId: string, context: CommentTokenContext, titleCounts: ReadonlyMap<string, number>): string | null {
+  const page = context.pages.get(pageId)
+  if (page === undefined) return null
+  return (titleCounts.get(page.title) ?? 0) > 1 && page.menuPath !== '' ? `${page.menuPath} › ${page.title}` : page.title
+}
+
+function resolveTarget(target: CommentTokenTarget, context: CommentTokenContext, titleCounts: ReadonlyMap<string, number>): string | null {
+  switch (target.kind) {
+    case 'page':
+      return pageName(target.pageId, context, titleCounts)
+    case 'comment': {
+      const page = pageName(target.pageId, context, titleCounts)
+      const entry = context.markers.get(markerKey(target.pageId, target.nodeId))
+      if (page === null || entry === undefined) return null
+      if (entry.marker === null) return `${page} › ${entry.nodeName}`
+      return target.pageId === context.currentPageId ? `#${entry.marker}` : `${page} #${entry.marker}`
+    }
+    case 'code': {
+      const group = context.codes?.get(target.group)
+      if (group === undefined) return null
+      if (target.item === undefined) return group.name
+      return group.items.find((item) => item.value === target.item)?.name ?? null
+    }
+  }
+}
+
+/** 본문을 지금의 이름 · 번호로 푼 조각. 이웃한 글 조각은 하나로 잇지 않는다 — 원문의 조각 차례 그대로다. */
+export function resolveCommentTokens(body: string, context: CommentTokenContext): ResolvedSegment[] {
+  const titleCounts = new Map<string, number>()
+  for (const page of context.pages.values()) titleCounts.set(page.title, (titleCounts.get(page.title) ?? 0) + 1)
+  return parseCommentBody(body).map((segment): ResolvedSegment => {
+    if (segment.type === 'text') return segment
+    const text = resolveTarget(segment.target, context, titleCounts)
+    return text === null ? { type: 'broken', text: segment.label } : { type: 'link', text, target: segment.target }
+  })
+}
+
+/** 에이전트가 다음 호출에 쓰는 대상 꼴 — `page:<id>` · `comment:<pageId>/<nodeId>` · `code:<KEY>[/<인코딩한 값>]`. */
+export function commentTokenTargetText(target: CommentTokenTarget): string {
+  return formatTarget(target).slice('wb:'.length).replace('/', ':')
+}
+
+export const COMMENT_TOKEN_BROKEN_TEXT = '찾을 수 없음'
+
+/**
+ * 글 한 줄로 편 본문 — PPTX · CLI 사람 출력은 `withTarget: false`, MCP · CLI `--json` 은 `true`(풀린 글 뒤에 대상을 괄호로).
+ * 끊긴 토큰은 대상 없이 `대체 글 (찾을 수 없음)` 이다.
+ */
+export function commentTokenText(body: string, context: CommentTokenContext, withTarget: boolean): string {
+  return resolveCommentTokens(body, context)
+    .map((segment) => {
+      if (segment.type === 'text') return segment.text
+      if (segment.type === 'broken') return `${segment.text} (${COMMENT_TOKEN_BROKEN_TEXT})`
+      return withTarget ? `${segment.text} (${commentTokenTargetText(segment.target)})` : segment.text
+    })
+    .join('')
 }

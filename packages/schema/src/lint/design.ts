@@ -39,6 +39,7 @@ import type { ValidationCode, ValidationIssue } from '../validate'
 import { unknownVisibilityStates, validatePage } from '../validate'
 import { stateDescendants } from '../visibility'
 import { indexCodes, type CodeIndex } from '../codes-resolve'
+import { buildMarkerIndex, parseCommentBody, resolveCommentTokens, type CommentTokenContext } from '../comment-tokens'
 import { codeIssues } from './codes'
 import { lintIssue, relayLintIssue, type LintIssue } from './issue'
 import type { LintConfig, LintPage, LintProject } from './input'
@@ -121,7 +122,41 @@ export function lintDesign(project: LintProject, config: LintConfig = {}): LintI
   for (const page of project.pages) {
     issues.push(...lintPage(page, targets, kinds, commented.get(page.id) ?? new Set(), codes))
   }
+  issues.push(...brokenCommentTokens(project, codes))
 
+  return issues
+}
+
+/**
+ * 끊긴 코멘트 토큰마다 하나. 풀기는 화면과 같은 `resolveCommentTokens` 다. 표를 안 받았으면 코드 토큰은 안 본다 — 공통코드 규칙과 같은
+ * 까닭(표를 못 받은 소비자가 모든 코드 토큰을 «끊겼다» 고 말하지 않게).
+ */
+function brokenCommentTokens(project: LintProject, codes: CodeIndex | null): LintIssue[] {
+  if (project.comments.length === 0) return []
+  const context: Omit<CommentTokenContext, 'currentPageId'> = {
+    pages: new Map(project.pages.map((page) => [page.id, { title: page.title, menuPath: '' }])),
+    markers: buildMarkerIndex(project.pages, codes ?? undefined),
+    ...(codes === null ? {} : { codes }),
+  }
+  const issues: LintIssue[] = []
+  for (const comment of project.comments) {
+    const segments = parseCommentBody(comment.body)
+    if (!segments.some((segment) => segment.type === 'token')) continue
+    const resolved = resolveCommentTokens(comment.body, { ...context, currentPageId: comment.pageId })
+    resolved.forEach((segment, i) => {
+      const source = segments[i]!
+      if (segment.type !== 'broken' || source.type !== 'token') return
+      if (codes === null && source.target.kind === 'code') return
+      issues.push(
+        lintIssue(
+          'comment-token-broken',
+          { pageId: comment.pageId, nodeId: comment.nodeId },
+          '',
+          `코멘트의 토큰이 가리키는 대상을 찾을 수 없습니다: ${segment.text}`,
+        ),
+      )
+    })
+  }
   return issues
 }
 

@@ -142,7 +142,8 @@ describe('표 전체가 이 한 자리에서 돈다', () => {
             ]),
           },
         ],
-        comments: [],
+        // 끊긴 코멘트 토큰(`comment-token-broken`) — 프로젝트에 없는 페이지를 가리킨다.
+        comments: [{ pageId: 'pg2', nodeId: 'x', body: '[옛](wb:page/99999999-9999-4999-8999-999999999999)' }],
         codes: [
           { key: 'S', name: '상태', items: [{ value: 'OFF', name: '꺼짐', active: false }] },
           { key: 'MANY', name: '많음', items: Array.from({ length: 31 }, (_, i) => ({ value: `V${i}`, name: `이름${i}`, active: true })) },

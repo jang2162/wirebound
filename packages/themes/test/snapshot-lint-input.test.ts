@@ -73,9 +73,9 @@ describe('절 이름을 옮긴다', () => {
     ])
   })
 
-  it('코멘트는 자리 둘만 남는다', () => {
+  it('코멘트는 자리 둘과 본문만 남는다', () => {
     const { input } = snapshotToLintInput(payload())
-    expect(input.project.comments).toEqual([{ pageId: 'p1', nodeId: 'root' }])
+    expect(input.project.comments).toEqual([{ pageId: 'p1', nodeId: 'root', body: '설명' }])
   })
 
   /**

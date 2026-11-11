@@ -80,7 +80,7 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
     const issues = lintDesign(
       project({
         pages: [page({ document: doc([list, entry]) })],
-        comments: [{ pageId: 'pg1', nodeId: list.id }],
+        comments: [{ pageId: 'pg1', nodeId: list.id, body: '' }],
       }),
     ).filter((issue) => issue.rule === 'comment-missing')
 
@@ -96,7 +96,7 @@ describe('① 코멘트가 없는 주요 컴포넌트', () => {
           page({ document: doc([list]) }),
           page({ id: 'pg2', title: '상세', target: 'page:관리자/회원/상세', document: doc([other]) }),
         ],
-        comments: [{ pageId: 'pg2', nodeId: list.id }],
+        comments: [{ pageId: 'pg2', nodeId: list.id, body: '' }],
       }),
     ).filter((issue) => issue.rule === 'comment-missing')
 
@@ -610,6 +610,8 @@ describe('표를 덮는다 (D6)', () => {
             ]),
           }),
         ],
+        // 끊긴 코멘트 토큰(`comment-token-broken`) — 프로젝트에 없는 페이지를 가리킨다.
+        comments: [{ pageId: 'pg2', nodeId: 'x', body: '[옛](wb:page/99999999-9999-4999-8999-999999999999)' }],
         codes: [
           {
             key: 'S',
