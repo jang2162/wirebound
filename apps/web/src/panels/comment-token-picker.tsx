@@ -8,6 +8,10 @@
  * | Enter · 누름 | 고른다 |
  * | Escape | 닫는다 — 친 `#…` 는 보통 글로 남는다(그 `#` 로는 다시 안 열린다) |
  *
+ * **`#` 를 친 입력에서만 연다** — 캐럿을 옮겨 이미 든 `#`(보통 글 `#12` · 든 토큰의 라벨 `[#1](…)`) 뒤에 서는 것으로는 안 연다. 그 자리에서 친 Enter 는
+ * 줄을 바꾼다. 연 `#` 는 그 `#` 뒤에 캐럿이 머무는 동안만 산다 — 캐럿이 `#` 앞으로 나가거나 다른 `#` 뒤로 가면 닫히고 다시 안 열린다. 토큰 원문
+ * 안(`parseCommentBody` 가 토큰으로 읽는 구간)에 친 `#` 로도 안 연다 — 고르면 토큰 안에 토큰이 들어 본문이 깨진다.
+ *
  * **한글 조합 중에는 열지도 고르지도 않는다** — 조합 중의 Enter 는 조합을 끝내는 키다(`isComposing` · `compositionstart` ~ `compositionend` 둘 다
  * 본다 — Chrome 은 조합을 끝내는 Enter 의 `keydown` 에 `isComposing: true` 를 싣지만, 끝난 뒤의 `compositionend` 와의 차례는 브라우저마다 다르다).
  * 조합이 끝난 뒤 그 글로 거른다.
@@ -18,6 +22,7 @@ import { useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type 
 import {
   COMMENT_BODY_MAX_LENGTH,
   formatCommentToken,
+  parseCommentBody,
   isolateBidi,
   markerKey,
   type CommentTokenContext,
@@ -61,6 +66,24 @@ export function hashQuery(value: string, caret: number): { start: number; query:
   const prev = start === 0 ? '' : before[start - 1]!
   if (prev !== '' && !/[\s(（[]/u.test(prev)) return null
   return { start, query }
+}
+
+/** `at` 이 토큰 원문(`[` ~ `)`) 안쪽인가 — 첫 `[` 자리는 안쪽이 아니다(토큰 앞에 친 글). */
+export function insideToken(value: string, at: number): boolean {
+  let offset = 0
+  for (const segment of parseCommentBody(value)) {
+    const length = segment.type === 'text' ? segment.text.length : segment.raw.length
+    if (segment.type === 'token' && at > offset && at < offset + length) return true
+    offset += length
+  }
+  return false
+}
+
+/** 앞 글과 새 글이 머리에서 같은 글자 수 — 새 글에서 그 뒤가 이번 입력이 바꾼 자리다. */
+function commonPrefix(before: string, after: string): number {
+  let at = 0
+  while (at < before.length && at < after.length && before[at] === after[at]) at += 1
+  return at
 }
 
 /** 컨텍스트 · 색인에서 후보 다섯 무리를 짓는다. 이름 글은 풀린 모양과 같은 꼴이다(`resolveCommentTokens`). */
@@ -134,7 +157,7 @@ export interface TokenPicker {
     'aria-controls'?: string
     'aria-activedescendant'?: string
   }
-  /** 글이 바뀐 뒤 부른다(상자의 `onChange` 끝에서) — 연 자리를 다시 본다. */
+  /** 글이 바뀐 뒤 부른다(상자의 `onChange` 끝에서) — 이번 입력이 `#` 를 넣었으면 열고, 아니면 연 자리를 다시 본다. */
   sync: (value: string, caret: number) => void
   /** 목록 · 한 줄 말. 닫혔으면 `null`. */
   list: ReactElement | null
@@ -154,19 +177,23 @@ export function useTokenPicker(options: {
   const { id, value, setValue, inputRef, context, index } = options
   const composing = useRef(false)
   const [open, setOpen] = useState<{ start: number; query: string } | null>(null)
-  // Escape 로 닫은 `#` 의 자리 — 그 `#` 로는 다시 안 연다.
-  const dismissed = useRef<number | null>(null)
+  // 친 입력이 연 `#` 의 자리(머리말 «`#` 를 친 입력에서만 연다»). Escape · 캐럿이 떠남은 이것을 비워 그 `#` 로는 다시 안 연다.
+  const armed = useRef<number | null>(null)
   const [active, setActive] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
 
   const all = useMemo(() => (context === null ? [] : tokenCandidates(context, index)), [context, index])
   const shown = useMemo(() => (open === null ? [] : filterCandidates(all, open.query)), [all, open])
 
-  const sync = (text: string, caret: number): void => {
-    if (composing.current || context === null) return
+  const update = (text: string, caret: number, typed: boolean): void => {
+    if (context === null) return
     const found = hashQuery(text, caret)
-    if (found === null || found.start === dismissed.current) {
-      if (found === null) dismissed.current = null
+    // `value` 는 이 입력 앞의 글이다(상자가 아직 다시 안 그렸다) — 연 `#` 가 이번 입력이 넣은 글자면 친 것이다. 조합 중에 든 `#` 도 적어 두고
+    // 여는 것은 조합이 끝난 뒤다(`onCompositionEnd` 의 `resync`).
+    if (typed && found !== null && found.start >= commonPrefix(value, text) && !insideToken(text, found.start)) armed.current = found.start
+    if (composing.current) return
+    if (found === null || found.start !== armed.current) {
+      armed.current = null
       setOpen(null)
       return
     }
@@ -177,9 +204,12 @@ export function useTokenPicker(options: {
     setNotice(null)
   }
 
+  const sync = (text: string, caret: number): void => update(text, caret, true)
+
+  // 캐럿이 옮겨진 때 · 조합이 끝난 때 — 연 것을 닫거나 거를 수만 있고 새로 열지는 않는다.
   const resync = (): void => {
     const input = inputRef.current
-    if (input !== null) sync(input.value, input.selectionStart ?? input.value.length)
+    if (input !== null) update(input.value, input.selectionStart ?? input.value.length, false)
   }
 
   const pick = (candidate: Candidate): void => {
@@ -222,7 +252,7 @@ export function useTokenPicker(options: {
     if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      dismissed.current = open.start
+      armed.current = null
       setOpen(null)
     }
   }

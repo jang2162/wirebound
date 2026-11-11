@@ -5,6 +5,8 @@
  * | 무엇이 거짓이면 죽나 |
  * |---|
  * | M1 페이지 제목의 방향 제어 글자(RLO)가 토큰 뒤의 글(«끝 글»)까지 뒤집는다 |
+ * | M3 고치는 상자에서 든 토큰의 라벨 «#1» 뒤로 캐럿만 옮겨도 목록이 서고 Enter 가 후보를 골라 본문을 깬다 |
+ * | M3 보통 글 «#12» 뒤로 캐럿을 옮겨 친 Enter 가 줄을 안 바꾸고 후보를 고른다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -102,6 +104,66 @@ describe.skipIf(!전제.ok)('코멘트 토큰 리뷰 대응 — 실브라우저'
       expect(order.at).toBeGreaterThanOrEqual(0)
       // 왼쪽에서 오른쪽으로 «끝» 이 «글» 보다 앞에 선다.
       expect(order.end).toBeLessThan(order.geul)
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('M3 — 고치는 상자에서 든 토큰 라벨 뒤로 캐럿만 옮기면 목록이 안 서고 Enter 는 줄을 바꾼다', async () => {
+    const p = await project()
+    const list = await page(p.id, p.menu, '목록', [{ id: 'n_a', type: 'Text', props: { content: '목록 글' } }])
+    await post(p.id, list, 'n_a', '먼저 단 말')
+    const editable = await post(p.id, list, 'n_a', `[#1](wb:comment/${list}/n_a) 뒤 글`)
+
+    const { context, page: tab } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+    try {
+      await openComments(tab, p.id, list, 'n_a')
+      await tab.locator('.wb-shell-comment', { hasText: '뒤 글' }).getByRole('button', { name: '수정' }).click()
+      const box = tab.locator(`#wb-comment-edit-${editable}`)
+      await box.waitFor()
+      const raw = await box.inputValue()
+      const caret = raw.indexOf('#1') + 2
+      await box.click()
+      await tab.keyboard.press('Meta+ArrowUp')
+      for (let i = 0; i < caret; i++) await tab.keyboard.press('ArrowRight')
+      await tab.waitForTimeout(300)
+      // 판 카나리아 — 캐럿이 «#1» 뒤에 섰다.
+      expect(await box.evaluate((el: HTMLTextAreaElement) => el.selectionStart)).toBe(caret)
+      expect(await tab.locator(PICKER).count()).toBe(0)
+      await tab.keyboard.press('Enter')
+      await tab.waitForTimeout(300)
+      expect(await box.inputValue()).toBe(`${raw.slice(0, caret)}\n${raw.slice(caret)}`)
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('M3 — 보통 글 «#12» 뒤로 캐럿을 옮겨 친 Enter 는 줄을 바꾼다', async () => {
+    const p = await project()
+    const list = await page(p.id, p.menu, '목록', [{ id: 'n_a', type: 'Text', props: { content: '목록 글' } }])
+    // «12» 로 걸리는 후보가 있다 — 고치기 전 판에서는 Enter 가 이것을 골랐다.
+    await page(p.id, p.menu, '상세 12', [{ id: 'n_d', type: 'Text', props: { content: 'd' } }])
+    const editable = await post(p.id, list, 'n_a', '이슈 #12 참고')
+
+    const { context, page: tab } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+    try {
+      await openComments(tab, p.id, list, 'n_a')
+      await tab.locator('.wb-shell-comment', { hasText: '참고' }).getByRole('button', { name: '수정' }).click()
+      const box = tab.locator(`#wb-comment-edit-${editable}`)
+      await box.waitFor()
+      const raw = await box.inputValue()
+      const caret = raw.indexOf('#12') + 3
+      await box.click()
+      await tab.keyboard.press('Meta+ArrowUp')
+      for (let i = 0; i < caret; i++) await tab.keyboard.press('ArrowRight')
+      await tab.waitForTimeout(300)
+      expect(await box.evaluate((el: HTMLTextAreaElement) => el.selectionStart)).toBe(caret)
+      await tab.keyboard.press('Enter')
+      await tab.waitForTimeout(300)
+      expect(await box.inputValue()).toBe(`${raw.slice(0, caret)}\n${raw.slice(caret)}`)
+      // 대조 — 새로 친 `#` 로는 목록이 선다.
+      await tab.keyboard.type(' #')
+      await tab.locator(PICKER).waitFor()
     } finally {
       await context.close()
     }

@@ -151,6 +151,30 @@ describe('# 자동완성', () => {
     await waitFor(() => expect(screen.getByText(PICK_TOO_LONG)).toBeTruthy())
     expect(box.value).toBe(long)
   })
+
+  it('토큰 원문 안에 친 # 로는 안 연다 — 토큰 앞에 친 # 로는 연다(RV-TK M3)', async () => {
+    const { box } = await stage()
+    const raw = formatCommentToken('1', { kind: 'page', pageId: DETAIL })
+    type(box, `${raw} 끝`)
+    box.focus()
+    fireEvent.change(box, { target: { value: `[#${raw.slice(1)} 끝`, selectionStart: 2, selectionEnd: 2 } })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    // 대조 — 같은 글의 머리(토큰 앞)에 친 `#`.
+    fireEvent.change(box, { target: { value: `#${raw} 끝`, selectionStart: 1, selectionEnd: 1 } })
+    await waitFor(() => expect(options().length).toBeGreaterThan(0))
+  })
+
+  it('캐럿을 옮겨 든 # 뒤에 서는 것으로는 안 연다(RV-TK M3)', async () => {
+    const { box } = await stage()
+    type(box, '이슈 #상세')
+    await waitFor(() => expect(options().length).toBeGreaterThan(0))
+    // 친 `#` 가 연 목록은 캐럿이 `#` 앞으로 나가면 닫히고, 다시 그 뒤로 와도 안 열린다.
+    fireEvent.select(box, { target: { selectionStart: 0, selectionEnd: 0 } })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.select(box, { target: { selectionStart: 6, selectionEnd: 6 } })
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
   it('후보 라벨의 방향 제어 글자는 보일 때 가두고 토큰 원문에는 이름 그대로 적는다(RV-TK M1)', async () => {
     const RLO = String.fromCharCode(0x202e)
     const { box } = await stage({
