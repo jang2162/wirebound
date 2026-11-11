@@ -75,6 +75,8 @@ import { SessionNotices, useLogout } from '../session/session-menu'
 import { useSessionUser } from '../session/session-context'
 import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
 import { ProjectCodesProvider, useProjectCodes } from '../codes/project-codes'
+import { ProjectCommentIndexProvider, useCommentIndex } from '../comments/comment-index'
+import { CommentFocusContext, useCommentFocus, type CommentFocus } from '../comments/comment-focus'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
   EditorStore,
@@ -529,14 +531,17 @@ export function EditorShellRoute(): ReactElement {
         <ProjectThemeProvider projectId={state.project.id}>
           {/* **공통코드 표**(`codes/project-codes.tsx`) — 캔버스 · 팝업 층 · 속성 패널이 읽고, 셸이 `codes-changed` 로 다시 읽게 한다. */}
           <ProjectCodesProvider projectId={state.project.id}>
-            {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
-            <PlacementRegionsProvider>
-              {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
+            {/* **코멘트 번호 색인**(`comments/comment-index.tsx`) — 코멘트 본문의 토큰을 지금의 이름 · 번호로 푼다. */}
+            <ProjectCommentIndexProvider projectId={state.project.id} pageId={params.pageId}>
+              {/* 끌기의 두 대상(구조 트리 · 캔버스)을 경로 층이 아는 통로(`drag/use-placement.ts`) — 둘의 공통 조상이 셸이다. */}
+              <PlacementRegionsProvider>
+                {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
-              <ViewStateProvider pageId={params.pageId}>
-                <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
-              </ViewStateProvider>
-            </PlacementRegionsProvider>
+                <ViewStateProvider pageId={params.pageId}>
+                  <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
+                </ViewStateProvider>
+              </PlacementRegionsProvider>
+            </ProjectCommentIndexProvider>
           </ProjectCodesProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
@@ -550,24 +555,30 @@ export function EditorShellRoute(): ReactElement {
  * 한 번 고르고 질의를 걷는다(`replace` — 뒤로 가기에 남기지 않는다 · 다시 고르지 않는다). 문서에 없는 id 는 고르지 않고 걷기만 한다. 남이 잠근
  * 노드는 `selectNode` 가 안 고른다(「소프트 잠금」).
  */
-function useNodeFromAddress(pageId: string | undefined): void {
+function useNodeFromAddress(pageId: string | undefined, onComment: (nodeId: string) => void): void {
   const store = useEditorStoreInstance()
   const [params, setParams] = useSearchParams()
   const wanted = params.get('node')
+  // 번호 토큰이 데려왔다(`?comment=1` — `panels/comment-body.tsx` 의 `commentTokenHref`) — 고른 뒤 코멘트 탭의 그 묶음으로 간다.
+  const toComment = params.get('comment') !== null
   // 주소의 페이지와 대조한 문서다 — 다른 페이지의 문서에서 고르지 않는다.
   const document = useOpenDocument(pageId)
   useEffect(() => {
     if (wanted === null || document === null) return
-    if (findNode(document.root, wanted) !== undefined) store.selectNode(wanted)
+    if (findNode(document.root, wanted) !== undefined) {
+      store.selectNode(wanted)
+      if (toComment) onComment(wanted)
+    }
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev)
         next.delete('node')
+        next.delete('comment')
         return next
       },
       { replace: true },
     )
-  }, [wanted, document, store, setParams])
+  }, [wanted, toComment, document, store, setParams, onComment])
 }
 
 function EditorShell(props: {
@@ -580,7 +591,12 @@ function EditorShell(props: {
 }): ReactElement {
   const store = useEditorStoreInstance()
   const mode = useEditorStore(store, (s) => s.mode)
-  useNodeFromAddress(props.pageId)
+  /** 번호 토큰이 데려온 묶음(`comments/comment-focus.tsx`) — 우측 패널 · 코멘트 패널이 읽는다. */
+  const [commentFocus, setCommentFocus] = useState<CommentFocus | null>(null)
+  useNodeFromAddress(
+    props.pageId,
+    useCallback((nodeId: string) => setCommentFocus((last) => ({ nodeId, at: (last?.at ?? 0) + 1 })), []),
+  )
   /**
    * 이 사람이 이 프로젝트에 무엇을 할 수 있나 — **역할을 읽는 곳은 이 셸의 이 줄이다**(`projects/project-actions.ts`).
    * 역할은 **실행 중에 바뀐다** — 라우트가 프로젝트를 다시 읽으면 이 줄이 새 값으로 다시 돈다. 모르면
@@ -731,14 +747,27 @@ function EditorShell(props: {
    */
   const theme = useProjectTheme()
   const codes = useProjectCodes()
+  // 코멘트 토큰의 이름 · 번호 — 메뉴 · 공통코드가 바뀌거나 다시 붙으면 색인도 다시 읽는다(`comments/comment-index.tsx` 머리말의 표).
+  const commentIndex = useCommentIndex()
+  const reloadIndex = commentIndex.reload
   useRealtime(
     props.project.id,
+    // 다시 붙음의 색인 다시 읽기는 코멘트 신호(`setup.comments.emit()`)가 낸다.
     useCallback(() => setResyncToken((token) => token + 1), []),
     // **역할은 룸에 들 때마다 다시 읽는다**(`MembershipCause` — 끊긴 동안의 `membership-changed`도 사라졌다).
     props.onMembership,
     theme.applyFrame,
-    onMenuChanged,
-    codes.reload,
+    useCallback(
+      (rev: number) => {
+        onMenuChanged(rev)
+        reloadIndex()
+      },
+      [onMenuChanged, reloadIndex],
+    ),
+    useCallback(() => {
+      codes.reload()
+      reloadIndex()
+    }, [codes.reload, reloadIndex]),
   )
   /**
    * **테마를 따라잡는다** — 라우트의 다시 읽기(룸에 듦 · 다시 붙음 · 멤버십 신호)가 받은 `themeRev` 가 쥔 바인딩보다 새것이면 다시 읽는다.
@@ -1174,13 +1203,15 @@ function EditorShell(props: {
             style={{ width: `${layout.panelWidth}px` }}
           >
             {/* **본문 넷이 같은 `canEdit`을 받는다** — 속성 · 상호작용은 끄고, 코멘트 폼 · 설명 편집기는 숨긴다. */}
-            <RightPanel
-              projectId={props.project.id}
-              pageId={props.pageId}
-              canEdit={canEdit}
-              restoredToken={restoredToken}
-              menuRev={menuRev}
-            />
+            <CommentFocusContext.Provider value={commentFocus}>
+              <RightPanel
+                projectId={props.project.id}
+                pageId={props.pageId}
+                canEdit={canEdit}
+                restoredToken={restoredToken}
+                menuRev={menuRev}
+              />
+            </CommentFocusContext.Provider>
           </aside>
         </div>
       </CanvasPickProvider>
@@ -1233,6 +1264,11 @@ function RightPanel(props: {
   // **캔버스에서 노드를 눌러 고르면 «컴포넌트» 탭이다**(설계서 「설계서 화면 구조」). 고른 것이 바뀐 것을 보지 않고 누름의 신호를 받는다 — 트리 줄 ·
   // 키보드 · 넣은 뒤 저절로 고름은 탭을 안 옮긴다(`shell/canvas-pick.tsx`). 뷰 모드는 그 탭이 없고 캔버스도 고르지 않는다.
   useOnCanvasPick(useCallback(() => setChosen('component'), []))
+  // 번호 토큰이 데려왔으면 «코멘트» 탭이다(`comments/comment-focus.tsx`) — 두 모드에 다 있다.
+  const commentFocus = useCommentFocus()
+  useEffect(() => {
+    if (commentFocus !== null) setChosen('comments')
+  }, [commentFocus])
 
   const tabs = PANEL_TABS[mode]
   // 고른 탭이 이 모드에 없으면 첫 탭이다(위 머리말의 판정). **`chosen`을 고치지 않는다** —

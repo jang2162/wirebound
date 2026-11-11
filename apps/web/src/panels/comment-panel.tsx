@@ -140,7 +140,10 @@
  * `api/http-client.ts`의 `SHAPES.comment`에서 이미 끊는다), 문서 순회는 던지지 않는
  * `walkSafely`를 쓴다.
  */
-import { useCallback, useEffect, useRef, type ReactElement } from 'react'
+import { useCommentTokenContext } from '../comments/comment-index'
+import { COMMENT_FLASH_MS, useCommentFocus } from '../comments/comment-focus'
+import { CommentBody } from './comment-body'
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { nodeAlias, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
@@ -672,6 +675,32 @@ export function CommentPanel(props: {
   const [refreshing, setRefreshing] = usePanelSlot(REFRESH)
 
   const { projectId, pageId } = props
+  // 본문의 토큰을 지금의 이름 · 번호로 푼다(`panels/comment-body.tsx`).
+  const tokenContext = useCommentTokenContext(pageId)
+  /**
+   * **번호 토큰이 데려온 묶음**(`comments/comment-focus.tsx`) — 목록에 그 노드의 묶음이 서면 한 번 굴려 `COMMENT_FLASH_MS` 동안 강조한다. 목록이
+   * 아직이면 설 때까지 기다린다(`at` 으로 한 번만). 그 노드에 코멘트가 없으면(번호가 걷힘) 노드를 고른 것으로 끝난다.
+   */
+  const focus = useCommentFocus()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const flashed = useRef(0)
+  const [flash, setFlash] = useState<{ nodeId: string; at: number } | null>(null)
+  const listed = state.status === 'ready' ? state.comments : null
+  useEffect(() => {
+    if (focus === null || flashed.current === focus.at || listed === null) return
+    if (!listed.some((comment) => comment.nodeId === focus.nodeId)) return
+    flashed.current = focus.at
+    setFlash({ nodeId: focus.nodeId, at: focus.at })
+  }, [focus, listed])
+  useEffect(() => {
+    if (flash === null) return
+    const row = [...(rootRef.current?.querySelectorAll<HTMLElement>('[data-comment-node]') ?? [])].find(
+      (element) => element.dataset['commentNode'] === flash.nodeId,
+    )
+    row?.scrollIntoView?.({ block: 'nearest' })
+    const timer = setTimeout(() => setFlash(null), COMMENT_FLASH_MS)
+    return () => clearTimeout(timer)
+  }, [flash])
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
   const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
 
@@ -1124,7 +1153,7 @@ export function CommentPanel(props: {
   const refreshNotice = refreshing !== null && refreshing.at > state.at ? refreshing : null
 
   return (
-    <div className="wb-shell-comments">
+    <div className="wb-shell-comments" ref={rootRef}>
       {/* **폼째 뺀다**(`canEdit`). 폼 안의 통지(실패 · 확인 중 · 어긋남)도 함께 가는데, 그것들은 전부 **내가 낸 쓰기**의
           뒷말이다. viewer 가 쓰기를 못 내는 것은 폼만의 일이 아니다 — 줄마다의 수정 상자도 `editing`(위)이 막아야 참이다.
           막지 않으면 저장소에서 되살아난 수정 상자가 폼 **밖**에서 쓰기를 내고, 그 실패가 설 자리는 뺀 폼 안이다.
@@ -1232,6 +1261,8 @@ export function CommentPanel(props: {
             <li
               key={group.nodeId}
               className="wb-shell-comment-group"
+              data-comment-node={group.nodeId}
+              {...(flash?.nodeId === group.nodeId ? { 'data-flash': '' } : {})}
               // 고른 노드의 무리에 표시를 단다. `aria-current`는 "여럿 중 지금 것"을
               // 뜻하는 표준 자리라 보조 기술도 그대로 읽는다.
               {...(group.nodeId === selectedNodeId ? { 'aria-current': true as const } : {})}
@@ -1277,7 +1308,7 @@ export function CommentPanel(props: {
                       </>
                     ) : (
                       <>
-                        <p className="wb-shell-comment-body">{comment.body}</p>
+                        <CommentBody body={comment.body} context={tokenContext} projectId={projectId} />
                         {/* **수정은 작성자만 부를 수 있다**(남이 부르면 서버가
                             403으로 막는다). 눌러 봐야 실패할 버튼을 두지 않는다. */}
                         {props.canEdit && currentUser !== null && comment.authorId === currentUser.id && (

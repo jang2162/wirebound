@@ -476,6 +476,13 @@ const ENDPOINTS: Array<{
     call: (c) => c.listComments('p1', 'pg1'),
   },
   {
+    client: 'commentIndex',
+    url: '/api/projects/p1/comments/index',
+    method: 'GET',
+    body: { pages: [], markers: [] },
+    call: (c) => c.commentIndex('p1'),
+  },
+  {
     client: 'createComment',
     url: '/api/projects/p1/pages/pg1/comments',
     method: 'POST',
@@ -964,6 +971,15 @@ const SHAPE_CASES: Array<{
   // **`id`가 빈 문자열이면 막는다** — 그 값이 수정·삭제 요청의 경로가 된다
   // (주소가 되지는 않지만 **요청 경로가 되는** 값).
   { shape: 'commentList', broken: [{ ...comment, id: '' }], ok: [comment], call: (c) => c.listComments('p1', 'pg1') },
+  {
+    shape: 'commentIndex',
+    broken: { pages: [{ id: 'pg1' }], markers: [] },
+    ok: {
+      pages: [{ id: 'pg1', title: '목록', menuPath: '' }],
+      markers: [{ pageId: 'pg1', nodeId: 'n1', marker: 1, nodeName: '글', firstComment: '' }],
+    },
+    call: (c) => c.commentIndex('p1'),
+  },
   // **`markerOps`가 배열이 아니면 막는다** — 그 값이 그대로 `applyOps`에 들어간다
   // (`patchResult.inverse`와 같은 하중).
   {

@@ -105,6 +105,8 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
      * 재는 케이스는 덮어쓴다.
      */
     listComments: async () => [],
+    /** 빈 색인이 기본이다 — 셸이 설 때 늘 읽는다(`src/comments/comment-index.tsx`). 토큰을 푸는 케이스가 덮어쓴다. */
+    commentIndex: async () => ({ pages: [], markers: [] }),
     createComment: notStubbed('createComment'),
     updateComment: notStubbed('updateComment'),
     deleteComment: notStubbed('deleteComment'),

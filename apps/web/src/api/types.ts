@@ -343,6 +343,15 @@ export type RevisionInverse = Omit<RevisionSummary, 'ops'>
  * `authorName`은 **지금** 그 사람의 이름이다(서버가 조인해서 낸다) — `RevisionSummary`의
  * `actorLabel`이 편집 시점의 스냅샷인 것과 갈린다.
  */
+/**
+ * 코멘트 토큰을 푸는 프로젝트 전체의 번호 색인(`GET …/comments/index` — `apps/api/README.md`). `markers` 는 코멘트가 달린 노드와 이 프로젝트 코멘트의
+ * 토큰이 가리키는 노드만이다 — 번호가 걷힌 노드는 `marker: null`.
+ */
+export interface CommentIndex {
+  pages: { id: string; title: string; menuPath: string }[]
+  markers: { pageId: string; nodeId: string; marker: number | null; nodeName: string; firstComment: string }[]
+}
+
 export interface Comment {
   id: string
   nodeId: string
