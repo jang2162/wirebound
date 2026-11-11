@@ -7,6 +7,7 @@
  * | M1 페이지 제목의 방향 제어 글자(RLO)가 토큰 뒤의 글(«끝 글»)까지 뒤집는다 |
  * | M3 고치는 상자에서 든 토큰의 라벨 «#1» 뒤로 캐럿만 옮겨도 목록이 서고 Enter 가 후보를 골라 본문을 깬다 |
  * | M3 보통 글 «#12» 뒤로 캐럿을 옮겨 친 Enter 가 줄을 안 바꾸고 후보를 고른다 |
+ * | L3 자동완성 덧말의 첫 코멘트 앞머리에 토큰 원문(`wb:` · 날 id)이 보인다 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -164,6 +165,30 @@ describe.skipIf(!전제.ok)('코멘트 토큰 리뷰 대응 — 실브라우저'
       // 대조 — 새로 친 `#` 로는 목록이 선다.
       await tab.keyboard.type(' #')
       await tab.locator(PICKER).waitFor()
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('L3 — 자동완성 덧말의 첫 코멘트는 토큰을 푼 글이다(날 id 없음)', async () => {
+    const p = await project()
+    const list = await page(p.id, p.menu, '목록', [{ id: 'n_a', type: 'Text', props: { content: '목록 글' } }])
+    const detail = await page(p.id, p.menu, '상세', [{ id: 'n_d', type: 'Text', props: { content: 'd' } }])
+    await post(p.id, list, 'n_a', `저기 [x](wb:page/${detail}) 보세요`)
+
+    const { context, page: tab } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+    try {
+      await openComments(tab, p.id, list, 'n_a')
+      const box = tab.getByLabel('새 코멘트', { exact: true })
+      await poll('상자가 열린다', () => box.isEnabled(), Boolean)
+      await box.click()
+      await tab.keyboard.type('#')
+      await tab.locator(PICKER).waitFor()
+      const hints = await tab.locator(`${PICKER} [role="option"] .wb-shell-comment-picker-hint`).allTextContents()
+      // 판 카나리아 — 이 페이지 번호(#1)의 덧말이 섰다.
+      expect(hints.length).toBeGreaterThan(0)
+      expect(hints.find((hint) => hint.includes('저기'))).toContain('저기 상세 보세요')
+      expect(hints.join('\n')).not.toContain('wb:')
     } finally {
       await context.close()
     }

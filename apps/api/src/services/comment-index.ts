@@ -9,7 +9,9 @@
  */
 import {
   buildMarkerIndex,
+  commentTokenText,
   indexCodes,
+  isolateBidi,
   markerKey,
   migrateDocument,
   parseCommentBody,
@@ -53,12 +55,17 @@ export async function readCommentIndex(db: DbHandle, projectId: string): Promise
   }
   const nodes = buildMarkerIndex(documents, codes)
 
-  // 가장 이른 코멘트 — `listProjectComments` 가 `created_at` 오름차순이라 처음 본 것이다.
+  const pages = new Map(records.map((page) => [page.id, { title: page.title, menuPath: menuPathById.get(page.id) ?? '' }]))
+  // 가장 이른 코멘트 — `listProjectComments` 가 `created_at` 오름차순이라 처음 본 것이다. **토큰을 푼 글이다**(`commentTokenText`) — 원문이면
+  // 자동완성 덧말에 토큰 원문 · 날 id 가 보인다(설계 «반-목표»). 앞머리로 자른 뒤 방향을 다시 가둔다 — 자른 자리가 격리의 끝 글자를 떨굴 수 있다.
   const first = new Map<string, string>()
   const wanted = new Set<string>()
   for (const comment of comments) {
     const key = markerKey(comment.pageId, comment.nodeId)
-    if (!first.has(key)) first.set(key, comment.body)
+    if (!first.has(key)) {
+      const text = commentTokenText(comment.body, { currentPageId: comment.pageId, pages, markers: nodes, codes }, false)
+      first.set(key, isolateBidi([...text].slice(0, FIRST_COMMENT_PREVIEW).join('')))
+    }
     wanted.add(key)
     for (const segment of parseCommentBody(comment.body)) {
       if (segment.type === 'token' && segment.target.kind === 'comment') wanted.add(markerKey(segment.target.pageId, segment.target.nodeId))
@@ -76,13 +83,13 @@ export async function readCommentIndex(db: DbHandle, projectId: string): Promise
       nodeId: key.slice(cut + 1),
       marker: entry.marker,
       nodeName: entry.nodeName,
-      firstComment: [...(first.get(key) ?? '')].slice(0, FIRST_COMMENT_PREVIEW).join(''),
+      firstComment: first.get(key) ?? '',
     })
   }
   markers.sort((a, b) => (order.get(a.pageId) ?? 0) - (order.get(b.pageId) ?? 0))
 
   return {
-    pages: records.map((page) => ({ id: page.id, title: page.title, menuPath: menuPathById.get(page.id) ?? '' })),
+    pages: [...pages].map(([id, page]) => ({ id, ...page })),
     markers,
   }
 }

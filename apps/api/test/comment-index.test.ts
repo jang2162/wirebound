@@ -83,6 +83,19 @@ describe('GET .../comments/index', () => {
     })
   })
 
+  it('첫 코멘트 앞머리는 토큰을 푼 글이다 — 토큰 원문 · 날 id 가 안 보인다(RV-TK L3)', async () => {
+    await withApi(async (ctx) => {
+      const fx = await setup(ctx)
+      const page = formatCommentToken('옛', { kind: 'page', pageId: fx.detail.id })
+      const gone = formatCommentToken('사라진 쪽', { kind: 'page', pageId: '99999999-9999-4999-8999-999999999999' })
+      await comment(ctx, fx.owner.cookie, fx.project.id, fx.list.id, 'n_a', `저기 ${page} 와 ${gone} 보세요`)
+
+      const body = (await index(ctx, fx.owner.cookie, fx.project.id)).json()
+      const first = body.markers.find((m: { nodeId: string; pageId: string }) => m.pageId === fx.list.id && m.nodeId === 'n_a').firstComment
+      expect(first).toBe('저기 회원 상세 와 사라진 쪽 (찾을 수 없음) 보세요')
+    })
+  })
+
   it('재번호 뒤에는 새 번호다', async () => {
     await withApi(async (ctx) => {
       const fx = await setup(ctx)
