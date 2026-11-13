@@ -13,7 +13,16 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  dragLayoutSettled,
+  editorStackPrerequisite,
+  poll,
+  shownDrops,
+  startEditorStack,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -166,10 +175,12 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
     try {
       const rowsBefore = await treeRows(page).count()
       const lastBefore = await nodeBox(page, 'n_last')
+      // 겨눌 자리 · 밀림의 기준은 끌기가 서고 배치가 선 뒤에 잰다 — 끌기 시작에 서는 빈 구역 칸이 노드를 민다(`./editor-stack.ts` 의 `dragLayoutSettled`).
+      await grabCard(page, 'Divider')
+      await dragLayoutSettled(page)
       const intxBefore = await nodeBox(page, 'n_intx')
       const into = await spotIn(page, 'n_empt', 0.5, 0.5)
       const front = await spotIn(page, 'n_intx', 0.5, 0.1)
-      await grabCard(page, 'Divider')
       await page.mouse.move(into.x, into.y, { steps: 8 })
       const inside = { drops: await shownDrops(page), look: await previewLook(page) }
       await page.mouse.move(front.x, front.y, { steps: 8 })
@@ -353,11 +364,12 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
         })
       const outlineBefore = await outline()
       const markerBefore = await marker()
-      const into = await spotIn(page, 'n_empt', 0.5, 0.5)
       const h = (await handle.boundingBox())!
       await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2)
       await page.mouse.down()
       await page.mouse.move(h.x + h.width / 2 + 3, h.y + h.height / 2 + 6, { steps: 3 })
+      await dragLayoutSettled(page)
+      const into = await spotIn(page, 'n_empt', 0.5, 0.5)
       await page.mouse.move(into.x, into.y, { steps: 8 })
       const during = {
         drops: (await shownDrops(page)).map((d) => `${d.kind}:${d.at}`),
@@ -465,8 +477,9 @@ describe.skipIf(!전제.ok)('배치 미리보기 — 실브라우저', () => {
     const P = await fixture('pv-remote')
     const { page, close } = await openEditor(P)
     try {
-      const into = await spotIn(page, 'n_empt', 0.5, 0.5)
       await grabCard(page, 'Divider')
+      await dragLayoutSettled(page)
+      const into = await spotIn(page, 'n_empt', 0.5, 0.5)
       await page.mouse.move(into.x, into.y, { steps: 8 })
       const armed = (await shownDrops(page)).map((d) => `${d.kind}:${d.at}`)
       const bob = await stack.login(stack.users.bob)

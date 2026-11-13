@@ -243,13 +243,14 @@ describe.skipIf(!전제.ok)('계산 비용 — 실브라우저', () => {
         while (!(${allInside}) && performance.now() - started < 8000) await new Promise((resolve) => requestAnimationFrame(resolve))
         return { ms: Math.round(performance.now() - started), cards: document.querySelectorAll('[data-wb-palette-card]').length, long: window.__long.slice() }
       })()`)
-      // 프로젝트 소유자가 토큰을 저장(테마 저장은 owner 의 몫이라 같은 사용자가 다른 탭처럼 저장한다) — 첫 단추 표본 색이 바뀔 때까지.
+      // 프로젝트 소유자가 토큰을 저장(테마 저장은 owner 의 몫이라 같은 사용자가 다른 탭처럼 저장한다) — 링크 표본의 글 색(주색을 따르는 표지 —
+      // 기본테마의 기본 단추는 흰 단추라 주색을 안 쓴다)이 바뀔 때까지.
       const brand = '#123456'
-      await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Button')
-      await page.locator('[data-wb-palette-card="Button"]').waitFor()
-      const colorOf = `(() => { const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument; const b = doc?.querySelector('[data-wb-palette-thumb="Button"] [data-wb-component="Button"]'); return b == null ? '' : getComputedStyle(b).backgroundColor })()`
+      await page.getByRole('searchbox', { name: '컴포넌트 찾기' }).fill('Link')
+      await page.locator('[data-wb-palette-card="Link"]').waitFor()
+      const colorOf = `(() => { const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument; const b = doc?.querySelector('[data-wb-palette-thumb="Link"] [data-wb-component="Link"]'); return b == null ? '' : getComputedStyle(b).color })()`
       await poll(
-        '단추 표본',
+        '링크 표본',
         async () => String(await page.evaluate(colorOf)),
         (value) => value !== '',
       )

@@ -941,7 +941,8 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       ])
 
       const card = await nodeBox(a.page, id(0))
-      const pane = { x: card.x - 20, y: card.y + card.height / 2 }
+      // 문서 옆 칸 여백 — 문서에서 넉넉히 뗀다. 문서 곁 몇 px 은 고른 노드의 손잡이(`.wb-shell-canvas-handle` — 노드 왼쪽 위)가 설 수 있다(글 줄이 낮은 테마).
+      const pane = { x: card.x - 120, y: card.y + card.height / 2 }
       const inPane = await a.page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className ?? null, pane)
       await a.page.mouse.move(pane.x, pane.y)
       await a.page.mouse.down()
@@ -951,7 +952,14 @@ describe.skipIf(!전제.ok)('E2 여러 노드 선택 — 실브라우저', () =>
       await a.page.mouse.up()
       await a.page.waitForTimeout(150)
       const margin = (await picked(a.page)).all
-      expect({ drawn, six, ten, trackpad, inPane: inPane?.includes('wb-shell-canvas') ?? false, margin }).toEqual({
+      expect({
+        drawn,
+        six,
+        ten,
+        trackpad,
+        inPane: inPane?.split(/\s+/).some((name) => name === 'wb-shell-canvas' || name === 'wb-shell-canvas-surface') ?? false,
+        margin,
+      }).toEqual({
         drawn: [1, 1, 1, 1],
         six: [id(4)],
         ten: [id(3)],

@@ -341,7 +341,12 @@ describe.skipIf(!전제.ok)('RV-PV — 테마 판마다 토큰 탭 · 미리보�
     expect({ narrow, big }).toEqual({ narrow: { count: 12, misses: [], over: 0 }, big: { count: 12, misses: [], over: 0 } })
   })
 
-  it('폭 따라가기 — 고전 스크롤바의 문턱 높이(726)에서 창 폭을 1px 씩 바꿔도 iframe 폭이 2s 안에 선다(고리 없음)', async () => {
+  /**
+   * 문턱 높이 — 미리보기 상자가 예제 문서를 세로 스크롤 없이 딱 담는 창 높이다. 그 높이에서 창 폭을 바꾸면 상자의 고전 스크롤바가 섰다 걷히며 iframe
+   * 폭이 15px 좁아졌다 돌아온다. **예제 문서의 높이는 테마가 정해 글자로 적지 않고 잰다** — 높은 창에서 상자의 제 높이를, 낮은 창에서 눌린 상자의
+   * 높이로 «창 높이 − 상자 높이»(셸의 몫)를 얻어 더한다.
+   */
+  it('폭 따라가기 — 고전 스크롤바의 문턱 높이에서 창 폭을 1px 씩 바꿔도 iframe 폭이 2s 안에 선다(고리 없음)', async () => {
     if (!전제.ok) return
     const browser = await chromium.launch({ executablePath: 전제.executablePath, headless: true, ignoreDefaultArgs: ['--hide-scrollbars'] })
     try {
@@ -357,6 +362,21 @@ describe.skipIf(!전제.ok)('RV-PV — 테마 판마다 토큰 탭 · 미리보�
         content: '*::-webkit-scrollbar { width: 15px; height: 15px; background: #ddd } *::-webkit-scrollbar-thumb { background: #888 }',
       })
       await openExamples(page)
+      const boxHeight = async (height: number): Promise<number> => {
+        await page.setViewportSize({ width: 1300, height })
+        await page.waitForTimeout(600)
+        return page.evaluate(() => document.querySelector('.wb-shell-settings-preview')!.getBoundingClientRect().height)
+      }
+      const natural = await boxHeight(1400)
+      const SHORT = 420
+      const pressed = await boxHeight(SHORT)
+      const threshold = Math.round(natural + (SHORT - pressed))
+      // eslint-disable-next-line no-console
+      console.log(`[RV-PV 문턱] 상자 제 높이 ${natural} · 창 ${SHORT} 에서 ${pressed} → 문턱 창 높이 ${threshold}`)
+      // 판 카나리아 — 낮은 창이 상자를 눌렀다(안 눌렸으면 셸의 몫을 못 잰다).
+      expect(pressed).toBeLessThan(natural)
+      await page.setViewportSize({ width: 1300, height: threshold })
+      await page.waitForTimeout(600)
       await page.evaluate(() => {
         const w = window as unknown as { __changes: number }
         w.__changes = 0
@@ -368,7 +388,7 @@ describe.skipIf(!전제.ok)('RV-PV — 테마 판마다 토큰 탭 · 미리보�
       let bounced = 0
       for (let width = 1300; width >= 1260; width -= 1) {
         const start = await page.evaluate(() => (window as unknown as { __changes: number }).__changes)
-        await page.setViewportSize({ width, height: 726 })
+        await page.setViewportSize({ width, height: threshold })
         const step = await page.evaluate(async () => {
           const w = window as unknown as { __changes: number }
           const began = performance.now()

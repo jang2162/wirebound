@@ -6,8 +6,8 @@
  * |---|---|
  * | 판을 열면 캔버스 칸이 준다 | 판 높이만큼 안 준다 · 최대에서 캔버스 칸이 `CANVAS_MIN_HEIGHT` 아래 · 셸이 세로로 넘친다 · 새로고침 뒤 열림 · 높이를 잃는다 |
  * | 축소판 — 카드마다 표본 | 탭 다섯을 돌며 어느 카드의 창 안에 그 타입의 `[data-wb-component]` 가 안 선다(빈 카드) · 카드가 17 보다 적다 · 줄임 비의 가운데 값이 0.6 아래(축소판이 작아 안 읽힌다) |
- * | 축소판 — 테마 표지 | 새 프로젝트(`system-admin`)에서 축소판 단추의 바탕이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
- * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 단추의 바탕이 옛 값이다 |
+ * | 축소판 — 테마 표지 | 새 프로젝트(`system-admin`)에서 축소판 링크의 글 색이 그 테마 주색(`semantic.primary` 기본값)이 아니다 |
+ * | 축소판 — 남이 토큰을 저장 | 저장 뒤에도 축소판 링크의 글 색이 옛 값이다 |
  * | 축소판 — 번들을 못 실음 | 축소판이 빈다(기본 뷰로 안 선다) |
  * | 축소판 — `inert` | 축소판 단추 자리를 눌러 iframe 문서에 클릭이 닿는다 · Tab 이 iframe 안으로 들어간다 |
  * | 카드 끌어 놓기 — 캔버스 · 트리 | 빈 카드 안 · 형제 앞 · 페이지 끝 · 구조 트리 줄에 놓은 자리가 서버 문서와 다르다 · 넣은 노드가 안 골라진다 · 이름표가 안 따라온다 · 되돌리기 넷 뒤 원래 문서가 아니다 |
@@ -128,6 +128,16 @@ const THUMB_BUTTON = `(() => {
   const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument
   const button = doc?.querySelector('[data-wb-palette-thumb="Button"] [data-wb-component="Button"]')
   return button == null ? '단추 없음' : getComputedStyle(button).backgroundColor
+})()`
+
+/**
+ * 축소판 링크(갤러리 표본)의 계산 글 색 — 테마의 주색을 따르는 표지다. 기본테마의 기본 단추는 흰 단추라 주색을 안 쓴다(주 단추 `primary` 만 채운다 ·
+ * 축소판의 표본은 variant 없는 노드다).
+ */
+const THUMB_LINK = `(() => {
+  const doc = document.querySelector('iframe.wb-shell-palette-thumbs-iframe')?.contentDocument
+  const link = doc?.querySelector('[data-wb-palette-thumb="Link"] [data-wb-component="Link"]')
+  return link == null ? '링크 없음' : getComputedStyle(link).color
 })()`
 
 const texts = (count: number) =>
@@ -308,12 +318,12 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       await page.goto(project.P)
       await canvasFrame(page).locator('[data-wb-id="n_t0"]').waitFor()
       await openPalette(page)
-      await showOnly(page, 'Button')
+      await showOnly(page, 'Link')
       const before = await poll(
         '축소판 표지',
-        async () => String(await page.evaluate(THUMB_BUTTON)),
+        async () => String(await page.evaluate(THUMB_LINK)),
         (value) => value === adminPrimary,
-      ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
+      ).catch(async () => String(await page.evaluate(THUMB_LINK)))
       await putTheme(project.call, project.projectId, {
         themeId: 'system-admin',
         version: seededVersion('system-admin'),
@@ -321,9 +331,9 @@ describe.skipIf(!전제.ok)('하단 컴포넌트 판 — 실브라우저', () =>
       })
       const after = await poll(
         '남의 저장을 따라간다',
-        async () => String(await page.evaluate(THUMB_BUTTON)),
+        async () => String(await page.evaluate(THUMB_LINK)),
         (value) => value === 'rgb(0, 170, 17)',
-      ).catch(async () => String(await page.evaluate(THUMB_BUTTON)))
+      ).catch(async () => String(await page.evaluate(THUMB_LINK)))
       expect({ before, after }).toEqual({ before: adminPrimary, after: 'rgb(0, 170, 17)' })
     } finally {
       await context.close()

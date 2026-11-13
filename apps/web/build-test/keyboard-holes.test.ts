@@ -1107,7 +1107,8 @@ describe.skipIf(!전제.ok)('키보드 구멍 묶음 — 실브라우저', () =>
         await page.goto(fx.url)
         await canvasFrame(page).locator('[data-wb-id="n_card0000001"]').waitFor()
         await sleep(600)
-        await canvasFrame(page).locator('[data-wb-id="n_card0000001"]').click()
+        // 글 노드를 고른다(첫 고르개가 «역할» 이다) — 카드의 가운데는 테마의 여백에 따라 글 사이의 틈일 수 있어 카드가 골라진다.
+        await canvasFrame(page).locator('[data-wb-id="n_text0000002"]').click()
         const select = page.locator('select.wb-shell-control').first()
         await select.waitFor()
         await select.selectOption('h1')

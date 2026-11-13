@@ -1017,8 +1017,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         await select(b.page, 'n_card')
         await select(a.page, 'n_intx')
         await handle(a.page).waitFor()
-        const empty = await nodeBox(a.page, 'n_empt')
-        await grabTo(a.page, { x: empty.x + empty.width / 2, y: empty.y + empty.height / 2 })
+        // 빈 카드의 가운데는 끌기가 서고 배치가 선 뒤에 잰다(`grabTo` 의 함수 꼴) — 끌기 시작에 서는 빈 구역 칸이 카드를 민다.
+        const empty = await grabTo(a.page, async () => {
+          const box = await nodeBox(a.page, 'n_empt')
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        })
         const armed = (await indicators(a.page)).map((h) => h.placement)
         // 기다림은 «bob 의 잠금 소식이 닿았다» 까지만 — 손잡이가 걷혔는지는 그 뒤 값으로 견준다(시간 초과로 죽지 않게).
         const locksBefore = a.received.filter((kind) => kind === 'locks').length
@@ -1030,7 +1033,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         )
         await a.page.waitForTimeout(200)
         const afterLock = { handle: await handle(a.page).count(), shown: (await indicators(a.page)).length }
-        await a.page.mouse.move(empty.x + empty.width / 2 + 6, empty.y + empty.height / 2)
+        await a.page.mouse.move(empty.x + 6, empty.y)
         await a.page.mouse.up()
         await a.page.waitForTimeout(600)
         expect({ armed, afterLock, sent: a.patches.length, doc: await shape(P) }).toEqual({
@@ -1052,8 +1055,11 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
       try {
         await select(a.page, 'n_text')
         await handle(a.page).waitFor()
-        const empty = await nodeBox(a.page, 'n_empt')
-        await grabTo(a.page, { x: empty.x + empty.width / 2, y: empty.y + empty.height / 2 })
+        // 빈 카드의 가운데는 끌기가 서고 배치가 선 뒤에 잰다(`grabTo` 의 함수 꼴) — 끌기 시작에 서는 빈 구역 칸이 카드를 민다.
+        const empty = await grabTo(a.page, async () => {
+          const box = await nodeBox(a.page, 'n_empt')
+          return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        })
         const armed = (await indicators(a.page)).map((h) => h.placement)
         const members = (await stack.request(bob, 'GET', `/projects/${projectId}/members`)).body as { userId: string; email: string }[]
         const aliceId = members.find((m) => m.email === stack.users.alice.email)!.userId
@@ -1067,7 +1073,7 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         )
         await a.page.waitForTimeout(1000)
         const afterDemote = { handle: await handle(a.page).count(), shown: (await indicators(a.page)).length }
-        await a.page.mouse.move(empty.x + empty.width / 2 + 6, empty.y + empty.height / 2)
+        await a.page.mouse.move(empty.x + 6, empty.y)
         await a.page.mouse.up()
         await a.page.waitForTimeout(600)
         expect({ armed, demote, afterDemote, sent: a.patches.length, doc: await shape(P) }).toEqual({
