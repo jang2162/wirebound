@@ -443,33 +443,71 @@ describe('system-admin CSS', () => {
   })
 
   /**
-   * 카드 몸통에 홀로 든 폼 표 · 그리드 · 조회 폼은 몸통 여백을 음수 여백으로 되돌려 카드에 붙는다. 형제가 있거나 테두리 없는 카드(몸통 여백이 없다)면
-   * 안 붙는다 — 거기서 음수 여백이 서면 노드가 카드 밖으로 나간다.
+   * 테두리 있는 카드의 몸통은 여백 0 이고 곧바로 든 노드가 제 여백(12px)을 갖는다 — 폼 표 · 그리드 · 조회 폼만 여백 0 으로 카드에 붙는다. **형제가 있어도
+   * 같다**(«홀로 든 것만» 이면 끄는 동안 숨긴 미리보기가 그 판을 바꾼다 — 아래 «형제 구조로 안 가른다»). 테두리 없는 카드는 둘 다 안 받는다.
    */
-  it('카드 몸통에 홀로 든 폼 표 · 그리드 · 조회 폼만 음수 여백으로 붙는다', () => {
-    const pulls = (el: Element) =>
-      rules().some(
-        (rule) => rule.media === null && rule.style.getPropertyValue('margin').includes('* -1') && matching(el).includes(rule.selector),
-      )
+  it('카드 몸통에 든 폼 표 · 그리드 · 조회 폼은 붙고(여백 0) 그 밖은 여백 12px — 형제가 있어도 같다', () => {
+    const marginOf = (el: Element) =>
+      rules()
+        .filter((rule) => rule.media === null && rule.selector.includes('[data-wb-part="body"] >') && matching(el).includes(rule.selector))
+        .map((rule) => rule.style.getPropertyValue('margin').trim())
+        .filter((margin) => margin !== '' && margin !== '0px 0px 8px' && !margin.startsWith('0px 0px'))
     const card = (variant: string, body: string) =>
       `<div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="${variant}"><div data-wb-part="body">${body}</div></div>`
     const node = (type: string) => `<div data-wb-component="${type}" data-test="x"></div>`
+    const TYPES = ['FormTable', 'DataGrid', 'SearchForm', 'KeyValue', 'Flex']
     const got = tree(
-      ['FormTable', 'DataGrid', 'SearchForm', 'KeyValue', 'Flex']
-        .map((type) => card('default', node(type)) + card('default', `${node(type)}<p></p>`) + card('borderless', node(type)))
-        .join(''),
+      TYPES.map(
+        (type) => card('default', node(type)) + card('default', `<p></p>${node(type)}<p></p>`) + card('borderless', node(type)),
+      ).join(''),
       (root) =>
         Array.from(root.querySelectorAll('[data-test="x"]')).map((el) => {
           const variant = el.closest('[data-wb-component="Card"]')!.getAttribute('data-wb-variant')
-          return `${el.getAttribute('data-wb-component')} ${variant} ${el.parentElement!.children.length === 1 ? '홀로' : '형제'}: ${pulls(el)}`
+          const alone = el.parentElement!.children.length === 1 ? '홀로' : '형제'
+          return `${el.getAttribute('data-wb-component')} ${variant} ${alone}: ${marginOf(el).join(' · ') || '없음'}`
         }),
     )
     expect(got).toEqual(
-      ['FormTable', 'DataGrid', 'SearchForm', 'KeyValue', 'Flex'].flatMap((type) => {
+      TYPES.flatMap((type) => {
         const flush = type === 'FormTable' || type === 'DataGrid' || type === 'SearchForm'
-        return [`${type} default 홀로: ${flush}`, `${type} default 형제: false`, `${type} borderless 홀로: false`]
+        const bordered = flush ? 'var(--wb-space-3) · 0' : 'var(--wb-space-3)'
+        return [`${type} default 홀로: ${bordered}`, `${type} default 형제: ${bordered}`, `${type} borderless 홀로: 없음`]
       }),
     )
+    expect(Number.parseFloat(ruleOf('[data-wb-component="Card"] > [data-wb-part="body"]').getPropertyValue('padding'))).toBe(0)
+  })
+
+  /**
+   * **배치를 바꾸는 규칙은 형제 구조로 안 가른다** — 에디터는 끄는 동안 미리보기를 `display: none` 으로 숨긴 배치로 놓을 자리를 재는데
+   * (`apps/web/src/canvas/canvas-preview.ts` 의 `withoutPreview`), 형제 셀렉터(`+` · `~` · `:first-child` · `:last-child` · `:only-child` · `:nth-*`)는
+   * 숨긴 요소도 형제로 센다. 그 규칙이 여백 · 크기를 바꾸면 미리보기가 선 자리에 따라 숨긴 배치가 달라져 같은 포인터에서 답이 뒤집히고, 캔버스가 다시
+   * 잴 때마다 다시 물어 `Maximum update depth` 로 죽는다(`apps/web/build-test/zone-editor.test.ts` «빈 구역 칸은 …»). 형제 셀렉터가 든 규칙은 그림만
+   * 바꾸는 속성(색 · 모서리 · 그림자)만 갖는다. 예외는 노드가 아닌 조각의 차례(세그먼트 칸 · 파일첨부 줄 · 조회 폼 조각)와 1px 선 둘이다.
+   */
+  it('배치를 바꾸는 규칙은 형제 구조로 안 가른다 — 형제 셀렉터 규칙은 그림만 바꾼다', () => {
+    const STRUCTURAL = /:(first|last|only)-child|:nth-|:(first|last|only)-of-type|\s[+~]\s/
+    const PAINT = /^(color|background(-color)?|border-(top|bottom)-(left|right)-radius|box-shadow|opacity|outline.*)$/
+    /** 노드가 아닌 조각의 차례 — 끄는 동안의 미리보기가 그 사이에 안 선다. 1px 선 — 칸 · 줄의 선 하나를 걷는다(숨긴 미리보기 칸 · 줄이 끝에 서면 1px 이 달라진다 · 보고 «남은 것»). */
+    const EXEMPT = [
+      '[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:first-child',
+      '[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:last-child',
+      '[data-wb-component="FileAttach"] > [data-wb-part="list"] > tbody > tr:last-child > *',
+      '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]:last-child',
+      '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] + [data-wb-part="actions"]',
+      '[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]:last-child',
+      '[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"] [data-wb-part="table"] > tbody:last-child > tr:last-child > [data-wb-part]',
+    ]
+    const structural = rules().filter((rule) => STRUCTURAL.test(rule.selector))
+    expect(structural.length).toBeGreaterThan(EXEMPT.length)
+    expect(EXEMPT.filter((selector) => !structural.some((rule) => rule.selector === selector))).toEqual([])
+    const layout = structural
+      .filter((rule) => !EXEMPT.includes(rule.selector))
+      .flatMap((rule) =>
+        names(rule.style)
+          .filter((name) => !PAINT.test(name))
+          .map((name) => `${rule.selector} { ${name} }`),
+      )
+    expect(layout).toEqual([])
   })
 
   /**
@@ -497,8 +535,8 @@ describe('system-admin CSS', () => {
     )
   })
 
-  /** 카드에 붙은 그리드는 표의 바깥 선을 걷는다 — 카드 테두리와 겹쳐 두 줄이 된다. 카드 밖 · 형제가 있는 그리드는 제 바깥 선을 지킨다. */
-  it('카드 몸통에 홀로 든 그리드만 표의 바깥 선을 걷는다', () => {
+  /** 카드에 붙은 그리드는 표의 바깥 선을 걷는다 — 카드 테두리와 겹쳐 두 줄이 된다(형제가 있어도). 카드 밖 그리드는 제 바깥 선을 지킨다. */
+  it('카드 몸통에 든 그리드는 표의 바깥 선을 걷는다 · 카드 밖 그리드는 지킨다', () => {
     const grid =
       '<div data-wb-component="DataGrid" data-wb-structure="default"><div data-wb-part="scroll"><table data-wb-part="table"></table></div></div>'
     const borderless = (table: Element) =>
@@ -514,7 +552,7 @@ describe('system-admin CSS', () => {
        <div data-wb-component="Section"><div data-wb-part="inner">${grid}</div></div>`,
       (root) => Array.from(root.querySelectorAll('table')).map(borderless),
     )
-    expect(got).toEqual([true, false, false])
+    expect(got).toEqual([true, true, false])
   })
 
   /** 잠금 사다리의 두 단을 규칙이 실제로 칠한다 — 변수만 있고 칠하는 규칙이 없으면 읽기 전용 · 비활성 칸이 편집 칸과 같은 흰 면이다. */
