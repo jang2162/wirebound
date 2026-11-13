@@ -63,30 +63,35 @@
   --wb-control-minHeight: calc(var(--wb-space-unit) * 7.5);
   --wb-cell-minHeight: calc(var(--wb-space-unit) * 10.5);
   --wb-motion-base: 150ms;
-  --wb-typography-display-fontSize: 28px;
+  /*
+   * 제목 단계 · 캡션의 글 크기는 본문 크기(토큰)에 더한 값이다 — 본문 13px 에서 28 · 22 · 18 · 16 · 15 · 14 · 13 · 12px. 고정 px 면 본문을 키운 프로젝트에서
+   * 카드 제목(h5) · 라벨(h6)이 본문보다 작아진다(본문 16px 에 카드 제목 14px — `docs/superpowers/plans/2026-11-13-rv-sk-report.md` F8). 배수가 아니라
+   * 덧셈인 까닭: 본문과 제목의 차가 1 – 2px 인 단계가 많아 배수로 지으면 반올림이 그 차를 지운다.
+   */
+  --wb-typography-display-fontSize: calc(var(--wb-typography-body-fontSize) + 15px);
   --wb-typography-display-lineHeight: 1.25;
   --wb-typography-display-fontWeight: 700;
-  --wb-typography-h1-fontSize: 22px;
+  --wb-typography-h1-fontSize: calc(var(--wb-typography-body-fontSize) + 9px);
   --wb-typography-h1-lineHeight: 1.3;
   --wb-typography-h1-fontWeight: 700;
-  --wb-typography-h2-fontSize: 18px;
+  --wb-typography-h2-fontSize: calc(var(--wb-typography-body-fontSize) + 5px);
   --wb-typography-h2-lineHeight: 1.35;
   --wb-typography-h2-fontWeight: 700;
-  --wb-typography-h3-fontSize: 16px;
+  --wb-typography-h3-fontSize: calc(var(--wb-typography-body-fontSize) + 3px);
   --wb-typography-h3-lineHeight: 1.4;
   --wb-typography-h3-fontWeight: 700;
-  --wb-typography-h4-fontSize: 15px;
+  --wb-typography-h4-fontSize: calc(var(--wb-typography-body-fontSize) + 2px);
   --wb-typography-h4-lineHeight: 1.45;
   --wb-typography-h4-fontWeight: 700;
-  --wb-typography-h5-fontSize: 14px;
+  --wb-typography-h5-fontSize: calc(var(--wb-typography-body-fontSize) + 1px);
   --wb-typography-h5-lineHeight: 1.5;
   --wb-typography-h5-fontWeight: 700;
-  --wb-typography-h6-fontSize: 13px;
+  --wb-typography-h6-fontSize: var(--wb-typography-body-fontSize);
   --wb-typography-h6-lineHeight: 1.5;
   --wb-typography-h6-fontWeight: 700;
   --wb-typography-body-lineHeight: 1.5;
   --wb-typography-body-fontWeight: 400;
-  --wb-typography-caption-fontSize: 12px;
+  --wb-typography-caption-fontSize: calc(var(--wb-typography-body-fontSize) - 1px);
   --wb-typography-caption-lineHeight: 1.5;
   --wb-typography-caption-fontWeight: 400;
   /* 누르는 조각(단추 · 탭 · 세그먼트 칸)의 글 굵기 — 본문과 굵은 글 사이. */
@@ -183,17 +188,27 @@
   padding: 0;
 }
 /*
- * 카드 머리줄 — 제목(과 제목 옆)은 왼쪽, 머리 오른쪽 구역(단추 · 링크 · 셀렉트)은 오른끝, 부제는 제목 밑. 바닥 구역은 몸통 밑의 오른쪽 단추줄이다.
- * 머리 오른쪽 구역은 두 줄(제목 줄 · 부제 줄)에 걸친다(SDK 기본 CSS) — 제목 줄이 남는 높이를 다 갖게 해(`1fr`) 부제가 없을 때 제목이 단추와 같은
- * 높이의 가운데에 선다. 안 정하면 단추 높이가 빈 부제 줄에도 나뉘어 제목이 위로 붙는다.
+ * 카드 머리줄 — 제목(과 제목 옆) · 부제(«총 0건»)가 한 줄에 기준선을 맞춰 왼쪽에 서고, 머리 오른쪽 구역(단추 · 링크 · 셀렉트)은 오른끝이다(원본 사이트
+ * `.adp-card__title` · `__sub`). 바닥 구역은 몸통 밑의 오른쪽 단추줄이다. SDK 기본 CSS 의 격자(제목 칸 `1fr` · 머리 오른쪽 `auto` · 부제는 제목
+ * 밑 줄)를 줄 바꿈하는 가로 줄로 덮는다 — 격자의 `auto` 칸은 줄을 바꾸기 전에 늘어나 단추가 많으면 제목 칸이 0 에 가깝게 줄어 한 글자씩 꺾였다
+ * (`docs/superpowers/plans/2026-11-13-rv-sk-report.md` F6). 가로 줄에서는 안 들어가는 조각이 다음 줄로 간다 — 부제가 먼저, 그다음 머리 오른쪽
+ * 구역(`margin-left: auto` 로 그 줄의 오른끝). 줄들을 세로 가운데에 모아(`align-content`) 단추가 없는 머리줄에서도 제목이 42px 칸 가운데에 선다.
  */
 [data-wb-component="Card"] > [data-wb-part="header"] {
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  align-content: center;
   box-sizing: border-box;
   min-height: var(--wb-cell-minHeight);
   padding: var(--wb-gap-piece) var(--wb-space-3);
-  column-gap: var(--wb-space-2);
+  column-gap: var(--wb-gap-piece);
+  row-gap: var(--wb-gap-piece);
   border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="heading"] {
+  min-width: 0;
+  align-items: baseline;
 }
 [data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="heading"],
 [data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="headEnd"],
@@ -203,6 +218,7 @@
 [data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="headEnd"] {
   flex-wrap: wrap;
   justify-content: flex-end;
+  margin-left: auto;
 }
 [data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="heading"] > [data-wb-part="title"] {
   font-size: var(--wb-typography-h5-fontSize);
@@ -250,7 +266,12 @@
 /*
  * 카드 몸통에는 여백이 없다 — 곧바로 든 노드가 제 여백(12px — 겹치는 위아래는 하나로 접힌다)을 갖는다. 폼 표 · 그리드 · 조회 폼만 여백 없이 카드에
  * 붙는다 — 표의 격자선이 카드 테두리까지 닿아 «한 상자» 가 된다. 맞닿는 바깥 선(카드 테두리 · 머리줄 밑선 · 바닥 윗선)은 카드가 이미 그었으므로 붙는
- * 쪽이 제 바깥 선을 걷는다 — 걷는 규칙은 노드마다 제 절에 있다(«카드에 붙은 …»). 넘친 모서리는 그 노드가 잘라 카드의 둥근 모서리에 맞춘다.
+ * 쪽이 제 바깥 선을 걷는다 — 걷는 규칙은 노드마다 제 절에 있다(«카드에 붙은 …»).
+ *
+ * **붙은 노드는 자르지 않는다(`overflow` 없음)** — 폼 표 · 조회 폼의 끝 칸 선은 격자를 1px 넓혀 카드 테두리 자리에 겹쳐 앉힌다(같은 토큰 색이라 한 줄로
+ * 보인다 — 원본 사이트 `_field-grid.scss` 의 «`overflow: hidden` 이 없다» 와 같은 식). 자르면 값 칸보다 넓은 세그먼트 · 하위 표가 카드 안에서 말없이
+ * 사라진다(간격 단위를 키운 프로젝트에서 «정지» 칸 — `docs/superpowers/plans/2026-11-13-rv-sk-report.md` F7). 대가는 카드의 둥근 모서리 구간에서 곧은
+ * 칸 선 · 라벨 바탕이 곡선 밖으로 1px 남는 것이다(원본도 같은 자국을 받아들였다). 그리드는 제 스크롤 조각이 자르는 상자라 그 조각의 모서리를 둥글린다.
  * 몸통의 여백이 아니라 자식의 여백으로 가르는 까닭은 위 «세로로 쌓인 노드» 의 «형제 구조로 가르지 않는다» 다 — «홀로 든 표만 붙는다»(`:only-child`)는
  * 끄는 동안 그 몸통에 숨긴 미리보기가 서면 표를 12px 옮긴다.
  */
@@ -259,14 +280,18 @@
 }
 [data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > :is([data-wb-component="FormTable"], [data-wb-component="DataGrid"], [data-wb-component="SearchForm"]) {
   margin: 0;
-  overflow: hidden;
 }
-/* 머리줄이 없으면 몸통이 카드의 첫 조각이고, 바닥이 없으면 끝 조각이다 — 그 쪽 모서리를 카드 안쪽 모서리(테두리 1px 안)에 맞춘다(그림만 바뀐다). */
-[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:first-child > :is([data-wb-component="FormTable"], [data-wb-component="DataGrid"], [data-wb-component="SearchForm"]) {
+/*
+ * 머리줄이 없으면 몸통이 카드의 첫 조각이고, 바닥이 없으면 끝 조각이다 — 그 쪽 모서리를 카드 안쪽 모서리(테두리 1px 안)에 맞춘다(그림만 바뀐다). 폼 표 ·
+ * 조회 폼은 제 바탕만, 그리드는 표를 담아 자르는 스크롤 조각이 둥글다.
+ */
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:first-child > :is([data-wb-component="FormTable"], [data-wb-component="SearchForm"]),
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:first-child > [data-wb-component="DataGrid"] > [data-wb-part="scroll"]:first-child {
   border-top-left-radius: calc(var(--wb-radius-lg) - 1px);
   border-top-right-radius: calc(var(--wb-radius-lg) - 1px);
 }
-[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:last-child > :is([data-wb-component="FormTable"], [data-wb-component="DataGrid"], [data-wb-component="SearchForm"]) {
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:last-child > :is([data-wb-component="FormTable"], [data-wb-component="SearchForm"]),
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"]:last-child > [data-wb-component="DataGrid"] > [data-wb-part="scroll"]:last-child {
   border-bottom-left-radius: calc(var(--wb-radius-lg) - 1px);
   border-bottom-right-radius: calc(var(--wb-radius-lg) - 1px);
 }
@@ -595,8 +620,8 @@
 
 /*
  * 조회 폼 — 테두리 상자. 상자에는 여백이 없고 필드 구역 · 단추 구역이 제 여백을 갖는다(열을 정한 판의 격자가 상자 테두리까지 닿는다). 열을 안 정한 판은
- * 한 줄이다 — 필드가 옆으로 서고 넘치면 접히며, 단추는 줄 끝에 필드 아래 선에 맞춘다. 넘친 것은 상자가 자른다 — 격자의 오른쪽 · 아래 끝 선이 상자
- * 테두리와 겹치지 않게 1px 밀어 숨긴다(아래 «열을 정한 조회 폼»).
+ * 한 줄이다 — 필드가 옆으로 서고 넘치면 접히며, 단추는 줄 끝에 필드 아래 선에 맞춘다. 격자의 오른쪽 · 아래 끝 선은 1px 밀어 상자 테두리 자리에 겹쳐
+ * 앉힌다(아래 «열을 정한 조회 폼»). 상자는 자르지 않는다 — 골격 절 «붙은 노드는 자르지 않는다» 와 같은 까닭이다.
  */
 [data-wb-component="SearchForm"][data-wb-structure="inline"] {
   display: flex;
@@ -605,7 +630,6 @@
   background: var(--wb-semantic-surface);
   border: 1px solid var(--wb-semantic-border);
   border-radius: var(--wb-radius-md);
-  overflow: hidden;
 }
 [data-wb-component="SearchForm"] > [data-wb-part="fields"] {
   display: flex;
@@ -681,8 +705,8 @@
  * 열마다 맞는다). 열을 안 정한 판은 위 규칙 그대로다. 필드의 몫(`weight`)은 차지할 쌍 수다. SDK 기본 CSS 는 열을 정한 조회 폼을 «필드 하나 = 트랙
  * 하나» 로 깐다(옛 테마 호환) — 쌍 격자 · 자식 폭 · subgrid 는 이 테마가 건다.
  *
- * 선은 칸마다 오른쪽 · 아래에 긋는다. 위 · 왼쪽 바깥 선은 상자 테두리다. 오른쪽 끝 칸의 선은 상자 테두리와 겹치므로 격자를 1px 넓혀 상자 밖으로 밀고
- * (상자가 자른다), 단추 구역이 없으면 아래 끝 줄의 선도 같은 식으로 민다. 빈 쌍은 그리지 않는다 — 끝 줄의 남는 자리는 라벨 바탕 없는 빈 칸이다.
+ * 선은 칸마다 오른쪽 · 아래에 긋는다. 위 · 왼쪽 바깥 선은 상자 테두리다. 오른쪽 끝 칸의 선은 상자 테두리와 겹치므로 격자를 1px 넓혀 상자 테두리
+ * 자리에 앉히고(같은 색이라 한 줄), 단추 구역이 없으면 아래 끝 줄의 선도 같은 식으로 민다. 빈 쌍은 그리지 않는다 — 끝 줄의 남는 자리는 라벨 바탕 없는 빈 칸이다.
  * 단추 구역은 격자 아래 줄의 오른쪽이고, 그 윗선이 끝 줄의 아래 선에 1px 겹쳐 빈 칸의 아래까지 한 줄로 닫는다.
  */
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
@@ -813,8 +837,14 @@
   border-right: 1px solid var(--wb-semantic-border);
   border-bottom: 1px solid var(--wb-semantic-border);
 }
+/*
+ * 값 칸은 자리 잡힌 상자(`position: relative`)다 — 값 칸보다 넓은 조각(줄을 안 바꾸는 세그먼트 · 하위 표)이 옆 쌍으로 넘치면 뒤에 그려지는 옆 쌍의 라벨
+ * 칸 바탕이 그 조각을 덮어 말없이 사라진다(창 1000 · 간격 단위 8px 에서 «탈퇴 · 정지» — `docs/superpowers/plans/2026-11-13-rv-sk-report.md` F7).
+ * 자리 잡힌 상자는 흐름 안 상자보다 뒤에 그려져 넘친 조각이 옆 칸 위에 보인다(겹쳐 보이는 것이 넘침을 알린다). `z-index` 를 안 줘 쌓임 맥락은 안 선다.
+ */
 [data-wb-component="FormTable"] > [data-wb-part="cells"] > :is([data-wb-component="Field"], [data-wb-part="filler"]) > [data-wb-part="value"],
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] > [data-wb-part="value"] {
+  position: relative;
   box-sizing: border-box;
   min-width: 0;
   min-height: var(--wb-cell-minHeight);
@@ -827,8 +857,8 @@
   align-content: start;
 }
 /*
- * 카드에 붙은 폼 표(골격 절 «카드 몸통에는 여백이 없다») — 표의 바깥 선은 카드가 긋는다. 위 · 왼쪽 선을 걷고, 오른쪽 · 아래 끝 칸의 선은 격자를 1px 넓혀 표 밖으로
- * 민다(표가 자른다 — 조회 폼의 격자와 같은 식). 머리줄은 카드 머리줄과 같은 여백 · 높이를 갖고 격자와의 사이에 선이 선다. 옆 칸은 격자와의 사이 선만
+ * 카드에 붙은 폼 표(골격 절 «카드 몸통에는 여백이 없다») — 표의 바깥 선은 카드가 긋는다. 위 · 왼쪽 선을 걷고, 오른쪽 · 아래 끝 칸의 선은 격자를 1px 넓혀 카드
+ * 테두리 자리에 앉힌다(조회 폼의 격자와 같은 식 · 자르지 않는다). 머리줄은 카드 머리줄과 같은 여백 · 높이를 갖고 격자와의 사이에 선이 선다. 옆 칸은 격자와의 사이 선만
  * 남긴다.
  */
 [data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="FormTable"] {
@@ -850,6 +880,19 @@
   border-left: 0;
   margin-right: -1px;
   margin-bottom: -1px;
+}
+/*
+ * 강조 카드는 테두리가 주색이라 1px 민 칸 선(테두리 색)이 그 위에 앉으면 오른쪽 · 아래 테두리가 회색으로 끊긴다 — 밀지 않는다(칸 선이 주색 테두리 안쪽에
+ * 한 줄 더 선다).
+ */
+[data-wb-component="Card"][data-wb-variant="featured"] > [data-wb-part="body"] > [data-wb-component="FormTable"] > [data-wb-part="cells"] {
+  margin-right: 0;
+  margin-bottom: 0;
+}
+[data-wb-component="Card"][data-wb-variant="featured"] > [data-wb-part="body"] > [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
+  flex-basis: 100%;
+  margin-right: 0;
+  margin-bottom: 0;
 }
 
 /*
@@ -1292,6 +1335,14 @@
 [data-wb-component="Link"][data-wb-variant="muted"] {
   color: var(--wb-semantic-textMuted);
 }
+/* 그리드 칸 안의 링크(목록의 제목 · 이름 칸)는 짙은 굵은 밑줄 글이고 올리면 주색이다 — 원본 사이트 `.adp-table__link`. 옅은 링크는 옅은 그대로다. */
+[data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-component="Link"][data-wb-structure="default"]:not([data-wb-variant="muted"]) {
+  color: var(--wb-semantic-textStrong);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-component="Link"][data-wb-structure="default"]:not([data-wb-variant="muted"]):hover {
+  color: var(--wb-semantic-primary);
+}
 [data-wb-component="Link"][data-wb-state~="disabled"] {
   opacity: 0.6;
   text-decoration: none;
@@ -1562,6 +1613,10 @@
   [data-wb-component="Section"] > [data-wb-part="inner"] {
     padding-left: var(--wb-space-3);
     padding-right: var(--wb-space-3);
+  }
+  /* 카드 머리 오른쪽 구역(단추 줄)은 제목 아래 줄의 오른끝으로 간다 — 제목 · 부제가 한 줄을 다 갖는다(조회 폼 단추줄과 같은 꼴). */
+  [data-wb-component="Card"] > [data-wb-part="header"] > [data-wb-part="headEnd"] {
+    flex-basis: 100%;
   }
   /* 조회 폼의 단추가 필드 아래 줄로 간다 — 한 줄을 나누면 390 폭에서 입력칸이 단추 폭만큼 좁아진다. */
   [data-wb-component="SearchForm"] > [data-wb-part="fields"] {

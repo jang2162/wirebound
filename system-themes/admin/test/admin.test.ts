@@ -69,6 +69,16 @@ function ruleOf(selector: string): CSSStyleDeclaration {
   return found[0]!.style
 }
 
+/** `:root` 의 글 크기 변수 하나를 본문 크기의 기본값으로 풀어 px 로 — 본문 변수 그대로거나 `calc(본문 ± Npx)` 다. */
+function typePx(name: string): number {
+  const vars = ROOT_VARS()
+  const body = Number.parseFloat(vars.get('--wb-typography-body-fontSize') ?? '')
+  const value = (vars.get(name) ?? '').replace(/\s+/g, ' ')
+  if (value === 'var(--wb-typography-body-fontSize)') return body
+  const shifted = /^calc\(var\(--wb-typography-body-fontSize\) ([+-]) (\d+)px\)$/.exec(value)
+  return shifted ? body + (shifted[1] === '+' ? 1 : -1) * Number(shifted[2]) : Number.parseFloat(value)
+}
+
 /** `:root` 의 변수 하나를 px 로 푼다 — `space.unit` 의 배수(`calc(var(--wb-space-unit) * N)`)거나 길이 글자다. */
 function rootPx(name: string): number {
   const vars = ROOT_VARS()
@@ -419,6 +429,31 @@ describe('system-admin CSS', () => {
     expect(byRole).toEqual(Object.fromEntries(roles.map((role) => [role, `var(--wb-typography-${role}-fontSize)`])))
   })
 
+  /**
+   * 제목 단계 · 캡션의 글 크기는 본문 크기 토큰에 더한 값이다 — 고정 px 면 본문을 키운 프로젝트에서 카드 제목(h5) · 라벨(h6)이 본문보다 작다
+   * (`docs/superpowers/plans/2026-11-13-rv-sk-report.md` F8). 본문 기본값(13px)에서 풀면 원본 사이트의 단계와 같다.
+   */
+  it('제목 단계 · 캡션의 글 크기는 본문 크기에서 셈한다 — 기본 13px 에서 28 · 22 · 18 · 16 · 15 · 14 · 13 · 12', () => {
+    const vars = ROOT_VARS()
+    const scale = ['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'caption']
+    const FROM_BODY = /^(?:var\(--wb-typography-body-fontSize\)|calc\(var\(--wb-typography-body-fontSize\) ([+-]) (\d+)px\))$/
+    expect(
+      Object.fromEntries(
+        scale.map((role) => [role, FROM_BODY.test((vars.get(`--wb-typography-${role}-fontSize`) ?? '').replace(/\s+/g, ' '))]),
+      ),
+    ).toEqual(Object.fromEntries(scale.map((role) => [role, true])))
+    expect(Object.fromEntries(scale.map((role) => [role, typePx(`--wb-typography-${role}-fontSize`)]))).toEqual({
+      display: 28,
+      h1: 22,
+      h2: 18,
+      h3: 16,
+      h4: 15,
+      h5: 14,
+      h6: 13,
+      caption: 12,
+    })
+  })
+
   /** 제목 단계(`display` · `h1` – `h6`)는 짙은 글 색이고 본문은 바탕 규칙의 글 색 그대로다. 페이지 제목(`h1`)은 22px 다. */
   it('Text 의 제목 단계는 짙은 글 색 · h1 은 22px', () => {
     const color = (role: string) => ruleOf(`[data-wb-component="Text"][data-wb-variant="${role}"]`).getPropertyValue('color').trim()
@@ -427,7 +462,7 @@ describe('system-admin CSS', () => {
       Object.fromEntries(headings.map((role) => [role, 'var(--wb-semantic-textStrong)'])),
     )
     expect(color('body')).toBe('')
-    expect(ROOT_VARS().get('--wb-typography-h1-fontSize')).toBe('22px')
+    expect(typePx('--wb-typography-h1-fontSize')).toBe(22)
   })
 
   /** 팝업 — 제목줄은 머리 바탕(표 머리와 같은 토큰), 바닥은 옅은 바탕이고 테두리는 테두리 색이다. */

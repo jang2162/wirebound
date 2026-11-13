@@ -8,17 +8,25 @@
  * - «화면» — 구역 안에 제목 · 조회 폼 카드(열 2 · 단추 둘) · 그리드 카드(머리 오른쪽 단추 · 세 줄 · 페이지네이션) · 폼 표 카드(2열 · 필수 · 읽기 전용 ·
  *   비활성 · 세그먼트 · 여러 줄) · 단추 다섯 variant.
  * - «팝업»(팝업 페이지) — 폼 표와 바닥 단추.
+ * - «목록» — 조회 폼 카드(열 2 · 세그먼트 · 기간 · 셀렉트 + 입력) · 결과 카드(부제 «총 0건» · 머리 오른쪽 단추 넷 · 열 2 폼 표 — 세그먼트 · 기간 · 하위
+ *   폼 표) · 그리드 카드(머리 오른쪽 단추 하나 · 칸 안 링크). `docs/superpowers/plans/2026-11-13-rv-sk-report.md` «5» 의 문서에 그리드 카드를 더했다.
+ *
+ * 그리고 «덮은» 프로젝트 — 같은 «목록» 을 글 · 바탕을 어두운 팔레트로 덮고 간격 단위 8px · 본문 16px 으로 덮은 프로젝트에서 내보낸다(리뷰 F1 · F7 · F8).
  *
  * | 케이스 | 재는 값 |
  * |---|---|
  * | 꼴 | 단추 · 입력 · 폼 표 라벨 칸 · 카드 · 그리드 머리 · 세그먼트 · 본문 글 · 팝업의 계산된 색 · 크기 |
+ * | 머리줄 · 칸 링크 | 카드 부제가 제목 옆 같은 줄(기준선 · 틈 6px · 12px 흐린 글) · 그리드 칸 안 링크가 짙은 굵은 밑줄 글이고 올리면 주색 |
+ * | 좁은 창 머리줄 | «목록» · «덮은» 의 창 641 · 390 에서 단추 넷을 둔 카드의 제목 · 부제가 한 줄씩 · 390 은 머리 오른쪽 구역이 제목 아래 줄(단추 하나인 카드도) |
+ * | 덮은 팔레트 | «덮은» 의 라벨 · 카드 제목 · 그리드 머리가 덮은 글 · 바탕 색(새 토큰이 옛 키를 따른다 — F1) · 카드 제목 · 라벨 크기 ≥ 본문(F8) |
+ * | 넘친 칸이 보인다 | «덮은» 의 창 1000 · 390 에서 값 칸보다 넓은 세그먼트(«정지»)가 넘치는데(카나리아) 자르는 조상이 없고 옆 칸 바탕에 안 덮인다(F7) |
  * | 붙음 | 테두리 있는 카드의 몸통에 곧바로 든 조회 폼 · 그리드 · 폼 표가 카드 테두리 안쪽에 맞닿는다(좌우 1px = 카드 테두리 — 형제가 있는 판은 jsdom 이 잰다) |
- * | 넘침 | 창 1280 · 1000 · 720 · 390(화면 모드 — 문서 폭 = 창 폭)에서 문서 `scrollWidth` ≤ 창 폭 · 글자 노드(`Range.getClientRects()`) · 노드 상자의 오른끝이 문서 뿌리 안 |
+ * | 넘침 | 창 1280 · 1000 · 720 · 390(화면 모드 — 문서 폭 = 창 폭)에서 «화면» · «팝업» · «목록» 의 문서 `scrollWidth` ≤ 창 폭 · 글자 노드(`Range.getClientRects()`) · 노드 상자의 오른끝이 문서 뿌리 안 |
  *
  * 색은 테마가 닮으려는 원본(lms-skala 관리자 본문)의 값으로 적는다 — 이 케이스는 «토큰을 따르는가» 가 아니라 «기본값이 그 꼴인가» 를 잠근다(토큰을
  * 따르는지는 `theme-canvas.test.ts` 가 잰다). 기본값을 바꾸는 판은 이 표를 함께 고친다.
  *
- * `WB_ADMIN_LOOK_SHOTS=<디렉터리>` 를 주면 창 1280 의 «화면» · «팝업» 과 창 390 의 «화면» 을 한 장씩 남긴다.
+ * `WB_ADMIN_LOOK_SHOTS=<디렉터리>` 를 주면 창 1280 의 «화면» · «팝업» · 좁은 창의 «화면» · «덮은» 의 «목록»(창 1000 · 390)을 한 장씩 남긴다.
  */
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -164,6 +172,125 @@ const POPUP_BODY: Node[] = [
 ]
 const POPUP_FOOTER: Node[] = [button('p_cancel', '취소'), button('p_save', '저장', 'primary')]
 
+const segment = (id: string, labels: string[]): Node => ({
+  id,
+  type: 'RadioGroup',
+  props: { options: labels.map((label, i) => ({ label, ...(i === 0 ? { selected: true } : {}) })) },
+})
+const period = (id: string): Node[] => [
+  { id: `${id}_from`, type: 'DateInput', props: { value: '2026-07-04' } },
+  { id: `${id}_tilde`, type: 'Affix', props: { text: '~' } },
+  { id: `${id}_to`, type: 'DateInput', props: { value: '2026-12-31' } },
+]
+
+const LIST: Node[] = [
+  {
+    id: 'l_sec',
+    type: 'Section',
+    children: [
+      {
+        id: 'l_search',
+        type: 'Card',
+        props: { title: '검색영역' },
+        children: [
+          {
+            id: 'l_sf',
+            type: 'SearchForm',
+            props: { columns: 2 },
+            children: [
+              field('l_sf_state', '회원 상태', [segment('l_sf_state_r', ['전체', '정상', '휴면', '탈퇴', '정지'])]),
+              field('l_sf_term', '가입 기간', period('l_sf_term')),
+              field('l_sf_kind', '검색 구분', [
+                { id: 'l_sf_kind_s', type: 'Select', props: { placeholder: '전체' } },
+                input('l_sf_kind_i', { placeholder: '검색어를 입력해주세요' }),
+              ]),
+              field('l_sf_yn', '사용여부', [segment('l_sf_yn_r', ['전체', 'Y', 'N'])]),
+            ],
+            zones: { actions: [button('l_sf_reset', '초기화'), button('l_sf_go', '검색', 'primary')] },
+          },
+        ],
+      },
+      {
+        id: 'l_info',
+        type: 'Card',
+        props: { title: '기본정보', subtitle: '총 0건' },
+        zones: {
+          headEnd: [
+            button('l_h1', '엑셀다운로드'),
+            button('l_h2', '일괄 등록'),
+            button('l_h3', '선택 삭제', 'danger'),
+            button('l_h4', '등록', 'primary'),
+          ],
+        },
+        children: [
+          {
+            id: 'l_ft',
+            type: 'FormTable',
+            props: { columns: 2 },
+            children: [
+              field('l_f_seg', '수강 상태', [segment('l_f_seg_r', ['수강중', '수료', '미수료', '취소'])]),
+              field('l_f_term', '교육 기간', period('l_f_term')),
+              field(
+                'l_f_sub',
+                '차시 정보',
+                [
+                  {
+                    id: 'l_f_sub_ft',
+                    type: 'FormTable',
+                    props: { columns: 2 },
+                    children: [
+                      field('l_fs_a', '차시명', [input('l_fs_a_i', { value: '음성과신체표현법사례분석' })]),
+                      field('l_fs_b', '교육 시간', [input('l_fs_b_i', { value: '2026-07-04' })]),
+                      field('l_fs_c', '진행 방식', [segment('l_fs_c_r', ['온라인', '오프라인', '혼합'])]),
+                    ],
+                  },
+                ],
+                { weight: 2 },
+              ),
+              field('l_f_mail', '이메일 수신 동의', [segment('l_f_mail_r', ['동의', '미동의'])]),
+              field('l_f_date', '최종 수정일', [input('l_f_date_i', { value: '2026-07-04', readonly: true })]),
+            ],
+          },
+        ],
+      },
+      {
+        id: 'l_grid',
+        type: 'Card',
+        props: { title: '수강생' },
+        zones: { headEnd: [button('l_g_excel', '엑셀다운로드')] },
+        children: [
+          {
+            id: 'l_dg',
+            type: 'DataGrid',
+            props: {},
+            children: [
+              {
+                id: 'l_col_name',
+                type: 'GridColumn',
+                props: { label: '이름' },
+                children: [{ id: 'l_link', type: 'Link', props: { label: '홍길동' } }],
+              },
+              column('l_col_state', '상태', '정상'),
+            ],
+            zones: { rows: [{ id: 'l_row', type: 'GridRow', props: { repeat: 2 } }] },
+          },
+        ],
+      },
+    ],
+  },
+]
+
+/** «덮은» 프로젝트의 토큰 — 어두운 팔레트(리뷰 F1 의 `DARK`) · 간격 단위 두 배(F7) · 본문 16px(F8). */
+const TUNED = {
+  'semantic.surface': '#1e1e1e',
+  'semantic.canvas': '#2a2a2a',
+  'semantic.text': '#e6e6e6',
+  'semantic.textMuted': '#aaaaaa',
+  'semantic.border': '#444444',
+  'space.unit': '8px',
+  'typography.body.fontSize': '16px',
+}
+
 /** 요소의 계산된 색 · 크기. 글로 넘긴다 — vitest 가 함수 안의 이름을 바꿔 페이지에서 죽지 않게. */
 const LOOK = `(() => {
   const q = (selector) => {
@@ -254,20 +381,101 @@ const OVERFLOW = `(() => {
   return { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, rootWidth: Math.round(right - root.getBoundingClientRect().left), texts, past, nodes, boxes }
 })()`
 
+/** «목록» 의 카드 머리줄 · 칸 링크 · 덮은 색. 줄 수는 글 노드 하나의 `Range.getClientRects()` 서로 다른 `top` 수다. */
+const HEAD = `(() => {
+  const q = (selector) => {
+    const el = document.querySelector('.wb-export-canvas ' + selector)
+    if (el === null) throw new Error('없다: ' + selector)
+    return el
+  }
+  const css = (el) => getComputedStyle(el)
+  const box = (el) => el.getBoundingClientRect()
+  const lines = (el) => {
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return new Set(Array.from(range.getClientRects()).filter((r) => r.width > 0).map((r) => Math.round(r.top))).size
+  }
+  const baseline = (el) => {
+    // 글 한 줄의 기준선 — 줄 상자 아래끝에서 글꼴의 내림만큼 위. 같은 줄에 선 두 글은 줄 상자 아래끝 − 반 행간 차가 0 이다.
+    const span = document.createElement('span')
+    span.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline'
+    el.appendChild(span)
+    const y = box(span).top
+    span.remove()
+    return Math.round(y * 10) / 10
+  }
+  const card = (id) => {
+    const title = q('[data-wb-id="' + id + '"] > [data-wb-part="header"] > [data-wb-part="heading"] > [data-wb-part="title"]')
+    const end = document.querySelector('.wb-export-canvas [data-wb-id="' + id + '"] > [data-wb-part="header"] > [data-wb-part="headEnd"]')
+    const sub = document.querySelector('.wb-export-canvas [data-wb-id="' + id + '"] > [data-wb-part="header"] > [data-wb-part="subtitle"]')
+    return {
+      title: { lines: lines(title), bottom: box(title).bottom, right: box(title).right, baseline: baseline(title), size: css(title).fontSize, color: css(title).color },
+      sub: sub && { lines: lines(sub), left: box(sub).left, top: box(sub).top, baseline: baseline(sub), size: css(sub).fontSize, color: css(sub).color },
+      end: end && { top: box(end).top },
+    }
+  }
+  const link = q('[data-wb-id="l_link"]')
+  const label = q('[data-wb-id="l_f_term"] > [data-wb-part="label"]')
+  const gridHead = q('[data-wb-id="l_col_name"]')
+  return {
+    info: card('l_info'),
+    grid: card('l_grid'),
+    search: card('l_search'),
+    link: { color: css(link).color, weight: css(link).fontWeight, line: css(link).textDecorationLine },
+    label: { color: css(label).color, bg: css(label).backgroundColor, size: css(label).fontSize },
+    gridHead: { color: css(gridHead).color, bg: css(gridHead).backgroundColor },
+    body: css(q('[data-wb-component="Page"]')).fontSize,
+  }
+})()`
+
+/**
+ * 넘친 세그먼트 칸이 보이는가 — «정지» 칸(조회 폼 · 회원 상태의 끝 칸)과 그 값 칸의 오른끝, 그 칸을 자르는 조상(문서 뿌리까지 · `overflow` 가 `visible` 이
+ * 아니고 칸이 그 상자 밖으로 나간 것), 그 칸의 가운데가 창 안이면 그 점에 그 칸이 서는가(옆 쌍의 라벨 칸 바탕에 덮이지 않았나).
+ */
+const CLIPPED = `(() => {
+  const option = Array.from(document.querySelectorAll('.wb-export-canvas [data-wb-id="l_sf_state_r"] > [data-wb-part="option"]')).at(-1)
+  if (!option) throw new Error('없다: 정지 칸')
+  const value = option.closest('[data-wb-part="value"]')
+  const root = document.querySelector('.wb-export-canvas [data-wb-id]')
+  const r = option.getBoundingClientRect()
+  const clippers = []
+  for (let el = option.parentElement; el && el !== root.parentElement; el = el.parentElement) {
+    const style = getComputedStyle(el)
+    if (style.overflowX === 'visible' && style.overflowY === 'visible') continue
+    const b = el.getBoundingClientRect()
+    if (r.right > b.right + 0.5 || r.left < b.left - 0.5) clippers.push((el.getAttribute('data-wb-id') || el.getAttribute('data-wb-part') || el.tagName) + ' ' + style.overflowX)
+  }
+  const x = (r.left + r.right) / 2
+  const y = (r.top + r.bottom) / 2
+  const inView = x >= 0 && x < innerWidth && y >= 0 && y < innerHeight
+  const at = inView ? document.elementFromPoint(x, y) : null
+  return {
+    text: option.textContent.trim(),
+    past: Math.round(r.right - value.getBoundingClientRect().right),
+    clippers,
+    inView,
+    covered: inView && !(at !== null && option.contains(at)) ? String(at && (at.closest('[data-wb-part]') || at).getAttribute('data-wb-part')) : null,
+  }
+})()`
+
 const WHITE = 'rgb(255, 255, 255)'
 const BORDER = 'rgb(204, 204, 204)'
 const PRIMARY = 'rgb(10, 120, 216)'
 const DANGER = 'rgb(240, 74, 59)'
 const CANVAS = 'rgb(243, 244, 246)'
-const HEADER = 'rgb(242, 244, 247)'
+// 머리 바탕(`semantic.header`)의 기본값은 옅은 바탕의 참조라 같은 색이다(`system-themes/admin/src/manifest.ts` 머리말).
+const HEADER = CANVAS
 const TEXT = 'rgb(51, 51, 51)'
 
 describe.skipIf(!전제.ok)('기본테마 — 관리자 화면의 꼴', () => {
   let stack: EditorStack
   let alice: Session
   let bundle: UnpackedBundle
+  let tuned: UnpackedBundle
   let SCREEN_FILE = ''
   let POPUP_FILE = ''
+  let LIST_FILE = ''
+  let TUNED_LIST_FILE = ''
 
   beforeAll(async () => {
     if (!전제.ok) return
@@ -291,17 +499,40 @@ describe.skipIf(!전제.ok)('기본테마 — 관리자 화면의 꼴', () => {
       }),
       'ops 팝업',
     )
+    const list = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '목록', kind: 'page' }), '목록')
+    ok(await call('PATCH', `/projects/${project.id}/pages/${list.id}/ops`, { baseSeq: 0, ops: add(LIST) }), 'ops 목록')
     bundle = await exportBundle(stack, alice, project.id)
     SCREEN_FILE = bundle.pages['관리자-화면']!
     POPUP_FILE = bundle.pages['관리자-팝업']!
-    if (SCREEN_FILE === undefined || POPUP_FILE === undefined)
+    LIST_FILE = bundle.pages['관리자-목록']!
+    if (SCREEN_FILE === undefined || POPUP_FILE === undefined || LIST_FILE === undefined)
       throw new Error(`번들에 페이지가 없다: ${Object.keys(bundle.pages).join(', ')}`)
+
+    const other = ok(
+      await call('POST', '/projects', { name: '덮은', slug: `admin-look-tuned-${Date.now().toString(36)}` }),
+      '덮은 프로젝트',
+    )
+    const theme = ok(await call('GET', `/projects/${other.id}/theme`), '덮은 테마')
+    ok(
+      await call('PUT', `/projects/${other.id}/theme`, { themeId: theme.themeId, version: theme.version, tokens: TUNED, rev: theme.rev }),
+      '덮은 토큰',
+    )
+    const otherMenu = ok(await call('POST', `/projects/${other.id}/menu`, { parentId: null, title: '관리자' }), '덮은 메뉴')
+    const otherList = ok(
+      await call('POST', `/projects/${other.id}/pages`, { menuNodeId: otherMenu.id, title: '목록', kind: 'page' }),
+      '덮은 목록',
+    )
+    ok(await call('PATCH', `/projects/${other.id}/pages/${otherList.id}/ops`, { baseSeq: 0, ops: add(LIST) }), 'ops 덮은 목록')
+    tuned = await exportBundle(stack, alice, other.id)
+    TUNED_LIST_FILE = tuned.pages['관리자-목록']!
+    if (TUNED_LIST_FILE === undefined) throw new Error(`덮은 번들에 페이지가 없다: ${Object.keys(tuned.pages).join(', ')}`)
     if (SHOTS !== undefined) mkdirSync(SHOTS, { recursive: true })
   }, 180_000)
 
   afterAll(async () => {
     if (stack === undefined) return
     bundle?.dispose()
+    tuned?.dispose()
     const { before, after } = await stack.close()
     expect(before.processes).toBeGreaterThan(0)
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
@@ -394,13 +625,14 @@ describe.skipIf(!전제.ok)('기본테마 — 관리자 화면의 꼴', () => {
   }, 120_000)
 
   it.each([1280, 1000, 720, 390])(
-    '넘침 — 창 %d 에서 «화면» · «팝업» 이 창 폭 안이고 글자 · 노드 상자가 문서 뿌리 밖으로 안 나간다',
+    '넘침 — 창 %d 에서 «화면» · «팝업» · «목록» 이 창 폭 안이고 글자 · 노드 상자가 문서 뿌리 밖으로 안 나간다',
     async (width) => {
       const got: Record<string, unknown> = {}
       const want: Record<string, unknown> = {}
       for (const [name, file] of [
         ['화면', SCREEN_FILE],
         ['팝업', POPUP_FILE],
+        ['목록', LIST_FILE],
       ] as const) {
         const { context, page } = await open(file, width)
         try {
@@ -424,6 +656,94 @@ describe.skipIf(!전제.ok)('기본테마 — 관리자 화면의 꼴', () => {
         }
       }
       expect(got).toEqual(want)
+    },
+    120_000,
+  )
+  it('머리줄 · 칸 링크 — 부제는 제목 옆 같은 줄(기준선 · 틈 6px · 12px 흐린 글) · 그리드 칸 안 링크는 짙은 굵은 밑줄 글이고 올리면 주색', async () => {
+    const { context, page } = await open(LIST_FILE, 1280)
+    try {
+      const look: any = await page.evaluate(HEAD)
+      // eslint-disable-next-line no-console
+      console.log(`[기본테마 머리줄] ${JSON.stringify(look)}`)
+      const { title, sub } = look.info
+      expect({
+        sameLine: Math.abs(title.baseline - sub.baseline) <= 0.5,
+        gap: Math.round(sub.left - title.right),
+        size: sub.size,
+        color: sub.color,
+        lines: [title.lines, sub.lines],
+      }).toEqual({ sameLine: true, gap: 6, size: '12px', color: 'rgb(102, 102, 102)', lines: [1, 1] })
+      expect(look.link).toEqual({ color: TEXT, weight: '700', line: 'underline' })
+      await page.locator('.wb-export-canvas [data-wb-id="l_link"]').hover()
+      expect(await page.evaluate(`getComputedStyle(document.querySelector('.wb-export-canvas [data-wb-id="l_link"]')).color`)).toBe(PRIMARY)
+    } finally {
+      await context.close()
+    }
+  }, 120_000)
+
+  it.each([
+    ['기본', 641],
+    ['기본', 390],
+    ['덮은', 641],
+    ['덮은', 390],
+  ] as const)(
+    '좁은 창 머리줄 — «%s» 의 창 %d 에서 단추 넷을 둔 카드의 제목 · 부제가 한 줄씩이고 640 아래는 머리 오른쪽 구역이 제목 아래 줄',
+    async (project, width) => {
+      const { context, page } = await open(project === '기본' ? LIST_FILE : TUNED_LIST_FILE, width)
+      try {
+        const look: any = await page.evaluate(HEAD)
+        const below = (card: any) => card.end.top >= card.title.bottom - 0.5
+        expect({ title: look.info.title.lines, sub: look.info.sub.lines }).toEqual({ title: 1, sub: 1 })
+        // 640 아래는 머리 오른쪽 구역이 들어갈 자리가 있어도 제목 아래 줄이다 — 단추 하나인 카드도.
+        if (width < 640) expect({ info: below(look.info), grid: below(look.grid) }).toEqual({ info: true, grid: true })
+      } finally {
+        await context.close()
+      }
+    },
+    120_000,
+  )
+
+  it('덮은 팔레트 — 글 · 바탕을 덮은 프로젝트에서 라벨 · 카드 제목 · 그리드 머리가 덮은 색을 따르고 제목 · 라벨이 본문보다 안 작다', async () => {
+    const { context, page } = await open(TUNED_LIST_FILE, 1280)
+    try {
+      const look: any = await page.evaluate(HEAD)
+      // eslint-disable-next-line no-console
+      console.log(`[기본테마 덮은 팔레트] ${JSON.stringify(look)}`)
+      const TUNED_TEXT = 'rgb(230, 230, 230)'
+      const TUNED_CANVAS = 'rgb(42, 42, 42)'
+      expect({ label: look.label.color, labelBg: look.label.bg, title: look.info.title.color, head: look.gridHead }).toEqual({
+        label: TUNED_TEXT,
+        labelBg: TUNED_CANVAS,
+        title: TUNED_TEXT,
+        head: { color: TUNED_TEXT, bg: TUNED_CANVAS },
+      })
+      const px = (v: string) => Number.parseFloat(v)
+      expect(look.body).toBe('16px')
+      expect({ title: px(look.info.title.size) >= px(look.body), label: px(look.label.size) >= px(look.body) }).toEqual({
+        title: true,
+        label: true,
+      })
+    } finally {
+      await context.close()
+    }
+  }, 120_000)
+
+  it.each([1000, 390])(
+    '넘친 칸이 보인다 — 간격 단위를 키운 프로젝트의 창 %d 에서 값 칸보다 넓은 세그먼트(«정지»)를 자르거나 덮는 것이 없다',
+    async (width) => {
+      const { context, page } = await open(TUNED_LIST_FILE, width)
+      try {
+        if (SHOTS !== undefined) await page.screenshot({ path: join(SHOTS, `tuned-${width}.png`), fullPage: true })
+        const read: any = await page.evaluate(CLIPPED)
+        // 카나리아 — 이 판에서 «정지» 칸이 제 값 칸 밖으로 실제로 넘친다(넘치지 않으면 자르는 조상이 있어도 안 보인다).
+        expect(read.text).toBe('정지')
+        expect(read.past).toBeGreaterThan(8)
+        // 창 1000 은 옆 쌍 위로 넘친다(그 칸 가운데가 창 안) — 덮였는지 잰다. 390 은 카드 · 창 밖으로 넘친다 — 자르는 조상만 잰다.
+        if (width === 1000) expect(read.inView).toBe(true)
+        expect({ clippers: read.clippers, covered: read.covered }).toEqual({ clippers: [], covered: null })
+      } finally {
+        await context.close()
+      }
     },
     120_000,
   )
