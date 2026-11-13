@@ -62,10 +62,55 @@ const ROOT_VARS = (): Map<string, string> => {
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
-    expect(ADMIN_V0.manifest.version).toBe('1.8.0')
+    expect(ADMIN_V0.manifest.version).toBe('2.0.0')
     expect(ADMIN_V0.manifest.sdk).toBe('^1.8.0')
     expect(ADMIN_V0.manifest.name).toBe('기본테마')
-    expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 좁은 여백과 표 중심의 밀도를 갖는다.')
+    expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 회색 선의 표 격자와 파란 주색을 쓴다.')
+  })
+
+  /**
+   * 프로젝트가 덮은 토큰은 키로 저장된다 — `1.8.0` 에 고정된 프로젝트가 판을 올릴 때 그 판의 키가 전부 있어야 덮은 값이 이어진다. 키를 걷거나
+   * 이름을 바꾸면 그 프로젝트의 덮은 값이 말없이 사라진다.
+   */
+  it('1.8.0 의 토큰 키를 전부 선언한다', () => {
+    const V1_8_0 = [
+      'semantic.primary',
+      'semantic.primarySoft',
+      'semantic.surface',
+      'semantic.canvas',
+      'semantic.border',
+      'semantic.borderStrong',
+      'semantic.text',
+      'semantic.textMuted',
+      'semantic.danger',
+      'radius.sm',
+      'radius.md',
+      'radius.lg',
+      'shadow.md',
+      'font.body',
+      'typography.body.fontSize',
+      'space.unit',
+    ]
+    const declared = new Set(Object.keys(ADMIN_V0.manifest.tokens.items))
+    expect(V1_8_0.filter((key) => !declared.has(key))).toEqual([])
+  })
+
+  /** 설정 화면의 색 칸은 소문자 `#rrggbb` 로 보낸다 — 기본값이 다른 꼴이면 «기본값과 같은가» 가 글자로 안 맞아 안 덮은 칸이 덮은 칸으로 읽힌다. */
+  it('색 토큰 기본값은 소문자 #rrggbb', () => {
+    const colors = Object.entries(ADMIN_V0.manifest.tokens.items).filter(([, decl]) => decl.type === 'color')
+    expect(colors.length).toBeGreaterThan(8)
+    expect(colors.filter(([, decl]) => !/^#[0-9a-f]{6}$/.test(String(decl.default))).map(([key]) => key)).toEqual([])
+  })
+
+  /** 글꼴 파일은 싣지 않는다 — Pretendard 가 없는 기기는 뒤의 시스템 한글 서체로 그린다. 총칭 서체로 끝나지 않으면 그 뒤가 브라우저 기본(명조)이다. */
+  it('서체는 Pretendard 로 시작하고 sans-serif 로 끝난다 · 시스템 한글 서체를 품는다', () => {
+    const families = String(ADMIN_V0.manifest.tokens.items['font.body']!.default)
+      .split(',')
+      .map((family) => family.trim())
+    expect(families[0]).toBe('"Pretendard"')
+    expect(families.at(-1)).toBe('sans-serif')
+    expect(families).toContain('"Malgun Gothic"')
+    expect(families).toContain('"Apple SD Gothic Neo"')
   })
 
   /** 토큰 폼이 수십 칸이 되지 않게 12 ~ 30 — 사람이 고칠 만한 것만. 칸마다 무리와 한국어 이름이 있어야 폼이 묶어 보인다. */
@@ -125,6 +170,38 @@ describe('system-admin manifest', () => {
 })
 
 describe('system-admin CSS', () => {
+  /**
+   * 토큰 색은 `:root` 의 변수로만 든다 — 규칙이 그 색을 글자로 박으면 설정에서 그 토큰을 바꿔도 그 자리만 안 따라온다. `:root` 안의 상수(읽기 전용
+   * 바탕처럼 토큰과 값이 같아도 뜻이 다른 것)는 세지 않는다.
+   */
+  it('토큰 색을 글자로 박지 않는다 — :root 밖 선언 값에 색 토큰 기본값이 없다', () => {
+    const colors = Object.values(ADMIN_V0.manifest.tokens.items)
+      .filter((decl) => decl.type === 'color')
+      .map((decl) => String(decl.default).toLowerCase())
+    expect(colors.length).toBeGreaterThan(8)
+    const outside = declarations().filter((d) => d.selector !== ':root')
+    expect(outside.length).toBeGreaterThan(100)
+    expect(
+      outside
+        .filter((d) => colors.some((color) => d.value.toLowerCase().includes(color)))
+        .map((d) => `${d.selector} { ${d.property}: ${d.value} }`),
+    ).toEqual([])
+  })
+
+  /**
+   * 읽기 전용(값이 서버로 간다)과 비활성(안 간다)은 바탕으로 갈린다 — 같은 색이면 화면이 «이 값이 저장되는가» 를 못 가른다. 둘 다 흰 면과도 달라야
+   * 편집 칸과 갈린다.
+   */
+  it('읽기 전용과 비활성의 바탕은 다른 색이다 · 둘 다 면과 다르다', () => {
+    const vars = ROOT_VARS()
+    const readonly = vars.get('--wb-input-readonly')
+    const disabled = vars.get('--wb-input-disabled')
+    expect(readonly).toMatch(/^#[0-9a-f]{6}$/)
+    expect(disabled).toMatch(/^#[0-9a-f]{6}$/)
+    expect(readonly).not.toBe(disabled)
+    expect([readonly, disabled]).not.toContain(vars.get('--wb-semantic-surface'))
+  })
+
   /**
    * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 예외는 폼 · 파일첨부
    * 단추 구역의 기본 단추 셋뿐이다 — 이 테마의 기본 단추가 주색이라 주 단추(`primary`)와 나란히 서거나 작은 단추 줄로 서면 주색이 넘쳐, 그 자리에서만 보조
