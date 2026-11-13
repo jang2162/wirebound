@@ -5,6 +5,9 @@
  * 탭을 옮기는 것은 «화면에서 누름» 하나뿐이라, `selectedNodeId`가 바뀔 때 옮기면 트리 줄을 눌러도 탭이 옮긴다(코멘트 탭에 머문 채 트리로
  * 노드를 골라 코멘트를 보는 길이 닫힌다). 그래서 누른 자리(`canvas/canvas.tsx`)가 직접 알린다.
  *
+ * **누르는 자리가 둘이다** — 캔버스의 노드 누름(`useTellCanvasPick`)과 «코멘트» 탭의 묶음 머리 단추(`useShowComponentTab` —
+ * `panels/comment-panel.tsx`). 둘 다 «이 노드를 골라 그 속성을 보러 간다» 는 같은 뜻이라 같은 신호다.
+ *
  * provider 가 없으면(캔버스만 세운 케이스) 알림은 아무 데도 안 간다.
  */
 import { createContext, useContext, useEffect, useMemo, type ReactElement, type ReactNode } from 'react'
@@ -40,6 +43,9 @@ const NOBODY = (): void => {}
 export function useTellCanvasPick(): () => void {
   return useContext(CanvasPickContext)?.tell ?? NOBODY
 }
+
+/** 코멘트 묶음의 머리 단추가 «컴포넌트» 탭으로 가는 함수 — `useTellCanvasPick` 과 같은 신호다(머리말 «누르는 자리가 둘이다»). */
+export const useShowComponentTab = useTellCanvasPick
 
 /** 그 알림을 받는다 — `listener`는 안정된 함수로 준다(바뀔 때마다 다시 단다). */
 export function useOnCanvasPick(listener: () => void): void {

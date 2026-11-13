@@ -1269,7 +1269,7 @@ function RightPanel(props: {
   const mode = useEditorStore(store, (s) => s.mode)
   const [chosen, setChosen] = useState<PanelTab>('component')
   // **캔버스에서 노드를 눌러 고르면 «컴포넌트» 탭이다**(설계서 「설계서 화면 구조」). 고른 것이 바뀐 것을 보지 않고 누름의 신호를 받는다 — 트리 줄 ·
-  // 키보드 · 넣은 뒤 저절로 고름은 탭을 안 옮긴다(`shell/canvas-pick.tsx`). 뷰 모드는 그 탭이 없고 캔버스도 고르지 않는다.
+  // 키보드 · 넣은 뒤 저절로 고름은 탭을 안 옮긴다(`shell/canvas-pick.tsx` — 코멘트 묶음의 머리 단추도 같은 신호다). 뷰 모드는 그 탭이 없고 캔버스도 고르지 않는다.
   useOnCanvasPick(useCallback(() => setChosen('component'), []))
   // 번호 토큰이 데려왔으면 «코멘트» 탭이다(`comments/comment-focus.tsx`) — 두 모드에 다 있다.
   const commentFocus = useCommentFocus()
