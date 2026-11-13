@@ -141,8 +141,9 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
         box.scrollTop = box.scrollHeight
       })
       await settle(page)
-      // 판 카나리아 — 상자가 실제로 굴렀다.
-      expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(300)
+      // 판 카나리아 — 상자가 실제로 끝까지 굴렀다. 굴린 양은 예제 장의 길이(테마가 정한다)에 매여 글자로 크게 잡지 않는다 — 머리가 위로 밀려 숨는
+      // 판을 세우기에 넉넉한 200px 이상이면 선다(기본테마 2.0.0 의 «주문 목록» 은 264px).
+      expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(200)
       await tap(page, 'ex-l-go-dash')
       await poll(
         '대시보드',
@@ -162,7 +163,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
         box.scrollTop = box.scrollHeight
       })
       await settle(page)
-      expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(300)
+      expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(200)
       await pick(page, '주문 상세', 'order')
       await settle(page)
       expect({ byLink, byRow: await headOf() }).toEqual({ byLink: true, byRow: true })
