@@ -377,6 +377,30 @@ describe('system-admin CSS', () => {
     expect(byRole).toEqual(Object.fromEntries(roles.map((role) => [role, `var(--wb-typography-${role}-fontSize)`])))
   })
 
+  /** 제목 단계(`display` · `h1` – `h6`)는 짙은 글 색이고 본문은 바탕 규칙의 글 색 그대로다. 페이지 제목(`h1`)은 22px 다. */
+  it('Text 의 제목 단계는 짙은 글 색 · h1 은 22px', () => {
+    const color = (role: string) => ruleOf(`[data-wb-component="Text"][data-wb-variant="${role}"]`).getPropertyValue('color').trim()
+    const headings = ['display', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']
+    expect(Object.fromEntries(headings.map((role) => [role, color(role)]))).toEqual(
+      Object.fromEntries(headings.map((role) => [role, 'var(--wb-semantic-textStrong)'])),
+    )
+    expect(color('body')).toBe('')
+    expect(ROOT_VARS().get('--wb-typography-h1-fontSize')).toBe('22px')
+  })
+
+  /** 팝업 — 제목줄은 머리 바탕(표 머리와 같은 토큰), 바닥은 옅은 바탕이고 테두리는 테두리 색이다. */
+  it('팝업 제목줄은 머리 바탕 · 바닥은 옅은 바탕', () => {
+    expect(ruleOf('[data-wb-component="Popup"] > [data-wb-part="titlebar"]').getPropertyValue('background').trim()).toBe(
+      'var(--wb-semantic-header)',
+    )
+    expect(ruleOf('[data-wb-component="Popup"] > [data-wb-part="footer"]').getPropertyValue('background').trim()).toBe(
+      'var(--wb-semantic-canvas)',
+    )
+    expect(ruleOf('[data-wb-component="Popup"][data-wb-structure="default"]').getPropertyValue('border')).toContain(
+      'var(--wb-semantic-border)',
+    )
+  })
+
   /**
    * 카드 상자에는 여백이 없다 — 머리줄 밑선 · 바닥 윗선 · 몸통에 붙은 표가 상자 테두리까지 닿는다. 머리줄은 격자 칸과 같은 높이(42px)다.
    */
