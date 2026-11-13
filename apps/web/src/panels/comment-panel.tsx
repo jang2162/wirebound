@@ -142,6 +142,7 @@
  */
 import { useCommentIndex, useCommentTokenContext } from '../comments/comment-index'
 import { COMMENT_FLASH_MS, useCommentFocus } from '../comments/comment-focus'
+import { useCommentPointing } from '../comments/comment-pointing'
 import { CommentBody } from './comment-body'
 import { useTokenPicker } from './comment-token-picker'
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
@@ -683,6 +684,8 @@ export function CommentPanel(props: {
    * 아직이면 설 때까지 기다린다(`at` 으로 한 번만). 그 노드에 코멘트가 없으면(번호가 걷힘) 노드를 고른 것으로 끝난다.
    */
   const focus = useCommentFocus()
+  /** 묶음에 포커스가 들면 캔버스가 그 노드에 링을 그린다(`comments/comment-pointing.tsx`) — «코멘트» 탭(`scope` `'page'`)에서만. */
+  const { point } = useCommentPointing()
   const rootRef = useRef<HTMLDivElement>(null)
   const flashed = useRef(0)
   const [flash, setFlash] = useState<{ nodeId: string; at: number } | null>(null)
@@ -1298,6 +1301,7 @@ export function CommentPanel(props: {
               key={group.nodeId}
               className="wb-shell-comment-group"
               data-comment-node={group.nodeId}
+              {...(scope === 'page' && group.present === 'yes' ? { tabIndex: 0, onFocus: () => point(group.nodeId) } : {})}
               {...(flash?.nodeId === group.nodeId ? { 'data-flash': '' } : {})}
               // 고른 노드의 무리에 표시를 단다. `aria-current`는 "여럿 중 지금 것"을
               // 뜻하는 표준 자리라 보조 기술도 그대로 읽는다.

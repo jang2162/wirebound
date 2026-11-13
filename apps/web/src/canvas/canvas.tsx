@@ -64,6 +64,7 @@ import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useViewState } from '../shell/use-view-state'
 import { useTellCanvasPick } from '../shell/canvas-pick'
+import { useCommentPointing } from '../comments/comment-pointing'
 import { useAnnounceCanvasRemeasure, useDragging, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { emptyZonesFor, type EmptyZones } from './empty-zones'
@@ -219,7 +220,7 @@ export function Canvas(props: {
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
 
   const surfaceRef = useRef<HTMLDivElement | null>(null)
-  /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`다. */
+  /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`, 코멘트 링의 것이 `ringBox` 다(아래 `outlinedIds`). */
   const [boxes, setBoxes] = useState<readonly OutlineBox[]>(NO_OUTLINES)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
   /** 배치 선(`./layout-guides.tsx`) — 켰고 편집 모드일 때 Flex · Grid 노드마다. */
@@ -420,12 +421,26 @@ export function Canvas(props: {
     popups.handle(event.requests)
   }
 
-  // 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
+  // 고른 노드의 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
   const outlinedNodeId = mode === 'edit' ? selectedNodeId : null
-  /** 외곽선을 그릴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것»). 기준 노드는 진하게 · 나머지는 옅게. */
-  const outlinedIds = mode === 'edit' ? selectedNodeIds : NO_IDS
+  const selectedOutlined = mode === 'edit' ? selectedNodeIds : NO_IDS
+  /**
+   * **코멘트가 가리킨 노드의 링**(`../comments/comment-pointing.tsx`) — 두 모드 다. 고른 것이 아니라 기준 외곽선과 같은 꼴(`.wb-shell-selection`)
+   * 하나를 따로 그린다. 기준 노드를 가리키면 따로 안 그린다(하나로 족하다). 고른 옅은 노드를 가리키면 옅은 외곽선 대신 링이다.
+   */
+  const { nodeId: pointedId, point } = useCommentPointing()
+  const ringId = pointedId !== null && pointedId !== outlinedNodeId ? pointedId : null
+  /**
+   * 외곽선을 잴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것») + 링. 링도 같은 측정 이펙트가 잰다 — 두 벌로 재면 하나만 자리를 따라간다.
+   * 이펙트의 의존이라 같은 값이면 같은 배열이어야 한다.
+   */
+  const outlinedIds = useMemo(
+    () => (ringId === null || selectedOutlined.includes(ringId) ? selectedOutlined : [...selectedOutlined, ringId]),
+    [selectedOutlined, ringId],
+  )
   const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
+  const ringBox = ringId === null ? null : (boxes.find((item) => item.nodeId === ringId)?.box ?? null)
   const [platform] = useState(() => platformOf(navigator))
   /** «사람이 캔버스에서 눌러 골랐다» — 우측 패널이 «컴포넌트» 탭으로 옮긴다(`../shell/canvas-pick.tsx`). 고름이 서지 않았으면(남이 잡음 · 뺌) 안 알린다. */
   const tellPick = useTellCanvasPick()
@@ -601,6 +616,8 @@ export function Canvas(props: {
       //
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
+        // 캔버스를 누르면 코멘트의 링이 걷힌다(`../comments/comment-pointing.tsx` «걷히는 때») — 두 모드 다.
+        point(null)
         // 바로 연 팝업 페이지의 ✖ — 덮개 위의 것은 층이 닫는다.
         if (mode === 'view' && isPopupClose(event.target) && (event.target as Element).closest?.('[data-wb-popup-layer]') == null) {
           const line = popupStack.popups.length === 0 && isPopupDocument(doc) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP
@@ -658,6 +675,7 @@ export function Canvas(props: {
           onResize={bumpMeasure}
           // 문서 밖(iframe 의 빈 자리)을 누른 것 — 표면의 `onClick` · `onClickCapture` 가 받는 클릭과 같게 다룬다.
           onBackgroundClick={(event) => {
+            point(null)
             if (mode === 'view') beginGesture()
             else if (!adds(event)) store.selectNode(null)
           }}
@@ -746,9 +764,25 @@ export function Canvas(props: {
           style={{ left: box.left, top: box.top, width: box.width, height: box.height, outlineWidth: 2 / zoom, outlineOffset: 1 / zoom }}
         />
       )}
+      {/* 코멘트가 가리킨 노드의 링(위 `ringId`) — 기준 외곽선 **뒤에** 그린다. `.wb-shell-selection` 의 첫 요소를 고른 외곽선으로 읽는 케이스가
+          많다. `data-wb-selected-id` 를 안 단다 — 고른 것이 아니다. */}
+      {ringId !== null && ringBox !== null && (
+        <div
+          className="wb-shell-selection"
+          data-wb-comment-pointed={ringId}
+          style={{
+            left: ringBox.left,
+            top: ringBox.top,
+            width: ringBox.width,
+            height: ringBox.height,
+            outlineWidth: 2 / zoom,
+            outlineOffset: 1 / zoom,
+          }}
+        />
+      )}
       {/* 기준 노드가 아닌 고른 노드의 외곽선 — 옅게(`.wb-shell-selection-member`). 기준 노드의 것(`data-wb-selected-id`)은 위 하나다. */}
       {boxes
-        .filter((item) => item.nodeId !== outlinedNodeId)
+        .filter((item) => item.nodeId !== outlinedNodeId && item.nodeId !== ringId)
         .map((item) => (
           <div
             key={item.nodeId}

@@ -1,0 +1,229 @@
+/**
+ * **코멘트가 가리킨 노드의 링**(`src/canvas/canvas.tsx` 의 `ringId` · `src/comments/comment-pointing.tsx`) — «코멘트» 탭의 묶음에 포커스가 들면
+ * 캔버스가 그 노드에 고른 것과 같은 꼴의 링(`.wb-shell-selection[data-wb-comment-pointed]`)을 세운다. **진짜 선택이 아니다** — 스토어의 선택 ·
+ * 고른 외곽선(`data-wb-selected-id`)은 그대로다.
+ *
+ * jsdom 이라 상자는 0 이다 — 링 요소가 서는지 · 어느 노드에 붙는지로 잰다. 자리 · Tab 차례는 실브라우저(`build-test/comment-focus.test.ts`)가 잰다.
+ */
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PageDocument } from '@wirebound/schema'
+import type { Comment } from '../../src/api/types'
+import type { EditorStore } from '../../src/store/editor-store'
+import { canvasDocument, deselect, openPage, PAGE_ID, pageDoc, requireNode } from '../editor-harness'
+
+/** 셸이 만든 스토어를 쥔다 — 링이 선택이 아님을 스토어 값으로 잰다(`./canvas.test.tsx` 의 같은 장치). */
+const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
+
+vi.mock('../../src/store/editor-store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/store/editor-store')>()
+  return {
+    ...actual,
+    EditorStore: class extends actual.EditorStore {
+      constructor() {
+        super()
+        createdStores.push(this)
+      }
+    },
+  }
+})
+
+beforeEach(() => {
+  createdStores.length = 0
+})
+
+function shellStore(): EditorStore {
+  const store = createdStores.at(-1)
+  if (store === undefined) throw new Error('셸이 스토어를 만들지 않았습니다')
+  return store as EditorStore
+}
+
+/** `n_form` · `n_grid` 는 늘 보이고 `n_admin` 은 `s_admin` 에서만 보인다. */
+function doc(): PageDocument {
+  return {
+    ...pageDoc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_form', type: 'Text', props: { content: '폼' } },
+        { id: 'n_grid', type: 'Text', props: { content: '표' } },
+        { id: 'n_admin', type: 'Text', props: { content: '관리' }, visibility: { mode: 'only', states: ['s_admin'] } },
+      ],
+    }),
+    viewStates: [{ id: 's_admin', name: '관리자' }],
+  }
+}
+
+function comment(id: string, nodeId: string): Comment {
+  return {
+    id,
+    nodeId,
+    body: `${nodeId} 의 말`,
+    authorId: 'u-1',
+    authorName: '테스터',
+    createdAt: '2026-11-14T09:00:00.000Z',
+    updatedAt: '2026-11-14T09:00:00.000Z',
+  }
+}
+
+async function open(): Promise<void> {
+  await openPage(doc(), {
+    apiOverrides: { listComments: async () => [comment('c1', 'n_grid'), comment('c2', 'n_admin'), comment('c3', 'n_form')] },
+  })
+}
+
+async function openCommentTab(): Promise<void> {
+  fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+  await waitFor(() => expect(document.querySelector('[data-comment-node="n_grid"]')).not.toBeNull())
+}
+
+/** 그 노드의 묶음에 포커스를 준다 — 사람이 Tab 으로 드는 것과 같은 `focusin`. */
+function focusGroup(nodeId: string): void {
+  const group = document.querySelector<HTMLElement>(`[data-comment-node="${nodeId}"]`)
+  if (group === null) throw new Error(`묶음이 없습니다: ${nodeId}`)
+  act(() => group.focus())
+}
+
+function rings(): string[] {
+  return [...document.querySelectorAll('[data-wb-comment-pointed]')].map((element) => element.getAttribute('data-wb-comment-pointed') ?? '')
+}
+
+function selectedOutlines(): string[] {
+  return [...document.querySelectorAll('[data-wb-selected-id]')].map((element) => element.getAttribute('data-wb-selected-id') ?? '')
+}
+
+describe('코멘트 링 — 진짜 선택이 아니다', () => {
+  it('아무것도 안 고른 채 묶음에 포커스 — 링 하나 · 고른 외곽선 없음 · 선택 그대로', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    expect(rings()).toEqual([])
+
+    focusGroup('n_grid')
+
+    expect(rings()).toEqual(['n_grid'])
+    expect(document.querySelector('[data-wb-comment-pointed]')?.classList.contains('wb-shell-selection')).toBe(true)
+    expect(selectedOutlines()).toEqual([])
+    expect(shellStore().getState().selectedNodeIds).toEqual([])
+  })
+
+  it('다른 노드를 고른 채 — 고른 외곽선은 그대로 · 링은 따로', async () => {
+    await open()
+    fireEvent.click(requireNode('n_form'))
+    await openCommentTab()
+
+    focusGroup('n_grid')
+
+    expect(rings()).toEqual(['n_grid'])
+    expect(selectedOutlines()).toEqual(['n_form'])
+    expect(shellStore().getState().selectedNodeIds).toEqual(['n_form'])
+  })
+
+  it('고른 노드를 가리키면 링을 따로 안 그린다', async () => {
+    await open()
+    fireEvent.click(requireNode('n_grid'))
+    await openCommentTab()
+
+    focusGroup('n_grid')
+    expect(rings()).toEqual([])
+    expect(selectedOutlines()).toEqual(['n_grid'])
+
+    // 양성 대조 — 같은 판에서 다른 묶음은 링이 선다.
+    focusGroup('n_form')
+    expect(rings()).toEqual(['n_form'])
+  })
+
+  it('뷰 모드에서도 선다 — 고른 외곽선은 없다', async () => {
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    await openCommentTab()
+
+    focusGroup('n_grid')
+
+    expect(rings()).toEqual(['n_grid'])
+    expect(selectedOutlines()).toEqual([])
+  })
+
+  it('지금 상태에서 숨은 노드를 가리키면 링이 없다', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+
+    focusGroup('n_admin')
+    expect(canvasDocument().querySelector('[data-wb-id="n_admin"]')).toBeNull()
+    expect(rings()).toEqual([])
+
+    // 양성 대조 — 보이는 노드로 옮기면 선다.
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+  })
+})
+
+describe('코멘트 링 — 걷히는 때', () => {
+  /**
+   * 고름이 서는 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 그쪽이 먼저 걷는다. 누름 자체가 걷는지는 **고름이 안 서는** 누름 —
+   * 남이 잡은 노드 — 으로 잰다(탭이 «코멘트» 에 머문다).
+   */
+  it('캔버스의 노드를 누르면 걷힌다 — 남이 잡아 안 골라져 탭이 머물러도', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    act(() => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n_form', userId: 'u-bora', userName: '보라' }]))
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+
+    fireEvent.click(requireNode('n_form'))
+
+    expect(shellStore().getState().selectedNodeIds).toEqual([])
+    expect(screen.getByRole('tab', { name: '코멘트' }).getAttribute('aria-selected')).toBe('true')
+    expect(rings()).toEqual([])
+  })
+
+  it('캔버스 빈 자리를 누르면 걷힌다', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+
+    deselect()
+
+    expect(rings()).toEqual([])
+  })
+
+  it('뷰 모드에서도 캔버스를 누르면 걷힌다', async () => {
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    await openCommentTab()
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+
+    fireEvent.click(requireNode('n_form'))
+
+    expect(rings()).toEqual([])
+  })
+
+  it('다른 탭으로 가면 걷힌다', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+
+    fireEvent.click(screen.getByRole('tab', { name: '페이지 정보' }))
+
+    await waitFor(() => expect(rings()).toEqual([]))
+  })
+
+  it('우측 패널을 접으면 걷힌다', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+
+    fireEvent.click(screen.getByRole('button', { name: '우측 패널 접기' }))
+
+    await waitFor(() => expect(rings()).toEqual([]))
+  })
+})
