@@ -527,9 +527,15 @@ describe('system-admin CSS', () => {
    * 바꾸는 속성(색 · 모서리 · 그림자)만 갖는다. 예외는 노드가 아닌 조각의 차례(세그먼트 칸 · 파일첨부 줄 · 조회 폼 조각)와 1px 선 둘이다.
    */
   it('배치를 바꾸는 규칙은 형제 구조로 안 가른다 — 형제 셀렉터 규칙은 그림만 바꾼다', () => {
-    const STRUCTURAL = /:(first|last|only)-child|:nth-|:(first|last|only)-of-type|\s[+~]\s/
+    // 결합자 양옆의 공백을 가정하지 않는다(`*+*`) — 속성 값(`[data-wb-state~="…"]`)을 걷은 뒤 센다. 자식 · 형제 유무로 가르는 `:has()` · `:empty` 도
+    // 숨긴 미리보기를 센다.
+    const STRUCTURAL = /:(first|last|only)-child|:nth-|-of-type|:empty|:has\(|[+~]/
+    const structuralOf = (selector: string) => STRUCTURAL.test(selector.replace(/\[[^\]]*\]/g, '[]'))
     const PAINT = /^(color|background(-color)?|border-(top|bottom)-(left|right)-radius|box-shadow|opacity|outline.*)$/
-    /** 노드가 아닌 조각의 차례 — 끄는 동안의 미리보기가 그 사이에 안 선다. 1px 선 — 칸 · 줄의 선 하나를 걷는다(숨긴 미리보기 칸 · 줄이 끝에 서면 1px 이 달라진다 · 보고 «남은 것»). */
+    /**
+     * 노드가 아닌 조각의 차례 — 끄는 동안의 미리보기가 그 사이에 안 선다. 1px 선 — 칸 · 줄의 선 하나를 걷는다(숨긴 미리보기 칸 · 줄이 끝에 서면 1px 이
+     * 달라진다 · `docs/superpowers/plans/2026-11-13-sk-report.md` «남은 것»). `:has()` — 자식 유무로 가르는 규칙 가운데 선 하나 · 칸 안 정렬만 바꾸는 것.
+     */
     const EXEMPT = [
       '[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:first-child',
       '[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [data-wb-part="option"]:last-child',
@@ -538,8 +544,15 @@ describe('system-admin CSS', () => {
       '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] + [data-wb-part="actions"]',
       '[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]:last-child',
       '[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"] [data-wb-part="table"] > tbody:last-child > tr:last-child > [data-wb-part]',
+      // 칸이 하나도 없는 폼 표의 칸 선 1px — 빈 표에 숨긴 미리보기가 서면 선이 선다(`docs/superpowers/plans/2026-11-13-rv-sk-report.md` «촘촘한 판» 이
+      // 그 자리를 0.5px 걸음으로 훑어 뒤집힘 0).
+      '[data-wb-component="FormTable"] > [data-wb-part="cells"]:not(:has(> *))',
+      // 여러 줄 입력이 든 필드의 라벨 정렬 — 칸 안의 라벨(노드가 아닌 조각) 자리만 바뀌고 칸 높이는 여러 줄 입력이 정한다.
+      '[data-wb-component="FormTable"] > [data-wb-part="cells"] > [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) > [data-wb-part="label"]',
+      '[data-wb-component="EntryForm"] > [data-wb-part="row"] > [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"])',
+      '[data-wb-component="EntryForm"] > [data-wb-part="row"] > [data-wb-component="Field"]:has(> [data-wb-part="value"] > [data-wb-component="TextArea"]) > [data-wb-part="label"]',
     ]
-    const structural = rules().filter((rule) => STRUCTURAL.test(rule.selector))
+    const structural = rules().filter((rule) => structuralOf(rule.selector))
     expect(structural.length).toBeGreaterThan(EXEMPT.length)
     expect(EXEMPT.filter((selector) => !structural.some((rule) => rule.selector === selector))).toEqual([])
     const layout = structural
