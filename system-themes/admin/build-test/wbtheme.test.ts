@@ -42,16 +42,19 @@ describe('system-admin .wbtheme', () => {
   /**
    * 빌드 CSS 에 토큰마다 기본값 변수가 실린다 — 토큰 시트가 없는 판(갤러리 · 토큰을 안 덮은 캔버스)이 이 값으로 그려진다. 견주는 쪽은 manifest 다:
    * 이 프로젝트(build)에서는 `theme.css?raw` 가 빈 글자라(루트 `vitest.config.ts` 의 `css.include` 는 unit 프로젝트에만 있다) 소스 CSS 와 견주면
-   * `toContain('')` 이 되어 늘 참이다.
+   * `toContain('')` 이 되어 늘 참이다. 참조 기본값(`{semantic.text}`)은 토큰 시트가 내는 꼴(`var(--wb-semantic-text)`)로 견준다.
    */
   it('빌드 CSS 에 토큰마다 --wb-<키>: <기본값>; 이 있다', () => {
     const css = files!.themeCss ?? ''
     expect(css.length).toBeGreaterThan(0)
     const items = Object.entries(MANIFEST.tokens.items)
     expect(items.length).toBeGreaterThan(0)
-    expect(items.filter(([key, decl]) => !css.includes(`--wb-${key.replaceAll('.', '-')}: ${decl.default};`)).map(([key]) => key)).toEqual(
-      [],
-    )
+    const cssVar = (key: string) => `--wb-${key.replaceAll('.', '-')}`
+    const valueOf = (value: string | number) => {
+      const ref = /^\{([^{}]+)\}$/.exec(String(value))?.[1]
+      return ref === undefined ? String(value) : `var(${cssVar(ref)})`
+    }
+    expect(items.filter(([key, decl]) => !css.includes(`${cssVar(key)}: ${valueOf(decl.default)};`)).map(([key]) => key)).toEqual([])
   })
 
   it('갤러리 칸 전부가 오류 없이 그려진다(jsdom)', () => {
