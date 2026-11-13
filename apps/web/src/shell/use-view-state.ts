@@ -13,7 +13,7 @@
  * 상태를 고른 채 편집해도 노드는 하나다 — 숨은 노드도 고르고 고칠 수 있다(구조 트리가 흐리게 그린다 · 캔버스는 안 그린다).
  */
 import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactElement, type ReactNode } from 'react'
-import { childLists, isVisibleIn, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
+import { childLists, isVisibleIn, viewStateOrder, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
 import { useOpenDocument } from '../store/use-editor-store'
 
 interface Chosen {
@@ -89,6 +89,25 @@ export function hiddenNodeIds(document: Pick<PageDocument, 'root' | 'viewStates'
   }
   visit(document.root, false)
   return out.size === 0 ? NO_HIDDEN : out
+}
+
+/**
+ * **그 노드가 보이는 화면 상태**(코멘트 묶음을 고를 때 — `panels/comment-panel.tsx`). 지금 상태에서 보이면 안 바꾼다. 숨었으면 «기본» → 상태 트리
+ * 차례(`viewStateOrder`)로 그 노드가 보이는 첫 상태다. 어느 상태에서도 안 보이거나 문서 · 노드가 없으면 안 바꾼다 — 고른 사람의 화면을 까닭 없이
+ * 뒤집지 않는다.
+ */
+export function stateShowingNode(
+  document: Pick<PageDocument, 'root' | 'viewStates'> | null,
+  nodeId: string,
+  current: string | null,
+): { change: false } | { change: true; state: string | null } {
+  // 없는 노드 · 없는 문서도 여기서 끝난다 — 숨은 집합에 없다.
+  if (document === null || !hiddenNodeIds(document, current).has(nodeId)) return { change: false }
+  const candidates: (string | null)[] = [null, ...viewStateOrder(document.viewStates).map((entry) => entry.state.id)]
+  for (const state of candidates) {
+    if (!hiddenNodeIds(document, state).has(nodeId)) return { change: true, state }
+  }
+  return { change: false }
 }
 
 /** 지금 상태에서 숨은 노드(`hiddenNodeIds`) — 구조 트리의 흐림 · 표지가 쓴다. */
