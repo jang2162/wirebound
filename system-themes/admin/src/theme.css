@@ -287,9 +287,10 @@
 /* ── 데이터 ───────────────────────────────────────────────────────────── */
 
 /*
- * 그리드 — 표에 바깥 선 · 칸마다 아래 선, 머리는 옅은 바탕 · 작은 굵은 글 · 칸 선(병합 머리가 읽히게), 짝수 줄 옅은 바탕. 결과 머리줄(«총 N건» ·
- * 엑셀 다운로드)과 바닥(페이지네이션 바)은 스크롤 상자 밖이라 창 폭을 따르고 표만 가로로 굴러간다. 뷰는 SDK 기본 뷰다(선택 칸 · 번호 · 빈 줄 · 막대 ·
- * 생략 띠 조각을 낸다). 행 꼴(`GridRow` 의 `tone`)은 줄 바탕, 열 음영(`GridColumn` 의 `tone` — 머리 칸과 몸 칸이 같은 표지를 싣는다)은 칸 바탕이다.
+ * 그리드 — 표에 바깥 선, 칸마다 아래 선(가로선)과 옅은 오른쪽 선(세로선), 머리는 머리 바탕 · 굵은 글 · 가운데. 줄무늬는 없다 — 줄은 올려 둔 줄(hover)과
+ * 행 꼴로만 칠한다. 결과 머리줄(«총 N건» · 엑셀 다운로드)과 바닥(페이지네이션 바)은 스크롤 상자 밖이라 창 폭을 따르고 표만 가로로 굴러간다. 뷰는 SDK 기본
+ * 뷰다(선택 칸 · 번호 · 빈 줄 · 막대 · 생략 띠 조각을 낸다). 행 꼴(`GridRow` 의 `tone`)은 줄 바탕, 열 음영(`GridColumn` 의 `tone` — 머리 칸과 몸 칸이
+ * 같은 표지를 싣는다)은 칸 바탕이다.
  */
 [data-wb-component="DataGrid"][data-wb-structure="default"] {
   color: var(--wb-semantic-text);
@@ -302,37 +303,43 @@
   gap: var(--wb-space-2);
 }
 [data-wb-component="DataGrid"] > [data-wb-part="head"] > * {
-  gap: var(--wb-space-2);
+  gap: var(--wb-gap-piece);
 }
 [data-wb-component="DataGrid"] > [data-wb-part="footer"] {
-  padding-top: var(--wb-space-3);
+  padding-top: var(--wb-space-2);
 }
 [data-wb-component="DataGrid"] [data-wb-part="table"] {
   border: 1px solid var(--wb-semantic-border);
   background: var(--wb-semantic-surface);
 }
+/*
+ * 세로선은 칸의 오른쪽에 긋고 줄의 끝 칸에서 걷는다 — 합친 테두리(`border-collapse`)에서는 같은 굵기면 칸의 선이 표의 선을 이겨, 안 걷으면 표의 오른쪽
+ * 바깥 선이 옅은 색이 된다.
+ */
 [data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part] {
-  padding: var(--wb-space-2) var(--wb-space-3);
+  padding: var(--wb-space-2) calc(var(--wb-space-unit) * 2.5);
   border-bottom: 1px solid var(--wb-semantic-border);
+  border-right: 1px solid var(--wb-semantic-borderFaint);
+}
+[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]:last-child {
+  border-right: 0;
 }
 [data-wb-component="DataGrid"] [data-wb-part="header"] > tr > * {
-  background: var(--wb-semantic-canvas);
-  color: var(--wb-semantic-textMuted);
-  font-size: var(--wb-typography-h6-fontSize);
-  line-height: var(--wb-typography-h6-lineHeight);
+  background: var(--wb-semantic-header);
+  color: var(--wb-semantic-textStrong);
   font-weight: var(--wb-typography-h6-fontWeight);
-  border: 1px solid var(--wb-semantic-border);
+  text-align: center;
+  vertical-align: middle;
 }
-[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:nth-child(even) {
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:hover {
   background: var(--wb-semantic-canvas);
 }
-/* 셀 틀 조각 사이는 간격 단위로. */
+/* 셀 틀 조각 사이는 조각 틈으로. */
 [data-wb-component="DataGrid"] [data-wb-part="pieces"] {
-  gap: var(--wb-space-2);
+  gap: var(--wb-gap-piece);
 }
 [data-wb-component="DataGrid"] [data-wb-cell="number"] {
   text-align: center;
-  color: var(--wb-semantic-textMuted);
 }
 /* 열 폭 — 길이가 아니라 설계의 낱말(짧은 칸 · 보통 · 긴 칸)이다. 넓은 표는 이 폭을 지키고 표 칸이 가로로 굴러간다. */
 [data-wb-component="GridColumn"][data-wb-size="short"] {
@@ -347,19 +354,14 @@
   width: 16em;
   min-width: 16em;
 }
-/* 필수 별은 머리 글 앞 · 정렬 표시는 머리 글 뒤. */
+/* 필수 별은 머리 글 앞 · 정렬 표시는 머리 글 뒤(정렬한 열에만 선다). */
 [data-wb-component="GridColumn"] > [data-wb-part="required"] {
   margin-right: var(--wb-space-1);
   color: var(--wb-semantic-danger);
 }
 [data-wb-component="GridColumn"] > [data-wb-part="sort"] {
   margin-left: var(--wb-space-1);
-  color: var(--wb-semantic-textMuted);
   font-size: var(--wb-typography-caption-fontSize);
-}
-[data-wb-component="GridColumn"][data-wb-sort="asc"] > [data-wb-part="sort"],
-[data-wb-component="GridColumn"][data-wb-sort="desc"] > [data-wb-part="sort"] {
-  color: var(--wb-semantic-primary);
 }
 [data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-tone="shaded"]:is(th, td) {
   background: var(--wb-semantic-canvas);
@@ -372,7 +374,7 @@
   height: 14px;
   box-sizing: border-box;
   border: 1px solid var(--wb-semantic-borderStrong);
-  border-radius: var(--wb-radius-sm);
+  border-radius: calc(var(--wb-radius-sm) / 2);
   background: var(--wb-semantic-surface);
 }
 [data-wb-component="DataGrid"] [data-wb-part="radio"] {
@@ -400,7 +402,7 @@
   color: var(--wb-semantic-textMuted);
   background: repeating-linear-gradient(135deg, transparent 0 6px, var(--wb-semantic-border) 6px 7px);
 }
-/* 행 꼴 — 강조(선택 칸 켬) · 흐림(선택 칸 끔 — 휴일 행) · 음영. 합계 행은 굵은 글 · 윗선. 짝수 줄 바탕보다 뒤에 와 이긴다. */
+/* 행 꼴 — 강조(선택 칸 켬) · 흐림(선택 칸 끔 — 휴일 행) · 음영. 합계 행은 머리 바탕 · 굵은 글. 올려 둔 줄 바탕보다 뒤에 와 이긴다. */
 [data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="selected"] {
   background: var(--wb-semantic-primarySoft);
 }
@@ -413,32 +415,35 @@
   background: var(--wb-semantic-canvas);
 }
 [data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="dimmed"] {
+  background: var(--wb-semantic-canvas);
   color: var(--wb-semantic-textMuted);
   opacity: 1;
 }
 [data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="dimmed"] :is([data-wb-part="checkbox"], [data-wb-part="radio"]) {
-  background: var(--wb-semantic-border);
-}
-[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-kind="total"] > * {
-  border-top: 2px solid var(--wb-semantic-borderStrong);
-  font-weight: var(--wb-typography-h6-fontWeight);
+  background: var(--wb-input-disabled);
 }
 /*
- * 고정 열 — 가로로 굴려도 제자리다(왼쪽 자리는 SDK 기본 뷰가 잰다). 칸 바탕이 비면 뒤로 지나는 칸 글이 비친다 — 줄 바탕(짝수 줄 · 행 꼴)을 칸에도
- * 깔고, 고정 구역 끝 칸은 오른쪽에 짙은 선을 긋는다.
+ * 고정 열 — 가로로 굴려도 제자리다(왼쪽 자리는 SDK 기본 뷰가 잰다). 칸 바탕이 비면 뒤로 지나는 칸 글이 비친다 — 줄 바탕(올려 둔 줄 · 행 꼴)을 칸에도
+ * 깔고, 고정 구역 끝 칸은 오른쪽에 테두리 색 선을 긋는다.
  */
 [data-wb-component="DataGrid"] [data-wb-part="body"] > tr > [data-wb-fixed] {
   background: var(--wb-semantic-surface);
 }
-[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:nth-child(even) > [data-wb-fixed],
-[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="shaded"] > [data-wb-fixed] {
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:hover > [data-wb-fixed],
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="shaded"] > [data-wb-fixed],
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="dimmed"] > [data-wb-fixed] {
   background: var(--wb-semantic-canvas);
 }
 [data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-tone="selected"] > [data-wb-fixed] {
   background: var(--wb-semantic-primarySoft);
 }
+[data-wb-component="DataGrid"] [data-wb-part="body"] > tr[data-wb-kind="total"] > * {
+  background: var(--wb-semantic-header);
+  color: var(--wb-semantic-textStrong);
+  font-weight: var(--wb-typography-h6-fontWeight);
+}
 [data-wb-component="DataGrid"] [data-wb-part="table"] [data-wb-fixed="last"] {
-  box-shadow: inset -1px 0 0 var(--wb-semantic-borderStrong);
+  box-shadow: inset -1px 0 0 var(--wb-semantic-border);
 }
 /* 고정 구역이 스크롤 상자보다 넓어 SDK 가 고정을 푼 표(`data-wb-fixed-off`)는 고정 구역 끝 선도 걷는다 — 칸이 표와 함께 굴러간다. */
 [data-wb-component="DataGrid"] [data-wb-part="table"][data-wb-fixed-off] [data-wb-fixed="last"] {
@@ -455,36 +460,60 @@
   padding-top: var(--wb-space-1);
   padding-bottom: var(--wb-space-1);
 }
+/*
+ * 카드에 붙은 그리드(골격 절 «몸통에 홀로 든 …») — 표의 바깥 선은 카드가 긋는다. 결과 머리줄 · 바닥은 카드 머리줄과 같은 좌우 여백을 갖고, 머리줄과 표 ·
+ * 표와 바닥 사이에 선이 선다. 끝 줄의 아래 선은 걷는다(카드 테두리 · 바닥 윗선과 겹쳐 두 줄이 된다) — 끝 줄까지 내려오는 세로 병합 칸은 앞 줄의 칸이라
+ * 제 아래 선이 남는다.
+ */
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"]:only-child {
+  max-width: none;
+}
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"]:only-child > [data-wb-part="head"] {
+  box-sizing: border-box;
+  min-height: var(--wb-cell-minHeight);
+  padding: var(--wb-gap-piece) var(--wb-space-3);
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"]:only-child > [data-wb-part="footer"] {
+  padding: var(--wb-space-2) var(--wb-space-3);
+  border-top: 1px solid var(--wb-semantic-border);
+}
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"]:only-child [data-wb-part="table"] {
+  border-width: 0;
+}
+[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"]:only-child [data-wb-part="table"] > tbody:last-child > tr:last-child > [data-wb-part] {
+  border-bottom: 0;
+}
 
 /* 페이지네이션 바 — 왼쪽 행 수 셀렉트 · 가운데 쪽 번호(지금 쪽 밑줄) · 오른쪽 범위 글. */
 [data-wb-component="Pagination"][data-wb-structure="default"] {
-  gap: var(--wb-space-3);
-  color: var(--wb-semantic-textMuted);
+  gap: var(--wb-space-2);
+  color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);
   line-height: var(--wb-typography-body-lineHeight);
 }
 [data-wb-component="Pagination"] > [data-wb-part="pages"] {
-  gap: var(--wb-space-2);
+  gap: calc(var(--wb-space-unit) / 2);
 }
 [data-wb-component="Pagination"] > [data-wb-part="pages"] > * {
-  min-width: 1.5em;
+  min-width: 2em;
   text-align: center;
 }
 [data-wb-component="Pagination"] [data-wb-part="page"][aria-current="page"] {
-  color: var(--wb-semantic-text);
+  color: var(--wb-semantic-textStrong);
 }
 [data-wb-component="Pagination"] [data-wb-part="sizeSelect"] {
   display: inline-flex;
   align-items: center;
-  min-height: calc(var(--wb-space-unit) * 7);
-  padding: 0 var(--wb-space-2);
+  box-sizing: border-box;
+  min-height: var(--wb-control-minHeight);
+  padding: var(--wb-space-1) var(--wb-space-2);
   border: 1px solid var(--wb-semantic-border);
   border-radius: var(--wb-radius-sm);
   background: var(--wb-semantic-surface);
   color: var(--wb-semantic-text);
 }
 [data-wb-component="Pagination"] > [data-wb-part="range"] {
-  font-size: var(--wb-typography-caption-fontSize);
   white-space: nowrap;
 }
 
@@ -516,10 +545,10 @@
   background: var(--wb-semantic-primarySoft);
 }
 [data-wb-component="Tree"][data-wb-state~="disabled"] {
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
-/* 상세 — 키 칸에 옅은 바탕을 깐 격자 표. 뷰는 SDK 기본 뷰(`columns` 쌍씩 한 행). */
+/* 상세 — 키 칸에 옅은 바탕 · 굵은 글을 깐 격자 표(폼 표의 라벨 칸과 같은 꼴). 뷰는 SDK 기본 뷰(`columns` 쌍씩 한 행). */
 [data-wb-component="KeyValue"][data-wb-structure="table"] {
   width: 100%;
   border-collapse: collapse;
@@ -531,8 +560,10 @@
 }
 [data-wb-component="KeyValue"] [data-wb-part="key"] {
   width: var(--wb-form-labelWidth);
+  height: var(--wb-cell-minHeight);
+  box-sizing: border-box;
   background: var(--wb-semantic-canvas);
-  color: var(--wb-semantic-textMuted);
+  color: var(--wb-semantic-textStrong);
   font-weight: var(--wb-typography-h6-fontWeight);
   padding: var(--wb-space-2) var(--wb-space-3);
   border: 1px solid var(--wb-semantic-border);

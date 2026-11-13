@@ -313,10 +313,11 @@ describe('system-admin CSS', () => {
 
   /**
    * `max-width` 를 거는 규칙은 가로 여백을 `auto` 로 둔다 — 칼럼을 가두는 값으로 바꾸면 가운데 선다(`Section` 의 «화면 전체 폭 배경 + 가운데 정렬된
-   * 콘텐츠»). 이 테마는 폭을 안 가둬 `auto` 가 0 이지만, `:root` 의 폭 하나만 바꾸는 사람이 가운데 정렬을 그대로 얻는다.
+   * 콘텐츠»). 이 테마는 폭을 안 가둬 `auto` 가 0 이지만, `:root` 의 폭 하나만 바꾸는 사람이 가운데 정렬을 그대로 얻는다. 글자 `none` 은 가두는
+   * 것이 아니라 SDK 가 건 한도를 푸는 것이라 세지 않는다(카드에 붙은 그리드).
    */
   it('max-width 를 거는 규칙마다 margin-left · margin-right 가 auto', () => {
-    const bounded = rules().filter((rule) => rule.style.getPropertyValue('max-width') !== '')
+    const bounded = rules().filter((rule) => !['', 'none'].includes(rule.style.getPropertyValue('max-width').trim()))
     expect(bounded.length).toBeGreaterThan(0)
     expect(
       bounded.map((rule) => [rule.selector, rule.style.getPropertyValue('margin-left'), rule.style.getPropertyValue('margin-right')]),
@@ -421,6 +422,51 @@ describe('system-admin CSS', () => {
         return [`${type} default 홀로: ${flush}`, `${type} default 형제: false`, `${type} borderless 홀로: false`]
       }),
     )
+  })
+
+  /**
+   * 그리드 — 머리는 머리 바탕(`semantic.header`) · 가운데, 가로선은 테두리 색 · 세로선은 옅은 테두리 색이다. 세로선은 줄의 끝 칸에서 걷는다 — 합친
+   * 테두리에서는 칸의 선이 표의 선을 이겨, 안 걷으면 표의 오른쪽 바깥 선이 옅은 색이 된다.
+   */
+  it('그리드 머리는 머리 바탕 · 가운데 · 세로선은 옅은 테두리이고 끝 칸에서 걷는다', () => {
+    const head = ruleOf('[data-wb-component="DataGrid"] [data-wb-part="header"] > tr > *')
+    expect(head.getPropertyValue('background').trim()).toBe('var(--wb-semantic-header)')
+    expect(head.getPropertyValue('text-align').trim()).toBe('center')
+    const cell = ruleOf('[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]')
+    expect(cell.getPropertyValue('border-bottom')).toContain('var(--wb-semantic-border)')
+    expect(cell.getPropertyValue('border-right')).toContain('var(--wb-semantic-borderFaint)')
+    const last = ruleOf('[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]:last-child')
+    expect(Number.parseFloat(last.getPropertyValue('border-right-width') || last.getPropertyValue('border-right'))).toBe(0)
+  })
+
+  /** 줄무늬가 없다 — 몸 줄의 바탕은 올려 둔 줄(`:hover`)과 행 꼴(`tone` · 합계)만 칠한다. 짝수 줄 바탕은 행 꼴(음영 · 흐림)과 같은 색이라 둘이 안 갈린다. */
+  it('그리드 몸 줄에 줄무늬(nth-child) 규칙이 없다 · 올려 둔 줄은 옅은 바탕', () => {
+    const body = rules().filter((rule) => rule.selector.includes('[data-wb-component="DataGrid"] [data-wb-part="body"]'))
+    expect(body.length).toBeGreaterThan(5)
+    expect(body.filter((rule) => /nth-(child|of-type)/.test(rule.selector)).map((rule) => rule.selector)).toEqual([])
+    expect(ruleOf('[data-wb-component="DataGrid"] [data-wb-part="body"] > tr:hover').getPropertyValue('background').trim()).toBe(
+      'var(--wb-semantic-canvas)',
+    )
+  })
+
+  /** 카드에 붙은 그리드는 표의 바깥 선을 걷는다 — 카드 테두리와 겹쳐 두 줄이 된다. 카드 밖 · 형제가 있는 그리드는 제 바깥 선을 지킨다. */
+  it('카드 몸통에 홀로 든 그리드만 표의 바깥 선을 걷는다', () => {
+    const grid =
+      '<div data-wb-component="DataGrid" data-wb-structure="default"><div data-wb-part="scroll"><table data-wb-part="table"></table></div></div>'
+    const borderless = (table: Element) =>
+      rules().some(
+        (rule) =>
+          rule.media === null &&
+          Number.parseFloat(rule.style.getPropertyValue('border-width')) === 0 &&
+          matching(table).includes(rule.selector),
+      )
+    const got = tree(
+      `<div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="default"><div data-wb-part="body">${grid}</div></div>
+       <div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="default"><div data-wb-part="body">${grid}<p></p></div></div>
+       <div data-wb-component="Section"><div data-wb-part="inner">${grid}</div></div>`,
+      (root) => Array.from(root.querySelectorAll('table')).map(borderless),
+    )
+    expect(got).toEqual([true, false, false])
   })
 
   /**
