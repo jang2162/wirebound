@@ -59,6 +59,56 @@ const ROOT_VARS = (): Map<string, string> => {
   return new Map(names(style).map((name) => [name, style.getPropertyValue(name).trim()]))
 }
 
+/** 셀렉터가 글자 그대로 `selector` 인 규칙 하나(`@media` 밖). 없거나 둘이면 죽는다 — 같은 셀렉터의 규칙이 갈리면 어느 쪽을 재는지 모른다. */
+function ruleOf(selector: string): CSSStyleDeclaration {
+  const found = rules().filter((rule) => rule.media === null && rule.selector === selector)
+  expect(
+    found.map((rule) => rule.selector),
+    selector,
+  ).toHaveLength(1)
+  return found[0]!.style
+}
+
+/** `:root` 의 변수 하나를 px 로 푼다 — `space.unit` 의 배수(`calc(var(--wb-space-unit) * N)`)거나 길이 글자다. */
+function rootPx(name: string): number {
+  const vars = ROOT_VARS()
+  const value = vars.get(name) ?? ''
+  const unit = Number.parseFloat(vars.get('--wb-space-unit') ?? '')
+  const scaled = /^calc\(var\(--wb-space-unit\) \* ([0-9.]+)\)$/.exec(value.replace(/\s+/g, ' '))
+  return scaled ? unit * Number(scaled[1]) : Number.parseFloat(value)
+}
+
+/**
+ * 요소에 맞는 규칙(`@media` 밖)의 셀렉터들. jsdom 의 셀렉터 엔진이 못 읽는 셀렉터(가상 요소 등)는 건너뛴다 — 건너뛴 수가 전체의 절반을 넘으면
+ * 아무것도 안 잰 것이라 죽는다.
+ */
+function matching(el: Element): string[] {
+  const all = rules().filter((rule) => rule.media === null)
+  let skipped = 0
+  const hit = all.filter((rule) => {
+    try {
+      return el.matches(rule.selector)
+    } catch {
+      skipped += 1
+      return false
+    }
+  })
+  expect(skipped).toBeLessThan(all.length / 2)
+  return hit.map((rule) => rule.selector)
+}
+
+/** 테스트용 DOM 한 그루 — 뿌리를 문서에 붙였다 뗀다(`:only-child` · `:first-child` 가 부모를 본다). */
+function tree<T>(html: string, read: (root: HTMLElement) => T): T {
+  const root = document.createElement('div')
+  root.innerHTML = html
+  document.body.appendChild(root)
+  try {
+    return read(root)
+  } finally {
+    root.remove()
+  }
+}
+
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
@@ -303,12 +353,86 @@ describe('system-admin CSS', () => {
   })
 
   /**
+   * 카드 상자에는 여백이 없다 — 머리줄 밑선 · 바닥 윗선 · 몸통에 붙은 표가 상자 테두리까지 닿는다. 머리줄은 격자 칸과 같은 높이(42px)다.
+   */
+  it('카드는 여백 없는 상자다 — 뿌리 padding 0 · 머리줄 최소 높이 42px · 머리줄 밑선은 테두리 색', () => {
+    expect(Number.parseFloat(ruleOf('[data-wb-component="Card"][data-wb-structure="plain"]').getPropertyValue('padding'))).toBe(0)
+    const header = ruleOf('[data-wb-component="Card"] > [data-wb-part="header"]')
+    expect(header.getPropertyValue('min-height').trim()).toBe('var(--wb-cell-minHeight)')
+    expect(rootPx('--wb-cell-minHeight')).toBe(42)
+    expect(header.getPropertyValue('border-bottom')).toContain('var(--wb-semantic-border)')
+  })
+
+  /**
+   * 카드 · 탭의 조각 규칙은 직계로 잡는다 — 그 안에 든 노드도 같은 이름의 조각(`header` · `title` · `body` · `footer` · `list`)을 가져 자손으로
+   * 잡으면 카드 · 탭의 꾸밈이 그 안에 선다(패널에 든 파일첨부의 목록 표가 `flex` 가 된다 · 카드에 든 폼 표의 머리줄이 카드 머리줄 꼴이 된다).
+   */
+  it('카드 · 탭의 조각 규칙은 그 안에 든 노드의 같은 이름 조각에 안 닿는다', () => {
+    const outer = (selectors: string[]) => selectors.filter((selector) => /^\[data-wb-component="(Card|Tabs)"\]/.test(selector))
+    const got = tree(
+      `<div data-wb-component="Card" data-wb-structure="plain"><div data-wb-part="header"><div data-wb-part="heading"><div data-wb-part="title">카드</div></div></div>
+         <div data-wb-part="body"><i></i>
+           <div data-wb-component="Tabs" data-wb-structure="underline"><div data-wb-part="list"><span data-wb-part="tab">탭</span></div>
+             <div data-wb-part="panel"><i></i>
+               <div data-wb-component="FileAttach" data-wb-structure="default"><table data-wb-part="list"><tbody><tr><td>파일</td></tr></tbody></table></div>
+               <div data-wb-component="FormTable" data-wb-structure="table"><div data-wb-part="header"><div data-wb-part="title">표</div></div><div data-wb-part="cells"></div></div>
+               <div data-wb-component="DataGrid" data-wb-structure="default"><div data-wb-part="head"></div><div data-wb-part="footer"></div></div>
+             </div></div>
+         </div></div>`,
+      (root) => ({
+        // 카나리아 — 카드 · 탭 제 조각에는 닿는다.
+        cardTitle:
+          outer(matching(root.querySelector('[data-wb-component="Card"] > [data-wb-part="header"] [data-wb-part="title"]')!)).length > 0,
+        tabList: outer(matching(root.querySelector('[data-wb-component="Tabs"] > [data-wb-part="list"]')!)).length > 0,
+        fileList: outer(matching(root.querySelector('table[data-wb-part="list"]')!)),
+        tableHeader: outer(matching(root.querySelector('[data-wb-component="FormTable"] > [data-wb-part="header"]')!)),
+        tableTitle: outer(matching(root.querySelector('[data-wb-component="FormTable"] [data-wb-part="title"]')!)),
+        gridFooter: outer(matching(root.querySelector('[data-wb-component="DataGrid"] > [data-wb-part="footer"]')!)),
+      }),
+    )
+    expect(got).toEqual({ cardTitle: true, tabList: true, fileList: [], tableHeader: [], tableTitle: [], gridFooter: [] })
+  })
+
+  /**
+   * 카드 몸통에 홀로 든 폼 표 · 그리드 · 조회 폼은 몸통 여백을 음수 여백으로 되돌려 카드에 붙는다. 형제가 있거나 테두리 없는 카드(몸통 여백이 없다)면
+   * 안 붙는다 — 거기서 음수 여백이 서면 노드가 카드 밖으로 나간다.
+   */
+  it('카드 몸통에 홀로 든 폼 표 · 그리드 · 조회 폼만 음수 여백으로 붙는다', () => {
+    const pulls = (el: Element) =>
+      rules().some(
+        (rule) => rule.media === null && rule.style.getPropertyValue('margin').includes('* -1') && matching(el).includes(rule.selector),
+      )
+    const card = (variant: string, body: string) =>
+      `<div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="${variant}"><div data-wb-part="body">${body}</div></div>`
+    const node = (type: string) => `<div data-wb-component="${type}" data-test="x"></div>`
+    const got = tree(
+      ['FormTable', 'DataGrid', 'SearchForm', 'KeyValue', 'Flex']
+        .map((type) => card('default', node(type)) + card('default', `${node(type)}<p></p>`) + card('borderless', node(type)))
+        .join(''),
+      (root) =>
+        Array.from(root.querySelectorAll('[data-test="x"]')).map((el) => {
+          const variant = el.closest('[data-wb-component="Card"]')!.getAttribute('data-wb-variant')
+          return `${el.getAttribute('data-wb-component')} ${variant} ${el.parentElement!.children.length === 1 ? '홀로' : '형제'}: ${pulls(el)}`
+        }),
+    )
+    expect(got).toEqual(
+      ['FormTable', 'DataGrid', 'SearchForm', 'KeyValue', 'Flex'].flatMap((type) => {
+        const flush = type === 'FormTable' || type === 'DataGrid' || type === 'SearchForm'
+        return [`${type} default 홀로: ${flush}`, `${type} default 형제: false`, `${type} borderless 홀로: false`]
+      }),
+    )
+  })
+
+  /**
    * 밑줄 탭 — 고른 탭(`aria-selected`)만 주색 밑줄을 받는다. 폼의 조각 규칙은 직계로 잡는다 — 자손으로 잡으면 안의 `Field` 의 `label` 조각까지
    * 받아 필드 라벨마다 제목의 밑줄이 선다.
    */
   it('고른 탭만 주색 밑줄 · 등록 폼 제목 규칙은 필드 라벨에 안 닿는다', () => {
-    const selected = rules().find((rule) => rule.selector === '[data-wb-component="Tabs"] [data-wb-part="tab"][aria-selected="true"]')
-    expect(selected?.style.getPropertyValue('border-bottom-color').trim()).toBe('var(--wb-semantic-primary)')
+    const selected = ruleOf('[data-wb-component="Tabs"] > [data-wb-part="list"] > [data-wb-part="tab"][aria-selected="true"]')
+    expect(selected.getPropertyValue('border-bottom-color').trim()).toBe('var(--wb-semantic-primary)')
+    const tabRules = rules().filter((rule) => rule.selector.includes('[data-wb-part="tab"]') && !rule.selector.includes('aria-selected'))
+    expect(tabRules.length).toBeGreaterThan(0)
+    expect(tabRules.filter((rule) => rule.style.cssText.includes('--wb-semantic-primary')).map((rule) => rule.selector)).toEqual([])
 
     const form = document.createElement('form')
     form.setAttribute('data-wb-component', 'EntryForm')
