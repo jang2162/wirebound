@@ -28,6 +28,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { exportBundle, layoutProject, openBundlePage } from './layout-bundle'
 import { decodePng } from './png-pixels'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -504,14 +505,15 @@ describe.skipIf(!전제.ok)('시스템 테마 — 폼 표 · 쌍 격자', () => 
     const shots = Object.entries(entries).filter(([path]) => path.startsWith('ppt/media/') && path.endsWith('.png'))
     expect(shots.length).toBe(1)
     const pixels = decodePng(Buffer.from(shots[0]![1]))
-    // 칸 선(`semantic.border` #e2e8f0)의 가로 줄 — 한 줄에서 그 색이 이어진 길이가 폭의 절반을 넘는 줄 수. 표 둘(3 + 4 줄 · 바깥 선 포함)이면 여럿이다.
+    // 칸 선(`semantic.border` 의 기본값)의 가로 줄 — 한 줄에서 그 색이 이어진 길이가 폭의 절반을 넘는 줄 수. 표 둘(3 + 4 줄 · 바깥 선 포함)이면 여럿이다.
+    const [R, G, B] = SYSTEM_ADMIN.rgb('semantic.border')
     let lines = 0
     for (let y = 0; y < pixels.height; y++) {
       let run = 0
       let best = 0
       for (let x = 0; x < pixels.width; x++) {
         const [r, g, b] = pixels.at(x, y)
-        run = Math.abs(r - 226) <= 3 && Math.abs(g - 232) <= 3 && Math.abs(b - 240) <= 3 ? run + 1 : 0
+        run = Math.abs(r - R) <= 3 && Math.abs(g - G) <= 3 && Math.abs(b - B) <= 3 ? run + 1 : 0
         best = Math.max(best, run)
       }
       if (best > pixels.width / 2) lines += 1
