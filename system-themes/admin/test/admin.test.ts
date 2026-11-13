@@ -253,32 +253,56 @@ describe('system-admin CSS', () => {
   })
 
   /**
-   * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 예외는 폼 · 파일첨부
-   * 단추 구역의 기본 단추 셋뿐이다 — 이 테마의 기본 단추가 주색이라 주 단추(`primary`)와 나란히 서거나 작은 단추 줄로 서면 주색이 넘쳐, 그 자리에서만 보조
-   * 꼴로 바꾼다(`theme.css` 의 «폼 · 파일첨부의 단추 구역»). 그 밖의 자리에 `default` 를 겨냥한 셀렉터는 여전히 죽는다.
+   * variant 없는 노드는 `defaultVariant`(`default`)로 그려진다 — 그 값을 겨냥한 규칙이 있으면 variant 없는 노드의 모습이 바뀐다. 바탕 규칙이 곧
+   * `default` 의 모양이다(단추의 바탕은 흰 단추라 폼의 단추 구역에서 따로 바꿀 것이 없다).
    */
-  it('[data-wb-variant="default"] 규칙은 폼 · 파일첨부 단추 구역의 기본 단추 셋뿐이다', () => {
-    const FORM_ACTIONS = ['SearchForm', 'EntryForm', 'FileAttach'].map(
-      (form) => `[data-wb-component="${form}"] > [data-wb-part="actions"] > [data-wb-component="Button"][data-wb-variant="default"]`,
-    )
-    const targeting = rules()
-      .flatMap((rule) => rule.selector.split(',').map((part) => part.trim()))
-      .filter((part) => part.includes('data-wb-variant="default"'))
-    expect(targeting).toEqual(FORM_ACTIONS)
+  it('[data-wb-variant="default"] 를 겨냥한 규칙이 없다', () => {
+    const selectors = rules().flatMap((rule) => rule.selector.split(',').map((part) => part.trim()))
+    expect(selectors.length).toBeGreaterThan(100)
+    expect(selectors.filter((part) => part.includes('data-wb-variant="default"'))).toEqual([])
   })
 
-  /** 선언한 variant 는 속성 패널에 칸으로 선다 — 규칙이 없으면 골라도 아무것도 안 바뀌는 칸이다. `Button` 의 `primary` 는 바탕 그대로가 뜻이다. */
-  it('default · Button primary 밖의 선언한 variant 마다 그 variant 를 겨냥한 규칙이 있다', () => {
+  /** 선언한 variant 는 속성 패널에 칸으로 선다 — 규칙이 없으면 골라도 아무것도 안 바뀌는 칸이다. */
+  it('default 밖의 선언한 variant 마다 그 variant 를 겨냥한 규칙이 있다', () => {
     const selectors = rules().map((rule) => rule.selector)
     const missing: string[] = []
+    let checked = 0
     for (const [type, decl] of Object.entries(ADMIN_V0.manifest.components ?? {})) {
       for (const { id } of decl.variants) {
-        if (id === 'default' || (type === 'Button' && id === 'primary')) continue
+        if (id === 'default') continue
+        checked += 1
         const target = `[data-wb-component="${type}"][data-wb-variant="${id}"]`
         if (!selectors.some((selector) => selector.includes(target))) missing.push(`${type}/${id}`)
       }
     }
+    expect(checked).toBeGreaterThan(10)
     expect(missing).toEqual([])
+  })
+
+  /**
+   * 단추의 바탕은 흰 단추(면 바탕 · 테두리 · 본문 색 글)이고 주 단추(`primary`)만 주색으로 채운다 — 한 화면의 채운 단추가 주 단추 하나라야 눈이 그리로
+   * 간다. 위험 단추는 채우지 않는다(위험 색 테두리 · 글).
+   */
+  it('단추 바탕은 흰 단추 · 최소 높이 30px · primary 만 주색으로 채운다', () => {
+    const base = ruleOf('[data-wb-component="Button"][data-wb-structure="solid"]')
+    expect(base.getPropertyValue('background').trim()).toBe('var(--wb-semantic-surface)')
+    expect(base.getPropertyValue('border-color').trim()).toBe('var(--wb-semantic-border)')
+    expect(base.getPropertyValue('color').trim()).toBe('var(--wb-semantic-text)')
+    expect(base.getPropertyValue('min-height').trim()).toBe('var(--wb-control-minHeight)')
+    const filled = rules()
+      .filter(
+        (rule) =>
+          rule.selector.includes('[data-wb-component="Button"]') &&
+          /--wb-semantic-(primary|danger)\b/.test(rule.style.getPropertyValue('background')),
+      )
+      .map((rule) => rule.selector)
+    expect(filled).toEqual(['[data-wb-component="Button"][data-wb-variant="primary"]'])
+    expect(ruleOf('[data-wb-component="Button"][data-wb-variant="primary"]').getPropertyValue('background').trim()).toBe(
+      'var(--wb-semantic-primary)',
+    )
+    expect(ruleOf('[data-wb-component="Button"][data-wb-variant="danger"]').getPropertyValue('border-color').trim()).toBe(
+      'var(--wb-semantic-danger)',
+    )
   })
 
   it('!important 가 없다', () => {
