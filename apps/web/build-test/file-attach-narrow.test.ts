@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack, type Session } from './editor-stack'
 import { exportBundle, layoutProject, openBundlePage, type UnpackedBundle } from './layout-bundle'
 import { decodePng } from './png-pixels'
+import { SYSTEM_ADMIN } from '@wirebound/test-support/system-admin'
 import { putTheme, seededVersion } from './theme-fixtures'
 
 const 전제 = await editorStackPrerequisite()
@@ -262,7 +263,7 @@ describe.skipIf(!전제.ok)('좁은 칸 안의 파일첨부 · 반복 행 표', 
               nameIn: one.nameOver <= 1,
               longWraps: width === 390 ? one.nameLines.slice(1).every((n) => n >= 2) : true,
               // 기본테마는 한도 수를 빨간(`--wb-semantic-danger` 기본값) 글로 칠한다 — SDK 기본 CSS 는 색을 안 정한다.
-              red: one.limitColor === 'rgb(239, 68, 68)',
+              red: one.limitColor === `rgb(${SYSTEM_ADMIN.rgb('semantic.danger').join(', ')})`,
             })),
           }
           want[key] = {

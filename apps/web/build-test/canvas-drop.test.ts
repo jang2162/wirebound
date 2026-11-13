@@ -24,6 +24,7 @@ import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   canvasFrame,
+  dragLayoutSettled,
   editorStackPrerequisite,
   poll,
   shownDrops,
@@ -272,13 +273,15 @@ describe.skipIf(!전제.ok)('캔버스 손잡이로 옮기기 — 실브라우�
   describe('끄는 중 남이 대상을 바꾼다', () => {
     /** alice 가 n_text 를 쥐고 빈 카드 위에서 «안» 표시를 세운 판. */
     // `here` 는 끌 때 쓴 점이다 — 놓을 자리가 서면 미리보기가 빈 카드를 키우므로 뒤에 다시 재면 다른 점이다(문턱 밖으로 «조금» 이 커진다).
+    // 끌기가 서고 캔버스 배치가 선 뒤에 잰다 — 끌기 시작에 서는 빈 구역 칸이 카드들을 밀어, 그 전에 잰 가운데는 테마의 카드 높이에 따라 빈 카드 밖이다.
     async function armed(
       P: string,
     ): Promise<{ page: Page; close: () => Promise<void>; patches: string[]; armedHint: string[]; here: { x: number; y: number } }> {
       const tab = await openEditor(P)
       await pick(tab.page, 'n_text')
-      const here = await spotIn(tab.page, 'n_empt', 0.5, 0.5)
       await grab(tab.page)
+      await dragLayoutSettled(tab.page)
+      const here = await spotIn(tab.page, 'n_empt', 0.5, 0.5)
       await moveTo(tab.page, here)
       const armedHint = (await indicators(tab.page)).map((h) => `${h.placement}`)
       return { ...tab, armedHint, here }

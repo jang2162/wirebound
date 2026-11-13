@@ -66,6 +66,16 @@ export const SYSTEM_ADMIN = {
   otherColor: colors[1]!,
   /** 셋째 색 토큰 — 테마를 바꿀 때 «새 테마에 없는 키» 로 쓴다. */
   thirdColor: colors[2]!,
+  /**
+   * 색 토큰 하나의 기본값을 화면의 계산 값 꼴로 — `[r, g, b]`. 케이스가 «테두리 색인 줄» · «위험 색 글» 처럼 뜻으로 고른 토큰의 색을 찍은 그림 ·
+   * 계산 스타일과 견줄 때 쓴다(색을 글자로 적으면 테마가 색을 바꿀 때마다 테마 밖의 케이스가 죽는다). 없는 키 · 색이 아닌 토큰이면 던진다.
+   */
+  rgb(key: string): [number, number, number] {
+    const found = colors.find((color) => color.key === key)
+    const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(found?.value ?? '')
+    if (hex === null) throw new Error(`system-admin 에 색 토큰 ${key} 가 없거나 #rrggbb 가 아닙니다(${found?.value})`)
+    return [Number.parseInt(hex[1]!, 16), Number.parseInt(hex[2]!, 16), Number.parseInt(hex[3]!, 16)]
+  },
 } as const
 
 /** system-admin 의 지금 판보다 큰 판 — `step` 이 클수록 크다. 케이스가 «더 새 판» 을 넣을 때 쓴다(지금 판이 몇이든). */
