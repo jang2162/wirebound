@@ -6,6 +6,8 @@ dist/
 *.tsbuildinfo
 .DS_Store
 .worktrees/
+# 로컬 임시 파일(테스트용 자격 · 탐침 산출물). 저장소 뿌리의 tmp 만 가린다.
+/tmp/
 
 # 로컬 환경 변수. apps/api의 스크립트가 --env-file-if-exists=.env로 읽으므로
 # README는 누구에게나 .env를 만들라고 안내한다 — 접속 문자열이 커밋되지 않도록
