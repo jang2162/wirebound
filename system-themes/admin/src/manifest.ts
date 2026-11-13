@@ -5,6 +5,10 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
  *
  * 토큰은 사람이 고칠 만한 것(색 · 모서리 · 그림자 · 서체 · 글자 크기 · 간격 단위)만 선언하고 나머지(제목 크기 · 전이 · 칼럼 폭)는
  * `theme.css` 의 상수다 — 토큰 폼이 수십 칸이 되지 않게.
+ *
+ * **판을 올리며 더한 토큰이 옛 키가 칠하던 자리를 나눠 가지면 기본값은 그 옛 키의 참조(`{semantic.text}`)다** — 옛 판에서 옛 키를 덮은 프로젝트가
+ * 판을 올리면 덮은 값은 옛 키에만 옮겨지고(`migrateTokens`) 새 키는 기본값으로 선다. 리터럴이면 그 자리만 덮은 팔레트를 벗어난다(어두운 바탕에 짙은
+ * 라벨 글). `semantic.borderFaint` 는 표 세로선뿐이라 글이 묻히지 않아 리터럴로 둔다 — `{semantic.border}` 면 기본 화면의 세로선이 가로선만큼 짙다.
  */
 export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
@@ -24,12 +28,12 @@ export const MANIFEST: ThemeManifest = {
       'semantic.primarySoft': { type: 'color', label: '주색(옅게)', group: 'color', default: '#d8e9fa' },
       'semantic.surface': { type: 'color', label: '면', group: 'color', default: '#ffffff' },
       'semantic.canvas': { type: 'color', label: '바탕 — 라벨 칸 · 옅은 구역', group: 'color', default: '#f3f4f6' },
-      'semantic.header': { type: 'color', label: '머리 바탕 — 표 머리 · 팝업 제목줄', group: 'color', default: '#f2f4f7' },
+      'semantic.header': { type: 'color', label: '머리 바탕 — 표 머리 · 팝업 제목줄', group: 'color', default: '{semantic.canvas}' },
       'semantic.border': { type: 'color', label: '테두리', group: 'color', default: '#cccccc' },
       'semantic.borderStrong': { type: 'color', label: '테두리(짙게)', group: 'color', default: '#666666' },
       'semantic.borderFaint': { type: 'color', label: '테두리(옅게) — 표 세로선', group: 'color', default: '#e8eaee' },
       'semantic.text': { type: 'color', label: '글자', group: 'color', default: '#333333' },
-      'semantic.textStrong': { type: 'color', label: '글자(짙게) — 제목 · 라벨', group: 'color', default: '#1a1a1a' },
+      'semantic.textStrong': { type: 'color', label: '글자(짙게) — 제목 · 라벨', group: 'color', default: '{semantic.text}' },
       'semantic.textMuted': { type: 'color', label: '글자(흐리게)', group: 'color', default: '#666666' },
       'semantic.danger': { type: 'color', label: '위험', group: 'color', default: '#f04a3b' },
       'radius.sm': { type: 'length', label: '모서리(작게) — 입력칸 · 단추', group: 'shape', default: '4px' },

@@ -17,17 +17,17 @@
  * (`apps/web/src/canvas/canvas-iframe.tsx` 의 `HOLD_CSS`).
  */
 :root {
-  /* 토큰 — manifest 의 기본값과 같다. */
+  /* 토큰 — manifest 의 기본값과 같다(참조 기본값은 그 키의 변수 — 토큰 시트가 내는 꼴). */
   --wb-semantic-primary: #0a78d8;
   --wb-semantic-primarySoft: #d8e9fa;
   --wb-semantic-surface: #ffffff;
   --wb-semantic-canvas: #f3f4f6;
-  --wb-semantic-header: #f2f4f7;
+  --wb-semantic-header: var(--wb-semantic-canvas);
   --wb-semantic-border: #cccccc;
   --wb-semantic-borderStrong: #666666;
   --wb-semantic-borderFaint: #e8eaee;
   --wb-semantic-text: #333333;
-  --wb-semantic-textStrong: #1a1a1a;
+  --wb-semantic-textStrong: var(--wb-semantic-text);
   --wb-semantic-textMuted: #666666;
   --wb-semantic-danger: #f04a3b;
   --wb-radius-sm: 4px;

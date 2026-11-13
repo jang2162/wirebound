@@ -109,6 +109,29 @@ function tree<T>(html: string, read: (root: HTMLElement) => T): T {
   }
 }
 
+/** `1.8.0` 이 선언한 토큰 키 — 그 판에 고정된 프로젝트가 덮은 값을 이 키로 저장해 두었다. */
+const V1_8_0_KEYS = [
+  'semantic.primary',
+  'semantic.primarySoft',
+  'semantic.surface',
+  'semantic.canvas',
+  'semantic.border',
+  'semantic.borderStrong',
+  'semantic.text',
+  'semantic.textMuted',
+  'semantic.danger',
+  'radius.sm',
+  'radius.md',
+  'radius.lg',
+  'shadow.md',
+  'font.body',
+  'typography.body.fontSize',
+  'space.unit',
+]
+
+/** 기본값이 참조(`{semantic.text}`)면 그 키, 아니면 `null`. */
+const refOf = (value: string | number): string | null => /^\{([^{}]+)\}$/.exec(String(value))?.[1] ?? null
+
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
@@ -123,31 +146,18 @@ describe('system-admin manifest', () => {
    * 이름을 바꾸면 그 프로젝트의 덮은 값이 말없이 사라진다.
    */
   it('1.8.0 의 토큰 키를 전부 선언한다', () => {
-    const V1_8_0 = [
-      'semantic.primary',
-      'semantic.primarySoft',
-      'semantic.surface',
-      'semantic.canvas',
-      'semantic.border',
-      'semantic.borderStrong',
-      'semantic.text',
-      'semantic.textMuted',
-      'semantic.danger',
-      'radius.sm',
-      'radius.md',
-      'radius.lg',
-      'shadow.md',
-      'font.body',
-      'typography.body.fontSize',
-      'space.unit',
-    ]
     const declared = new Set(Object.keys(ADMIN_V0.manifest.tokens.items))
-    expect(V1_8_0.filter((key) => !declared.has(key))).toEqual([])
+    expect(V1_8_0_KEYS.filter((key) => !declared.has(key))).toEqual([])
   })
 
-  /** 설정 화면의 색 칸은 소문자 `#rrggbb` 로 보낸다 — 기본값이 다른 꼴이면 «기본값과 같은가» 가 글자로 안 맞아 안 덮은 칸이 덮은 칸으로 읽힌다. */
+  /**
+   * 설정 화면의 색 칸은 소문자 `#rrggbb` 로 보낸다 — 기본값이 다른 꼴이면 «기본값과 같은가» 가 글자로 안 맞아 안 덮은 칸이 덮은 칸으로 읽힌다. 참조
+   * 기본값(`{semantic.text}`)은 색 글자가 아니라 세지 않는다.
+   */
   it('색 토큰 기본값은 소문자 #rrggbb', () => {
-    const colors = Object.entries(ADMIN_V0.manifest.tokens.items).filter(([, decl]) => decl.type === 'color')
+    const colors = Object.entries(ADMIN_V0.manifest.tokens.items).filter(
+      ([, decl]) => decl.type === 'color' && refOf(decl.default) === null,
+    )
     expect(colors.length).toBeGreaterThan(8)
     expect(colors.filter(([, decl]) => !/^#[0-9a-f]{6}$/.test(String(decl.default))).map(([key]) => key)).toEqual([])
   })
@@ -175,11 +185,43 @@ describe('system-admin manifest', () => {
     }
   })
 
+  /** 참조 기본값(`{semantic.text}`)은 토큰 시트가 내는 꼴(`var(--wb-semantic-text)`)과 같아야 한다 — 번들 · 캔버스는 그 시트를 이 시트 뒤에 싣는다. */
   it('토큰마다 CSS 의 :root 에 같은 이름 · 같은 기본값의 변수가 있다', () => {
     const vars = ROOT_VARS()
-    for (const [key, decl] of Object.entries(ADMIN_V0.manifest.tokens.items)) {
-      expect(vars.get(`--wb-${key.replaceAll('.', '-')}`), key).toBe(String(decl.default))
+    const cssOf = (value: string | number) => {
+      const ref = refOf(value)
+      return ref === null ? String(value) : `var(--wb-${ref.replaceAll('.', '-')})`
     }
+    for (const [key, decl] of Object.entries(ADMIN_V0.manifest.tokens.items)) {
+      expect(vars.get(`--wb-${key.replaceAll('.', '-')}`), key).toBe(cssOf(decl.default))
+    }
+  })
+
+  /**
+   * **판을 올리며 더한 토큰 가운데 글 · 바탕을 칠하는 것은 옛 키의 참조다** — 1.8.0 에서 글 · 바탕을 덮은 프로젝트가 판을 올리면 덮은 값은 옛 키에만
+   * 옮겨지고 새 키는 기본값으로 선다(`migrateTokens`). 리터럴 기본값이면 제목 · 라벨 · 표 머리만 덮은 팔레트를 벗어난다(어두운 바탕에 짙은 글 —
+   * `docs/superpowers/plans/2026-11-13-rv-sk-report.md` F1). 옅은 세로선(`borderFaint`)은 글이 묻히지 않아 리터럴로 둔다(`src/manifest.ts` 머리말).
+   */
+  it('2.0.0 이 더한 토큰 가운데 글 · 바탕에 쓰이는 것은 옛 키의 참조다', () => {
+    const items = ADMIN_V0.manifest.tokens.items
+    const added = Object.keys(items).filter((key) => !V1_8_0_KEYS.includes(key) && items[key]!.type === 'color')
+    /** 그 토큰의 변수를 글 · 바탕 속성에 쓰는 선언 수. */
+    const paintsTextOrGround = (key: string) =>
+      declarations().filter(
+        (d) =>
+          d.selector !== ':root' &&
+          /^(color|background(-color)?)$/.test(d.property) &&
+          d.value.includes(`var(--wb-${key.replaceAll('.', '-')})`),
+      ).length
+    const used = added.filter((key) => paintsTextOrGround(key) > 0)
+    // 카나리아 — 더한 색 토큰 가운데 글 · 바탕을 칠하는 것이 둘(짙은 글 · 머리 바탕)이고, 세로선만 긋는 것은 세지 않는다.
+    expect(used.length).toBeGreaterThanOrEqual(2)
+    expect(added.filter((key) => !used.includes(key))).toEqual(['semantic.borderFaint'])
+    expect(
+      Object.fromEntries(
+        used.map((key) => [key, V1_8_0_KEYS.includes(refOf(items[key]!.default) ?? '') ? '옛 키의 참조' : String(items[key]!.default)]),
+      ),
+    ).toEqual(Object.fromEntries(used.map((key) => [key, '옛 키의 참조'])))
   })
 
   it('components 선언은 카탈로그의 이름만 쓴다', () => {
