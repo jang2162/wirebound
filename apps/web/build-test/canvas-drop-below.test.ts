@@ -498,9 +498,10 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
     }
   })
   /**
-   * 기록(L-017) — 문서 옆 · 위의 칸 바탕이 «못 놓는 자리» 인 까닭의 값. 창 1440 · 칸 860 에서 프리셋 375 · 줌 100% 의 옆 바탕은 왼 243 · 오른 242px 이고(위 24px), 줌 50% 는 336px 씩이다(문서가 칸에
-   * 다 들어와 칸 스크롤이 없다). 긴 문서(글 40)의 페이지 끝은 줌 100% 에서 칸 아래끝보다 밑이라(기본테마 2.0.0 에서 496px — 글 줄 높이를 테마가 정해
-   * 판마다 다르다) — 옆 바탕을 «페이지 끝» 으로 읽으면 — 미리보기가 화면 밖에 선다. 줌 50% 는 칸 안(145px 위)이라 보인다.
+   * 기록(L-017) — 문서 옆 · 위의 칸 바탕이 «못 놓는 자리» 인 까닭의 값. 창 1440 · 칸 860 에서 프리셋 375 · 줌 100% 의 옆 바탕은 왼 243 · 오른 243px 이고(위 24px), 줌 50% 는 336px 씩이다(문서가 칸에
+   * 다 들어와 칸 스크롤이 없다). 긴 문서(글 40)의 페이지 끝은 줌 100% 에서 칸 아래끝보다 칸 높이의 절반 넘게 밑이라(기본테마 2.0.0 에서 칸 높이 809 · 496px
+   * 밑 — 글 줄 높이를 테마가 정해 판마다 다르다 · 1.8.0 은 648px) — 옆 바탕을 «페이지 끝» 으로 읽으면 — 미리보기가 굴려야 닿는 화면 밖에 선다. 줌 50% 는
+   * 칸 안(145px 위)이라 보인다.
    * 설계가 «못 놓는 자리» 로 둔 둘(남이 잡은 빈 카드 안 · 프리셋 375 문서 왼쪽 바탕)은 결함이 아니다. 값이 바뀌면 이 케이스가 알린다.
    */
   it('기록 — 프리셋 375 의 옆 바탕 폭과 긴 문서의 페이지 끝 자리(줌 100% · 50%)', async () => {
@@ -521,6 +522,7 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
           right: Math.round(b.cell.x + b.cell.width - b.frame.x - b.frame.width),
           top: Math.round(b.frame.y - b.cell.y),
           pageEndBelowCell: Math.round(last.y - (b.cell.y + b.cell.height)),
+          cellHeight: Math.round(b.cell.height),
           scrolls: b.scrollMax > 0,
         }
       }
@@ -532,7 +534,8 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       // eslint-disable-next-line no-console
       console.log(`[옆 바탕] 프리셋 375 · 줌 100% ${JSON.stringify(full)} · 줌 50% ${JSON.stringify(half)}`)
       expect({
-        fullWide: full.left > 200 && full.right > 200 && full.top === 24 && full.scrolls && full.pageEndBelowCell > 0,
+        // «화면 밖에 선다» 의 뜻 — 페이지 끝이 칸 아래끝보다 칸 높이의 절반 넘게 밑이다(굴려야 닿는다).
+        fullWide: full.left > 200 && full.right > 200 && full.top === 24 && full.scrolls && full.pageEndBelowCell > full.cellHeight / 2,
         halfWide: half.left > 300 && half.right > 300 && !half.scrolls && half.pageEndBelowCell < 0,
       }).toEqual({ fullWide: true, halfWide: true })
     } finally {
