@@ -175,8 +175,13 @@
   border-color: var(--wb-semantic-border);
   padding: 0;
 }
-/* 카드 머리줄 — 제목(과 제목 옆)은 왼쪽, 머리 오른쪽 구역(단추 · 링크 · 셀렉트)은 오른끝, 부제는 제목 밑. 바닥 구역은 몸통 밑의 오른쪽 단추줄이다. */
+/*
+ * 카드 머리줄 — 제목(과 제목 옆)은 왼쪽, 머리 오른쪽 구역(단추 · 링크 · 셀렉트)은 오른끝, 부제는 제목 밑. 바닥 구역은 몸통 밑의 오른쪽 단추줄이다.
+ * 머리 오른쪽 구역은 두 줄(제목 줄 · 부제 줄)에 걸친다(SDK 기본 CSS) — 제목 줄이 남는 높이를 다 갖게 해(`1fr`) 부제가 없을 때 제목이 단추와 같은
+ * 높이의 가운데에 선다. 안 정하면 단추 높이가 빈 부제 줄에도 나뉘어 제목이 위로 붙는다.
+ */
 [data-wb-component="Card"] > [data-wb-part="header"] {
+  grid-template-rows: 1fr auto;
   box-sizing: border-box;
   min-height: var(--wb-cell-minHeight);
   padding: var(--wb-gap-piece) var(--wb-space-3);
@@ -666,8 +671,8 @@
  * 하나» 로 깐다(옛 테마 호환) — 쌍 격자 · 자식 폭 · subgrid 는 이 테마가 건다.
  *
  * 선은 칸마다 오른쪽 · 아래에 긋는다. 위 · 왼쪽 바깥 선은 상자 테두리다. 오른쪽 끝 칸의 선은 상자 테두리와 겹치므로 격자를 1px 넓혀 상자 밖으로 밀고
- * (상자가 자른다), 단추 구역이 없으면 아래 끝 줄의 선도 같은 식으로 민다. 빈 쌍은 그리지 않는다 — 끝 줄의 남는 자리는 선 없는 빈자리다(위 줄의 아래
- * 선이 그 자리를 닫는다). 단추 구역은 격자 아래 줄의 오른쪽이다.
+ * (상자가 자른다), 단추 구역이 없으면 아래 끝 줄의 선도 같은 식으로 민다. 빈 쌍은 그리지 않는다 — 끝 줄의 남는 자리는 라벨 바탕 없는 빈 칸이다.
+ * 단추 구역은 격자 아래 줄의 오른쪽이고, 그 윗선이 끝 줄의 아래 선에 1px 겹쳐 빈 칸의 아래까지 한 줄로 닫는다.
  */
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] {
   display: grid;
@@ -683,6 +688,8 @@
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] + [data-wb-part="actions"] {
   flex: 1 1 100%;
   justify-content: flex-end;
+  margin-top: -1px;
+  border-top: 1px solid var(--wb-semantic-border);
 }
 [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > * {
   grid-column: span calc(2 * var(--wb-node-weight, 1));
@@ -1346,6 +1353,17 @@
   line-height: var(--wb-typography-caption-lineHeight);
   font-weight: var(--wb-typography-caption-fontWeight);
   color: var(--wb-semantic-textMuted);
+}
+/*
+ * 칸 안의 글은 문단 여백 없이 선다 — 표 칸 · 값 칸 · 머리줄의 높이는 칸 여백이 정한다. `Text` 는 문단 · 제목 요소라 브라우저 기본 여백(글 크기만큼 위아래)을
+ * 갖고, 그대로 두면 글 한 줄이 든 표 줄만 입력칸이 든 줄보다 높다.
+ */
+[data-wb-component="DataGrid"] [data-wb-part="pieces"] > [data-wb-component="Text"],
+[data-wb-component="DataGrid"] > [data-wb-part="head"] [data-wb-component="Text"],
+[data-wb-component="Field"] > [data-wb-part="value"] > [data-wb-component="Text"],
+[data-wb-component="Card"] > [data-wb-part="header"] [data-wb-component="Text"],
+[data-wb-component="FormTable"] > [data-wb-part="header"] [data-wb-component="Text"] {
+  margin: 0;
 }
 [data-wb-component="Media"][data-wb-structure="image"] {
   margin: 0;
