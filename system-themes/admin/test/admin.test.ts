@@ -469,6 +469,56 @@ describe('system-admin CSS', () => {
     expect(got).toEqual([true, false, false])
   })
 
+  /** 잠금 사다리의 두 단을 규칙이 실제로 칠한다 — 변수만 있고 칠하는 규칙이 없으면 읽기 전용 · 비활성 칸이 편집 칸과 같은 흰 면이다. */
+  it('읽기 전용 · 비활성 칸은 제 바탕 변수로 칠한다', () => {
+    const paints = (state: string, name: string) =>
+      rules()
+        .filter(
+          (rule) =>
+            rule.selector.includes(`[data-wb-state~="${state}"]`) && rule.style.getPropertyValue('background').trim() === `var(${name})`,
+        )
+        .map((rule) => rule.selector)
+    expect(paints('readonly', '--wb-input-readonly')).toEqual(['[data-wb-state~="readonly"]'])
+    const disabled = paints('disabled', '--wb-input-disabled').join(', ')
+    for (const type of ['Input', 'TextArea', 'Select', 'DateInput', 'TimeInput'])
+      expect(disabled, type).toContain(`[data-wb-component="${type}"][data-wb-state~="disabled"]`)
+  })
+
+  /** 고른 세그먼트 칸은 채운 주색 흰 글이다 — 글 색(`semantic.text`)으로 채우면 주색을 바꿔도 고른 칸이 안 따라온다. */
+  it('고른 세그먼트 칸은 채운 주색 · 면 색 글', () => {
+    const on = ruleOf('[data-wb-component="RadioGroup"][data-wb-variant="segment"] > [aria-checked="true"]')
+    expect(on.getPropertyValue('background').trim()).toBe('var(--wb-semantic-primary)')
+    expect(on.getPropertyValue('border-color').trim()).toBe('var(--wb-semantic-primary)')
+    expect(on.getPropertyValue('color').trim()).toBe('var(--wb-semantic-surface)')
+  })
+
+  /**
+   * 쌍 격자(폼 표 · 열을 정한 조회 폼)의 라벨 칸 — 폭 140px · 옅은 바탕 · 칸 최소 높이 42px. 두 격자가 같은 규칙을 나눠 써 조회 폼과 폼 표의 라벨
+   * 칸이 한 꼴이다.
+   */
+  it('쌍 격자의 라벨 칸은 폭 140px · 옅은 바탕 · 최소 높이 42px — 폼 표와 열을 정한 조회 폼이 같은 규칙', () => {
+    expect(ROOT_VARS().get('--wb-form-labelWidth')).toBe('140px')
+    const FORM =
+      '[data-wb-component="FormTable"] > [data-wb-part="cells"] > :is([data-wb-component="Field"], [data-wb-part="filler"]) > [data-wb-part="label"]'
+    const SEARCH =
+      '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] > [data-wb-part="label"]'
+    const label = rules().filter((rule) => rule.media === null && rule.selector.includes(FORM))
+    expect(label.map((rule) => rule.selector.includes(SEARCH))).toEqual([true])
+    expect(label[0]!.style.getPropertyValue('background').trim()).toBe('var(--wb-semantic-canvas)')
+    expect(label[0]!.style.getPropertyValue('min-height').trim()).toBe('var(--wb-cell-minHeight)')
+    const tracks = rules().filter((rule) => rule.style.getPropertyValue('grid-template-columns').includes('--wb-form-labelWidth'))
+    expect(tracks.length).toBeGreaterThanOrEqual(4)
+  })
+
+  /** 글을 받는 조각의 최소 높이는 30px 이다(`space.unit` × 7.5 — 밀도를 따른다). */
+  it('입력 조각의 최소 높이는 30px', () => {
+    const boxed = rules().filter(
+      (rule) => rule.media === null && rule.selector.split(',').some((part) => part.trim() === '[data-wb-component="Input"]'),
+    )
+    expect(boxed.map((rule) => rule.style.getPropertyValue('min-height').trim())).toEqual(['var(--wb-control-minHeight)'])
+    expect(rootPx('--wb-control-minHeight')).toBe(30)
+  })
+
   /**
    * 밑줄 탭 — 고른 탭(`aria-selected`)만 주색 밑줄을 받는다. 폼의 조각 규칙은 직계로 잡는다 — 자손으로 잡으면 안의 `Field` 의 `label` 조각까지
    * 받아 필드 라벨마다 제목의 밑줄이 선다.
