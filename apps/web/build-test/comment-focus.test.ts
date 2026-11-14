@@ -737,4 +737,189 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       await close()
     }
   })
+
+  /**
+   * **링이 캔버스 칸 밖에 서면 칸을 굴려 들인다**(V1) — 묶음에 포커스가 가서 링이 설 때 · 묶음을 고를 때 · 머리 단추로 고를 때, 그 노드가 캔버스 칸
+   * (`.wb-shell-canvas`)의 보이는 구간에 다 안 들면 가장 가까운 쪽으로 굴린다(이미 보이면 안 굴린다 — `block: 'nearest'` 와 같은 뜻). 칸의 `scrollTop`
+   * 쓰기를 setter 로 세어 한 번만 굴리는지, 다른 스크롤 상자(문서 · 우측 패널)가 그 사이 움직였는지를 최댓값으로 잰다.
+   */
+  async function longFixture(): Promise<string> {
+    const project = (await call('POST', '/projects', { name: '긴 페이지', slug: `cfl-${Date.now().toString(36)}` })).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+    const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body.id as string
+    const P = `/projects/${project.id}/pages/${pageId}`
+    const ops = Array.from({ length: 70 }, (_, i) => ({
+      op: 'add',
+      path: `/root/children/${i}`,
+      value: { id: `n_t${i}`, type: 'Text', props: { content: `줄 ${i} 글` } },
+    }))
+    const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops })
+    if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+    for (const nodeId of ['n_t0', 'n_t35', 'n_t62', 'n_t69']) {
+      const res = await call('POST', `${P}/comments`, { nodeId, body: `${nodeId} 에 단 말` })
+      if (res.status !== 201) throw new Error(`comment ${res.status} ${JSON.stringify(res.body)}`)
+    }
+    return P
+  }
+
+  /** 칸의 `scrollTop` 쓰기를 세고, 칸 밖 스크롤 상자들의 움직임 최댓값을 모은다. */
+  async function watchScrolls(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      const pane = document.querySelector<HTMLElement>('.wb-shell-canvas')
+      if (pane === null) throw new Error('캔버스 칸이 없습니다')
+      const box = window as unknown as { __writes: number[]; __jumps: Record<string, number> }
+      box.__writes = []
+      box.__jumps = {}
+      const own = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop')!
+      Object.defineProperty(pane, 'scrollTop', {
+        configurable: true,
+        get() {
+          return own.get!.call(this)
+        },
+        set(value: number) {
+          const before = own.get!.call(this) as number
+          own.set!.call(this, value)
+          box.__writes.push((own.get!.call(this) as number) - before)
+        },
+      })
+      // 문서는 넘치지 않아도 잰다 — 칸 밖까지 굴리는 장치(`scrollIntoView`)가 가장 먼저 움직이는 상자다.
+      const page = document.scrollingElement as Element
+      const scrollers = [
+        page,
+        ...[...document.querySelectorAll('*')].filter(
+          (element) => element !== pane && element !== page && element.scrollHeight > element.clientHeight,
+        ),
+      ]
+      scrollers.forEach((element, index) => {
+        const name = `${element.tagName.toLowerCase()}.${(element.className || '').toString().split(' ')[0]}#${index}`
+        const start = element.scrollTop
+        box.__jumps[name] = 0
+        const target = element === document.scrollingElement ? window : element
+        target.addEventListener('scroll', () => {
+          box.__jumps[name] = Math.max(box.__jumps[name]!, Math.abs(element.scrollTop - start))
+        })
+      })
+    })
+  }
+  const scrollLog = (page: Page) =>
+    page.evaluate(() => {
+      const box = window as unknown as { __writes: number[]; __jumps: Record<string, number> }
+      const moved = Object.entries(box.__jumps).filter(([, value]) => value !== 0)
+      // 쓰기는 값이 안 바뀐 것(맨 위에서 위로)도 센다 — 안 굴려야 할 때 쓴 것이다.
+      return { writes: box.__writes.length, moved, scrollers: Object.keys(box.__jumps).length }
+    })
+  /** 그 노드의 외곽선(링 · 고른 외곽선)이 칸의 보이는 구간에 다 드는가 — 위 · 아래 끝과 칸의 위 · 아래 끝. */
+  const inPane = (page: Page, selector: string) =>
+    page.evaluate((selector) => {
+      const pane = document.querySelector('.wb-shell-canvas')!.getBoundingClientRect()
+      const ring = document.querySelector(selector)?.getBoundingClientRect() ?? null
+      return ring === null
+        ? null
+        : { inside: ring.top >= pane.top && ring.bottom <= pane.bottom, top: ring.top, bottom: ring.bottom, pane: [pane.top, pane.bottom] }
+    }, selector)
+  const paneScroll = (page: Page) => page.evaluate(() => document.querySelector('.wb-shell-canvas')!.scrollTop)
+
+  for (const mode of ['편집 모드', '뷰 모드'] as const) {
+    it(`${mode} — 링이 캔버스 칸 밖에 서면 가장 가까운 쪽으로 한 번 굴려 들인다 · 이미 보이면 안 굴린다`, async () => {
+      const P = await longFixture()
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator('[data-wb-id="n_t69"]').waitFor()
+        if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+        await group(page, 'n_t69').waitFor()
+        // 판 카나리아 — 칸이 페이지보다 짧아 굴릴 자리가 있다.
+        const room = await page.evaluate(() => {
+          const pane = document.querySelector('.wb-shell-canvas')!
+          return pane.scrollHeight - pane.clientHeight
+        })
+        expect(room).toBeGreaterThan(500)
+        expect(await paneScroll(page)).toBe(0)
+        await watchScrolls(page)
+
+        // 이미 보이는 노드 — 안 굴린다.
+        await group(page, 'n_t0').focus()
+        await frames(page)
+        expect(await rings(page)).toEqual(['n_t0'])
+        expect((await scrollLog(page)).writes).toBe(0)
+
+        // 칸 밖(아래) 노드 — 한 번 굴려 들인다.
+        await group(page, 'n_t69').focus()
+        await frames(page)
+        expect(await rings(page)).toEqual(['n_t69'])
+        const below = await inPane(page, '[data-wb-comment-pointed="n_t69"]')
+        expect(below?.inside).toBe(true)
+        // 아래에서 왔으니 칸 아래 끝에 붙는다(위 끝 맞춤이 아니다).
+        expect(below!.pane[1]! - below!.bottom).toBeLessThanOrEqual(12)
+        expect((await scrollLog(page)).writes).toBe(1)
+        const down = await paneScroll(page)
+        expect(down).toBeGreaterThan(0)
+
+        // 칸 가운데쯤 보이는 노드 — 안 굴린다.
+        await group(page, 'n_t62').focus()
+        await frames(page)
+        expect(await rings(page)).toEqual(['n_t62'])
+        const middle = await inPane(page, '[data-wb-comment-pointed="n_t62"]')
+        expect(middle?.inside).toBe(true)
+        expect(middle!.pane[1]! - middle!.bottom).toBeGreaterThan(50)
+        expect((await scrollLog(page)).writes).toBe(1)
+        expect(await paneScroll(page)).toBe(down)
+
+        // 칸 밖(위) 노드 — 칸 위 끝에 붙고, 굴린 양이 맨 위까지가 아니다.
+        await group(page, 'n_t35').focus()
+        await frames(page)
+        const above = await inPane(page, '[data-wb-comment-pointed="n_t35"]')
+        expect(above?.inside).toBe(true)
+        expect(above!.top - above!.pane[0]!).toBeLessThanOrEqual(12)
+        const mid = await paneScroll(page)
+        expect(mid).toBeLessThan(down)
+        expect(mid).toBeGreaterThan(0)
+        expect((await scrollLog(page)).writes).toBe(2)
+
+        // 고름(작성자 줄 누름) — 이미 보여 더 안 굴린다.
+        await group(page, 'n_t35').locator('.wb-shell-comment-author').first().click()
+        await pickSettled(page)
+        expect((await scrollLog(page)).writes).toBe(2)
+
+        // 사람이 칸을 굴려 링을 밀어내면 끌려오지 않는다 — 다시 재는 때(줌)에도 칸에 안 쓴다.
+        const pane = await page.locator('.wb-shell-canvas').boundingBox()
+        await page.mouse.move(pane!.x + pane!.width / 2, pane!.y + pane!.height / 2)
+        await page.mouse.wheel(0, 700)
+        await poll(
+          '휠이 칸을 굴린다',
+          () => inPane(page, '[data-wb-comment-pointed="n_t35"]'),
+          (place) => place !== null && !place.inside,
+        )
+        await page.getByRole('group', { name: '줌' }).getByRole('button', { name: '축소', exact: true }).click()
+        await frames(page)
+        await page.waitForTimeout(200)
+        expect(await rings(page)).toEqual(['n_t35'])
+        expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(false)
+        expect((await scrollLog(page)).writes).toBe(2)
+
+        // 같은 묶음을 다시 고르면(링은 그대로) 다시 들인다 — 고름은 사람의 몸짓이다.
+        await group(page, 'n_t35').locator('.wb-shell-comment-author').first().click()
+        await pickSettled(page)
+        expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(true)
+        expect((await scrollLog(page)).writes).toBe(3)
+
+        if (mode === '편집 모드') {
+          // 머리 단추로 고른 진짜 선택 — 칸 밖이면 굴려 들인다.
+          await group(page, 'n_t69').locator('.wb-shell-comment-group-pick').click()
+          await frames(page)
+          expect(await selectedOutline(page)).toEqual(['n_t69'])
+          expect((await inPane(page, '[data-wb-selected-id="n_t69"]'))?.inside).toBe(true)
+          expect((await scrollLog(page)).writes).toBe(4)
+        }
+
+        // 튐 — 칸 밖의 스크롤 상자는 그 사이 안 움직였다.
+        const log = await scrollLog(page)
+        expect(log.scrollers).toBeGreaterThan(0)
+        expect(log.moved).toEqual([])
+      } finally {
+        await context.close()
+      }
+    })
+  }
 })

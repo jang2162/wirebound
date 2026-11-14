@@ -43,7 +43,7 @@ export interface CommentPointing {
   point: (nodeId: string | null) => void
   /** 펼쳐 그릴 노드(머리말 «펼침») — 고를 때의 진짜 선택(`selectedNodeIds` 를 줄바꿈으로 이은 글)과 함께. 없으면 `null`. */
   revealed: Revealed | null
-  /** 고른 묶음의 노드를 펼친다 — `null` 이면 걷는다. `point` 와 같이 페이지가 같은 동안 같은 함수다. */
+  /** 고른 묶음의 노드를 펼친다 — `null` 이면 걷는다. 부를 때마다 새 값이다(같은 노드여도). `point` 와 같이 페이지가 같은 동안 같은 함수다. */
   reveal: (target: Revealed | null) => void
 }
 
@@ -94,14 +94,10 @@ export function CommentPointingProvider(props: { pageId: string | undefined; chi
       }),
     [pageId],
   )
+  // 고를 때마다 새 값이다 — 같은 노드를 다시 골라도 캔버스가 «새로 골랐다» 를 알아본다(그 노드를 칸 안으로 굴린다 — `canvas/canvas.tsx` 의 `scrolledPick`).
   const reveal = useCallback(
     (next: Revealed | null) =>
-      setRevealedOn((prev) => {
-        if (next === null) return prev === null ? prev : null
-        return prev !== null && prev.pageId === pageId && prev.nodeId === next.nodeId && prev.selection === next.selection
-          ? prev
-          : { pageId, nodeId: next.nodeId, selection: next.selection }
-      }),
+      setRevealedOn((prev) => (next === null ? (prev === null ? prev : null) : { pageId, nodeId: next.nodeId, selection: next.selection })),
     [pageId],
   )
   const value = useMemo<CommentPointing>(() => ({ nodeId, point, revealed, reveal }), [nodeId, point, revealed, reveal])

@@ -64,7 +64,7 @@ import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useViewState } from '../shell/use-view-state'
 import { useTellCanvasPick } from '../shell/canvas-pick'
-import { useCommentPointing } from '../comments/comment-pointing'
+import { useCommentPointing, type Revealed } from '../comments/comment-pointing'
 import { useAnnounceCanvasRemeasure, useDragging, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { emptyZonesFor, type EmptyZones } from './empty-zones'
@@ -449,6 +449,14 @@ export function Canvas(props: {
   const outlinedIds = useMemo(() => (ringId === null ? selectedOutlined : [...selectedOutlined, ringId]), [selectedOutlined, ringId])
   const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
   const ringBox = ringId === null ? null : (boxes.find((item) => item.nodeId === ringId)?.box ?? null)
+  /**
+   * **링 · 고른 묶음의 노드를 캔버스 칸 안으로 굴린다**(설계서 «코멘트» 탭) — 링이 새로 설 때(그 노드로 처음 잰 때 — 숨었다 보이게 된 때도) · 묶음을
+   * 고를 때(`revealed` 가 새 값 — 머리 단추로 고른 진짜 선택도)마다 한 번, 그 노드의 외곽선이 칸의 보이는 구간에 다 안 들면 가장 가까운 쪽으로
+   * 굴린다(`bringIntoPane`). 이미 보이면 안 굴린다. 한 번 굴린 링은 그 링이 걷히거나 다른 노드로 옮기기 전에는 다시 안 굴린다 — 사람이 칸을 굴려
+   * 링을 밀어내도 끌려오지 않는다.
+   */
+  const scrolledRing = useRef<string | null>(null)
+  const scrolledPick = useRef<Revealed | null>(null)
   const [platform] = useState(() => platformOf(navigator))
   /** «사람이 캔버스에서 눌러 골랐다» — 우측 패널이 «컴포넌트» 탭으로 옮긴다(`../shell/canvas-pick.tsx`). 고름이 서지 않았으면(남이 잡음 · 뺌) 안 알린다. */
   const tellPick = useTellCanvasPick()
@@ -487,6 +495,8 @@ export function Canvas(props: {
     const surface = surfaceRef.current
     if (surface === null || frame === null || outlinedIds.length === 0) {
       setBoxes((prev) => (prev.length === 0 ? prev : NO_OUTLINES))
+      if (ringId === null) scrolledRing.current = null
+      if (revealed !== null) scrolledPick.current = revealed
       return
     }
 
@@ -498,6 +508,19 @@ export function Canvas(props: {
       if (target !== null) next.push({ nodeId, box: measureLines(target, nodeId, offset) })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
+    // 링이 새로 섰거나 묶음을 새로 골랐으면 그 노드를 칸 안으로 굴린다(위 `scrolledRing` 머리말). 그리기 전에 굴린다 — 칸 밖의 링이 한 번 그려지지 않게.
+    let show: string | null = null
+    if (ringId === null) scrolledRing.current = null
+    else if (scrolledRing.current !== ringId && next.some((item) => item.nodeId === ringId)) {
+      scrolledRing.current = ringId
+      show = ringId
+    }
+    if (revealed !== null && scrolledPick.current !== revealed) {
+      scrolledPick.current = revealed
+      show = revealed.nodeId
+    }
+    const shown = show === null ? undefined : next.find((item) => item.nodeId === show)
+    if (shown !== undefined) bringIntoPane(surface, shown.box, zoom)
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
     // **겹layer도 자리를 바꾼다** — `setVisible`이 노드를 통째로 빼고 `setProp`이 크기를
@@ -507,7 +530,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedIds, rendered, reveal, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedIds, ringId, revealed, rendered, reveal, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -1107,4 +1130,37 @@ const NO_IDS: readonly string[] = []
 /** 두 외곽선 목록이 같은가 — `sameBox`와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
 function sameOutlines(a: readonly OutlineBox[], b: readonly OutlineBox[]): boolean {
   return a.length === b.length && a.every((item, index) => item.nodeId === b[index]?.nodeId && sameBox(item.box, b[index]!.box))
+}
+
+/** 외곽선 · 링이 칸 가장자리에 붙어 잘리지 않게 더 들이는 몫(px) — 외곽선은 상자 밖으로 `outlineOffset` + `outlineWidth`(3px) 그려진다. */
+const PANE_MARGIN = 4
+
+/**
+ * 표면 좌표의 상자를 캔버스 칸(`.wb-shell-canvas` — 표면을 품은 스크롤 상자)의 보이는 구간에 들인다 — 다 들어 있으면 안 굴리고, 아니면 가장
+ * 가까운 쪽 끝에 붙인다(`scrollIntoView({ block: 'nearest', inline: 'nearest' })` 와 같은 뜻). 칸보다 크면 위 · 왼 끝을 맞춘다.
+ * `scrollIntoView` 를 안 쓰는 것은 그것이 칸 밖의 조상(셸 · 문서)까지 굴리기 때문이다. 표면은 줌만큼 커져 그려진다(`frameOffset` 과 같은 축).
+ */
+function bringIntoPane(surface: HTMLElement, box: Box, zoom: number): void {
+  const pane = surface.closest<HTMLElement>('.wb-shell-canvas')
+  if (pane === null) return
+  const base = surface.getBoundingClientRect()
+  const view = pane.getBoundingClientRect()
+  const top = view.top + pane.clientTop
+  const left = view.left + pane.clientLeft
+  const dy = nearest(base.top + box.top * zoom, box.height * zoom, top, pane.clientHeight)
+  const dx = nearest(base.left + box.left * zoom, box.width * zoom, left, pane.clientWidth)
+  if (dy !== 0) pane.scrollTop += dy
+  if (dx !== 0) pane.scrollLeft += dx
+}
+
+/**
+ * 한 축에서 상자를 구간 안에 들일 굴림 양 — 들어 있으면 0. 1px 안은 들어 있다고 본다 — 끝에 붙여 굴린 상자를 다시 재면 1px 아래의 소수점만큼 구간을
+ * 넘어, 같은 상자를 다시 고를 때마다 칸에 값이 안 바뀌는 쓰기를 한 번 더 한다(Chrome · `build-test/comment-focus.test.ts` «가장 가까운 쪽»).
+ */
+function nearest(start: number, size: number, viewStart: number, viewSize: number): number {
+  const from = start - PANE_MARGIN
+  const to = start + size + PANE_MARGIN
+  if (from >= viewStart - 1 && to <= viewStart + viewSize + 1) return 0
+  if (to - from > viewSize || from < viewStart) return from - viewStart
+  return to - (viewStart + viewSize)
 }
