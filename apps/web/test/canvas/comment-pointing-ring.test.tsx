@@ -133,6 +133,28 @@ describe('코멘트 링 — 진짜 선택이 아니다', () => {
     expect(rings()).toEqual(['n_form'])
   })
 
+  it('고른 옅은 노드(여럿 고름의 기준 아닌 것)를 가리키면 링 대신 그 옅은 외곽선 그대로다', async () => {
+    await open()
+    fireEvent.click(requireNode('n_form'))
+    fireEvent.click(requireNode('n_grid'), { metaKey: true, ctrlKey: true })
+    await waitFor(() => expect(shellStore().getState().selectedNodeIds).toHaveLength(2))
+    const members = () =>
+      [...document.querySelectorAll('[data-wb-member-id]')].map((element) => element.getAttribute('data-wb-member-id') ?? '')
+    const base = shellStore().getState().selectedNodeId
+    const member =
+      shellStore()
+        .getState()
+        .selectedNodeIds.find((id) => id !== base) ?? ''
+    expect(members()).toEqual([member])
+    await openCommentTab()
+
+    focusGroup(member)
+
+    expect(rings()).toEqual([])
+    expect(members()).toEqual([member])
+    expect(selectedOutlines()).toEqual([base])
+  })
+
   it('뷰 모드에서도 선다 — 고른 외곽선은 없다', async () => {
     await open()
     fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))

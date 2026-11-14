@@ -438,17 +438,15 @@ export function Canvas(props: {
   const selectedOutlined = mode === 'edit' ? selectedNodeIds : NO_IDS
   /**
    * **코멘트가 가리킨 노드의 링**(`../comments/comment-pointing.tsx`) — 두 모드 다. 고른 것이 아니라 기준 외곽선과 같은 꼴(`.wb-shell-selection`)
-   * 하나를 따로 그린다. 기준 노드를 가리키면 따로 안 그린다(하나로 족하다). 고른 옅은 노드를 가리키면 옅은 외곽선 대신 링이다.
+   * 하나를 따로 그린다. **이미 고른 노드를 가리키면 따로 안 그린다** — 그 노드의 외곽선(기준이면 진한 선 · 옅으면 가는 끊은 선)이 그대로 선다. 옅은
+   * 노드에 링을 그리면 캔버스에 진한 실선이 둘 서 어느 쪽이 기준 노드인지 못 가른다(설계서 「설계서 화면 구조」 «보이는 것»).
    */
-  const ringId = pointedId !== null && pointedId !== outlinedNodeId ? pointedId : null
+  const ringId = pointedId !== null && !selectedOutlined.includes(pointedId) ? pointedId : null
   /**
    * 외곽선을 잴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것») + 링. 링도 같은 측정 이펙트가 잰다 — 두 벌로 재면 하나만 자리를 따라간다.
    * 이펙트의 의존이라 같은 값이면 같은 배열이어야 한다.
    */
-  const outlinedIds = useMemo(
-    () => (ringId === null || selectedOutlined.includes(ringId) ? selectedOutlined : [...selectedOutlined, ringId]),
-    [selectedOutlined, ringId],
-  )
+  const outlinedIds = useMemo(() => (ringId === null ? selectedOutlined : [...selectedOutlined, ringId]), [selectedOutlined, ringId])
   const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
   const ringBox = ringId === null ? null : (boxes.find((item) => item.nodeId === ringId)?.box ?? null)
   const [platform] = useState(() => platformOf(navigator))

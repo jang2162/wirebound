@@ -684,4 +684,57 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       await close()
     }
   })
+
+  /**
+   * **이미 고른 노드를 가리키면 링을 따로 그리지 않는다**(L2) — 그 노드의 외곽선이 그대로 선다: 기준이면 진한 선, 여럿 고름의 옅은 것이면 가는 끊은 선.
+   * 링이 옅은 외곽선을 대신하면 캔버스에 진한 실선이 둘 서 어느 쪽이 기준 노드인지 못 가른다.
+   */
+  it('편집 모드 — 고른 기준 · 옅은 노드를 가리키면 그 노드의 외곽선 그대로다 · 링은 따로 없다', async () => {
+    const P = await fixture([{ nodeId: 'n_c', body: '다에 단 말' }])
+    const { page, close } = await openTab(P)
+    try {
+      await canvasFrame(page).locator('[data-wb-id="n_c"]').click()
+      await canvasFrame(page)
+        .locator('[data-wb-id="n_a"]')
+        .click({ modifiers: ['Meta'] })
+      // Cmd+누른 것이 기준이 된다 — 기준 n_a · 옅은 n_c.
+      await poll(
+        '기준 n_a · 옅은 n_c',
+        () => selectedIds(page),
+        (list) => list.join() === 'n_a,n_c',
+      )
+      const outlines = () =>
+        page.evaluate(() =>
+          [...document.querySelectorAll('.wb-shell-selection, .wb-shell-selection-member')].map((element) => {
+            const style = getComputedStyle(element)
+            const id =
+              element.getAttribute('data-wb-selected-id') ??
+              element.getAttribute('data-wb-member-id') ??
+              `ring:${element.getAttribute('data-wb-comment-pointed')}`
+            return `${id}|${element.className}|${style.outlineStyle}`
+          }),
+        )
+      const before = await outlines()
+      expect(before).toEqual(['n_a|wb-shell-selection|solid', 'n_c|wb-shell-selection-member|dashed'])
+      await openCommentTab(page)
+
+      await group(page, 'n_a').focus()
+      await frames(page)
+      expect(await outlines()).toEqual(before)
+      expect(await rings(page)).toEqual([])
+
+      await group(page, 'n_c').focus()
+      await frames(page)
+      expect(await outlines()).toEqual(before)
+      expect(await rings(page)).toEqual([])
+
+      // 양성 대조 — 안 고른 노드를 가리키면 링이 따로 선다.
+      await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
+      await pickedInto(page, '관리자')
+      await frames(page)
+      expect(await rings(page)).toEqual(['n_b'])
+    } finally {
+      await close()
+    }
+  })
 })
