@@ -227,3 +227,89 @@ describe('코멘트 링 — 걷히는 때', () => {
     await waitFor(() => expect(rings()).toEqual([]))
   })
 })
+
+/**
+ * **펼침**(`src/comments/comment-pointing.tsx` 머리말 «펼침») — 지금 탭이 아닌 패널 안 노드의 묶음을 고르면(묶음 Enter) 캔버스가 그 패널을 펼쳐
+ * 그린다. 걷히는 때를 잰다 — 실브라우저 판(`build-test/comment-focus.test.ts` «안 보이는 탭 패널 …»)은 펼침 · 링 자리 · 문서 그대로를 잰다.
+ */
+describe('코멘트 펼침 — 걷히는 때', () => {
+  /** `n_tabs` 의 지금 탭은 첫째 — `n_in2` 는 둘째 탭 안이라 그리지 않는다. `n_top` 은 늘 보인다. */
+  function tabsDoc(): PageDocument {
+    const panel = (id: string, label: string, inner: string) => ({
+      id,
+      type: 'TabPanel',
+      props: { label },
+      children: [{ id: inner, type: 'Text', props: { content: label } }],
+    })
+    return pageDoc({
+      id: 'n_root',
+      type: 'Page',
+      children: [
+        { id: 'n_top', type: 'Text', props: { content: '위' } },
+        { id: 'n_tabs', type: 'Tabs', props: { active: 0 }, children: [panel('n_p1', '첫', 'n_in1'), panel('n_p2', '둘', 'n_in2')] },
+      ],
+    })
+  }
+
+  async function openTabs(): Promise<void> {
+    await openPage(tabsDoc(), {
+      apiOverrides: { listComments: async () => [comment('c1', 'n_in2'), comment('c2', 'n_top')] },
+    })
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    await waitFor(() => expect(document.querySelector('[data-comment-node="n_in2"]')).not.toBeNull())
+  }
+
+  const drawn = (nodeId: string) => canvasDocument().querySelector(`[data-wb-id="${nodeId}"]`) !== null
+
+  /** 묶음을 고른다 — 포커스를 두고 Enter(곧바로 고른다). */
+  function pick(nodeId: string): void {
+    focusGroup(nodeId)
+    const group = document.querySelector<HTMLElement>(`[data-comment-node="${nodeId}"]`)
+    if (group === null) throw new Error(`묶음이 없습니다: ${nodeId}`)
+    fireEvent.keyDown(group, { key: 'Enter' })
+  }
+
+  it('포커스로는 안 펼치고 고르면 펼친다 · 다른 묶음으로 옮겨도 남는다', async () => {
+    await openTabs()
+    expect(drawn('n_in2')).toBe(false)
+
+    focusGroup('n_in2')
+    expect(drawn('n_in2')).toBe(false)
+
+    pick('n_in2')
+    await waitFor(() => expect(drawn('n_in2')).toBe(true))
+    expect(rings()).toEqual(['n_in2'])
+
+    focusGroup('n_top')
+    expect(rings()).toEqual(['n_top'])
+    expect(drawn('n_in2')).toBe(true)
+  })
+
+  it('캔버스를 누르면 걷힌다 — 뷰 모드(누름이 선택을 안 바꾼다)', async () => {
+    await openTabs()
+    fireEvent.click(screen.getByRole('button', { name: '뷰 모드' }))
+    await waitFor(() => expect(document.querySelector('[data-comment-node="n_in2"]')).not.toBeNull())
+    pick('n_in2')
+    await waitFor(() => expect(drawn('n_in2')).toBe(true))
+
+    fireEvent.click(requireNode('n_top'))
+
+    await waitFor(() => expect(drawn('n_in2')).toBe(false))
+  })
+
+  it('진짜 선택이 바뀌면 걷히고, 선택이 되돌아와도 되살지 않는다', async () => {
+    await openTabs()
+    const before = shellStore().getState().selectedNodeId
+    expect(before).not.toBeNull()
+    pick('n_in2')
+    await waitFor(() => expect(drawn('n_in2')).toBe(true))
+
+    act(() => shellStore().selectNode('n_top'))
+    await waitFor(() => expect(drawn('n_in2')).toBe(false))
+
+    act(() => shellStore().selectNode(before))
+    // 이펙트가 돌 틈을 준다 — 되살면 이 사이에 다시 선다.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(drawn('n_in2')).toBe(false)
+  })
+})

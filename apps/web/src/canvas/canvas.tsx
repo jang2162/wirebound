@@ -257,10 +257,21 @@ export function Canvas(props: {
   /**
    * **고른 노드를 펼쳐 보인다**(설계 spec Q3 (가)) — 고른 노드 · 고른 구역의 부모가 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 그 화면에서만 펼친 판으로 그린다
    * (렌더러의 `reveal`). 고른 구역은 그 부모 자신이 그 구역을 가리면(접힌 검색폼의 단추 구역) 부모도 펼친다(리뷰 RV-ZE L2). 문서(`active` ·
-   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기 · 뷰 모드는 그대로다. 편집 모드에서만이다.
+   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기는 그대로다. 고른 노드의 펼침은 편집 모드에서만이다(뷰 모드에는 고른 표지가 없다).
    */
   const selectedZone = useEditorStore(store, (s) => s.selectedZone)
-  const revealKey = mode === 'edit' ? selectedNodeIds.join('\n') : ''
+  /**
+   * **코멘트 묶음을 고른 노드도 펼친다**(`../comments/comment-pointing.tsx` 머리말 «펼침») — 두 모드 다. 고를 때의 진짜 선택과 지금 선택이 다르면
+   * 걷는다(진짜 선택의 펼침이 이긴다 — 같은 `Tabs` 의 다른 패널을 둘이 펼치면 한쪽만 선다). 걷어야 선택이 되돌아와도 되살지 않는다. 그리기 전에
+   * 걷는다(`useLayoutEffect`) — 둘이 함께 선 판이 화면에 안 나간다.
+   */
+  const { nodeId: pointedId, point, revealed, reveal: setCommentReveal } = useCommentPointing()
+  const selectionKey = selectedNodeIds.join('\n')
+  useLayoutEffect(() => {
+    if (revealed !== null && revealed.selection !== selectionKey) setCommentReveal(null)
+  }, [revealed, selectionKey, setCommentReveal])
+  const commentReveal = revealed?.nodeId ?? null
+  const revealKey = [...(mode === 'edit' ? selectedNodeIds : NO_IDS), ...(commentReveal === null ? [] : [commentReveal])].join('\n')
   const zoneParent = mode === 'edit' ? (selectedZone?.parentId ?? null) : null
   const zoneName = mode === 'edit' ? (selectedZone?.zone ?? null) : null
   const reveal = useMemo((): RevealTarget[] | undefined => {
@@ -429,7 +440,6 @@ export function Canvas(props: {
    * **코멘트가 가리킨 노드의 링**(`../comments/comment-pointing.tsx`) — 두 모드 다. 고른 것이 아니라 기준 외곽선과 같은 꼴(`.wb-shell-selection`)
    * 하나를 따로 그린다. 기준 노드를 가리키면 따로 안 그린다(하나로 족하다). 고른 옅은 노드를 가리키면 옅은 외곽선 대신 링이다.
    */
-  const { nodeId: pointedId, point } = useCommentPointing()
   const ringId = pointedId !== null && pointedId !== outlinedNodeId ? pointedId : null
   /**
    * 외곽선을 잴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것») + 링. 링도 같은 측정 이펙트가 잰다 — 두 벌로 재면 하나만 자리를 따라간다.
@@ -499,7 +509,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedIds, rendered, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedIds, rendered, reveal, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -549,7 +559,7 @@ export function Canvas(props: {
     // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
     // `rendered` 는 배치 미리보기가 끼운 사본이다 — 미리보기가 노드를 밀거나 걷히면 다시 잰다(위 `preview` 주석).
-  }, [doc, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [doc, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **배치 선의 자리를 잰다**(`./layout-guides.tsx`). 외곽선 · 마커와 같은 장치 · 같은 의존이다 — 줌 · 뷰포트 폭 · 남의 편집 · 미리보기 ·
@@ -577,7 +587,7 @@ export function Canvas(props: {
         next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
     }
     setGuides((prev) => (sameGuides(prev, next) ? prev : next))
-  }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [guidesOn, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
@@ -616,8 +626,9 @@ export function Canvas(props: {
       //
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
-        // 캔버스를 누르면 코멘트의 링이 걷힌다(`../comments/comment-pointing.tsx` «걷히는 때») — 두 모드 다.
+        // 캔버스를 누르면 코멘트의 링 · 펼침이 걷힌다(`../comments/comment-pointing.tsx` «걷히는 때») — 두 모드 다.
         point(null)
+        setCommentReveal(null)
         // 바로 연 팝업 페이지의 ✖ — 덮개 위의 것은 층이 닫는다.
         if (mode === 'view' && isPopupClose(event.target) && (event.target as Element).closest?.('[data-wb-popup-layer]') == null) {
           const line = popupStack.popups.length === 0 && isPopupDocument(doc) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP
@@ -676,6 +687,7 @@ export function Canvas(props: {
           // 문서 밖(iframe 의 빈 자리)을 누른 것 — 표면의 `onClick` · `onClickCapture` 가 받는 클릭과 같게 다룬다.
           onBackgroundClick={(event) => {
             point(null)
+            setCommentReveal(null)
             if (mode === 'view') beginGesture()
             else if (!adds(event)) store.selectNode(null)
           }}

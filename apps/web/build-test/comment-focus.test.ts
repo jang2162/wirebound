@@ -102,14 +102,11 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
    * 넉넉히 뒤에 읽는다 — 곧바로 읽으면 늦게 서는 고름을 못 본다.
    */
   const pickSettled = (page: Page) => page.waitForTimeout(900)
-  /** 미룬 고름이 서기를 기다린다 — 상태 이름으로 끝낸다(판 카나리아가 아니라 단언할 값이지만, 서는 때가 간격 뒤라 폴이 아니면 못 읽는다). */
-  const pickedInto = (page: Page, name: string) =>
-    poll(
-      `상태가 ${name} 로 선다`,
-      () => switcherName(page),
-      (value) => value === `화면 상태: ${name}`,
-      3_000,
-    )
+  /** 미룬 고름이 선 뒤 상태를 한 번 읽는다 — 단언할 값을 폴로 기다리지 않는다(그 값을 깨는 변조가 시간 초과로 죽는다). */
+  const pickedInto = async (page: Page, name: string) => {
+    await pickSettled(page)
+    expect(await switcherName(page)).toBe(`화면 상태: ${name}`)
+  }
   const focusedGroup = (page: Page) =>
     page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-comment-node') ?? null)
 
@@ -439,6 +436,121 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
         expect(await rings(page)).toEqual(['n_b'])
       } finally {
         await close()
+      }
+    })
+  }
+
+  /**
+   * **안 보이는 탭 패널 · 접힌 검색폼 안 노드**(M2) — 화면 상태가 아니라 부모가 숨긴 노드다. 고름(누름 · 묶음 Enter)이면 그 노드가 보이게 펼친 판으로
+   * 그리고(렌더러 `reveal` — 진짜 선택과 같은 장치) 링이 그 노드에 선다. 포커스로는 안 펼친다. 다른 묶음으로 옮겨도 되돌리지 않는다. 문서는 그대로다.
+   */
+  async function hiddenParentFixture(): Promise<string> {
+    const project = (await call('POST', '/projects', { name: '안 보이는 부모', slug: `cfh-${Date.now().toString(36)}` })).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+    const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '첫째' })).body.id as string
+    const P = `/projects/${project.id}/pages/${pageId}`
+    const panel = (id: string, label: string, inner: string) => ({
+      id,
+      type: 'TabPanel',
+      props: { label },
+      children: [{ id: inner, type: 'Text', props: { content: `${label} 안 글` } }],
+    })
+    const seeded = await call('PATCH', `${P}/ops`, {
+      baseSeq: 0,
+      ops: [
+        { op: 'add', path: '/root/children/0', value: { id: 'n_top', type: 'Text', props: { content: '맨 위 글' } } },
+        {
+          op: 'add',
+          path: '/root/children/1',
+          value: {
+            id: 'n_tabs',
+            type: 'Tabs',
+            props: { active: 0 },
+            children: [panel('n_p1', '첫 탭', 'n_in1'), panel('n_p2', '둘째 탭', 'n_in2')],
+          },
+        },
+        {
+          op: 'add',
+          path: '/root/children/2',
+          value: {
+            id: 'n_sf',
+            type: 'SearchForm',
+            props: { collapsed: true },
+            children: [{ id: 'n_sf_in', type: 'Text', props: { content: '접힌 조건' } }],
+          },
+        },
+      ],
+    })
+    if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+    for (const nodeId of ['n_top', 'n_in2', 'n_sf_in']) {
+      const res = await call('POST', `${P}/comments`, { nodeId, body: `${nodeId} 에 단 말` })
+      if (res.status !== 201) throw new Error(`comment ${res.status} ${JSON.stringify(res.body)}`)
+    }
+    return P
+  }
+
+  /** 서버 문서의 `Tabs.active` · `SearchForm.collapsed` · 번호 — 펼침이 문서를 안 바꾸는지. */
+  async function serverParents(P: string): Promise<{ active: unknown; collapsed: unknown; headSeq: number }> {
+    const response = await call('GET', P)
+    const children = response.body.schema.root.children as { id: string; props?: Record<string, unknown> }[]
+    const of = (id: string) => children.find((child) => child.id === id)?.props ?? {}
+    return { active: of('n_tabs').active, collapsed: of('n_sf').collapsed, headSeq: response.body.headSeq }
+  }
+
+  const drawn = (page: Page, nodeId: string) => canvasFrame(page).locator(`[data-wb-id="${nodeId}"]`).count()
+
+  for (const mode of ['편집 모드', '뷰 모드'] as const) {
+    it(`${mode} — 안 보이는 탭 패널 · 접힌 검색폼 안 노드의 묶음을 고르면 펼쳐 그리고 링이 선다 · 포커스로는 안 펼친다`, async () => {
+      const P = await hiddenParentFixture()
+      const before = await serverParents(P)
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator('[data-wb-id="n_top"]').waitFor()
+        if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+        await group(page, 'n_in2').waitFor()
+        // 연 판 — 지금 탭이 아닌 패널 · 접힌 검색폼 안은 그리지 않는다(카나리아).
+        expect(await drawn(page, 'n_in2')).toBe(0)
+        expect(await drawn(page, 'n_sf_in')).toBe(0)
+        expect(await drawn(page, 'n_in1')).toBe(1)
+
+        // 포커스만 — 안 펼친다.
+        await group(page, 'n_in2').focus()
+        await pickSettled(page)
+        expect(await drawn(page, 'n_in2')).toBe(0)
+        expect(await rings(page)).toEqual([])
+
+        // 고름(작성자 줄 누름) — 둘째 탭을 펼친 판으로 그리고 링이 선다.
+        await group(page, 'n_in2').locator('.wb-shell-comment-author').first().click()
+        await pickSettled(page)
+        await frames(page)
+        expect(await drawn(page, 'n_in2')).toBe(1)
+        expect(await drawn(page, 'n_in1')).toBe(0)
+        expect(await rings(page)).toEqual(['n_in2'])
+        const { ring, node } = await ringAndNode(page, 'n_in2')
+        expect(node!.width).toBeGreaterThan(0)
+        for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(ring![key] - node![key])).toBeLessThanOrEqual(1)
+
+        // 다른 묶음으로 옮겨도 되돌리지 않는다.
+        await group(page, 'n_top').focus()
+        await frames(page)
+        expect(await rings(page)).toEqual(['n_top'])
+        expect(await drawn(page, 'n_in2')).toBe(1)
+
+        // 접힌 검색폼 — 묶음에 포커스를 두고 Enter.
+        await group(page, 'n_sf_in').focus()
+        await frames(page)
+        expect(await drawn(page, 'n_sf_in')).toBe(0)
+        await page.keyboard.press('Enter')
+        await frames(page)
+        expect(await drawn(page, 'n_sf_in')).toBe(1)
+        expect(await rings(page)).toEqual(['n_sf_in'])
+
+        // 문서는 그대로다 — 펼침은 이 화면에서만이다.
+        expect(await serverParents(P)).toEqual(before)
+      } finally {
+        await context.close()
       }
     })
   }

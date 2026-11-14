@@ -49,6 +49,30 @@ describe('CommentPointingProvider', () => {
     expect(seen.every((value) => value === null)).toBe(true)
   })
 
+  it('펼침도 페이지를 옮긴 첫 렌더에서 걷힌다', () => {
+    const seen: (string | null)[] = []
+    const out: { current: CommentPointing | null } = { current: null }
+    const revealedSeen: (string | null)[] = []
+    function RevealProbe(): ReactElement {
+      const pointing = useCommentPointing()
+      revealedSeen.push(pointing.revealed?.nodeId ?? null)
+      return <span />
+    }
+    const tree = (pageId: string): ReactElement => (
+      <CommentPointingProvider pageId={pageId}>
+        <Probe seen={seen} out={out} />
+        <RevealProbe />
+      </CommentPointingProvider>
+    )
+    const { rerender } = render(tree('p1'))
+    act(() => out.current?.reveal({ nodeId: 'A', selection: '' }))
+    expect(out.current?.revealed).toEqual({ nodeId: 'A', selection: '' })
+    revealedSeen.length = 0
+    rerender(tree('p2'))
+    expect(revealedSeen[0]).toBeNull()
+    expect(revealedSeen.every((value) => value === null)).toBe(true)
+  })
+
   it('provider 가 없으면 늘 null 이고 point 는 아무것도 안 한다', () => {
     const seen: (string | null)[] = []
     const out: { current: CommentPointing | null } = { current: null }

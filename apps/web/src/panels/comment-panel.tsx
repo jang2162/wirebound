@@ -136,7 +136,7 @@
  * | 몸짓 | 하는 일 |
  * |---|---|
  * | 묶음 안에 포커스가 듦(Tab · 묶음 안 단추 · 누름) | 캔버스가 그 노드에 링을 그린다(`comments/comment-pointing.tsx`) |
- * | 묶음을 한 번 누름 · 묶음 자체에 포커스가 선 채 Enter/Space(**고름**) | 그 노드가 지금 화면 상태에서 숨었으면 보이는 상태로 바꾼다(`shell/use-view-state.ts` 의 `stateShowingNode`) |
+ * | 묶음을 한 번 누름 · 묶음 자체에 포커스가 선 채 Enter/Space(**고름**) | 그 노드가 지금 화면 상태에서 숨었으면 보이는 상태로 바꾸고(`shell/use-view-state.ts` 의 `stateShowingNode`), 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그린다(`comments/comment-pointing.tsx` 머리말 «펼침») |
  * | 머리 단추(편집 모드) | 고름 + 그 노드를 고르고 «컴포넌트» 탭으로 간다(`shell/canvas-pick.tsx` 의 `useShowComponentTab`) |
  *
  * **고름은 묶음 자신의 몸짓만이다** — 묶음 안의 단추 · 링크 · 글 상자 · 토큰 고르개를 누르거나 거기서 친 키는 그것들의 일이라 화면 상태를 안 바꾼다
@@ -735,7 +735,7 @@ export function CommentPanel(props: {
    */
   const focus = useCommentFocus()
   /** 묶음이 캔버스를 가리킨다(머리말 «묶음이 캔버스를 가리킨다»). */
-  const { point } = useCommentPointing()
+  const { point, reveal } = useCommentPointing()
   const mode = useEditorStore(store, (s) => s.mode)
   const viewState = useViewState(props.pageId)
   const showComponentTab = useShowComponentTab()
@@ -1246,11 +1246,15 @@ export function CommentPanel(props: {
   const groups = scope === 'page' ? all : all.filter((group) => group.nodeId === selectedNodeId)
   // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
   const aliases = document === null ? null : aliasesOf(document)
-  /** 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로(머리말 «묶음이 캔버스를 가리킨다»). */
+  /**
+   * 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로 바꾸고, 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그린다(머리말 «묶음이 캔버스를
+   * 가리킨다» · `comments/comment-pointing.tsx` 머리말 «펼침»).
+   */
   const showNode = (nodeId: string): void => {
     cancelPick()
     const verdict = stateShowingNode(document, nodeId, viewState.state)
     if (verdict.change) viewState.choose(verdict.state)
+    reveal({ nodeId, selection: store.getState().selectedNodeIds.join('\n') })
   }
   // 미룬 고름은 그때의 문서 · 상태로 판정한다 — 클릭한 렌더의 것이 아니다. 렌더 중에 싣는다 — 이 위에 일찍 돌려주는 갈래가 있어 훅을 못 둔다.
   latestShowNode.current = showNode
