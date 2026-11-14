@@ -293,3 +293,50 @@ jsdom(`apps/web/test/canvas/comment-pointing-ring.test.tsx` «고른 옅은 노�
 
 첫 판에서 산 둘을 고쳤다 — V1b 는 «보이는 노드» 판이 칸 맨 위(`scrollTop` 0)뿐이라 위로 굴리는 쓰기가 값 0 이었고(바뀐 쓰기만 셌다), V1d 는 머리 단추
 판에서 링 길이 먼저 굴려 고름 길을 가렸다. 칸 가운데 노드 판(`n_t62`) · 값이 안 바뀐 쓰기도 세기 · «밀어낸 뒤 같은 묶음을 다시 고름» 판을 더했다.
+
+## 게이트
+
+체인 하나(`nohup nice -n 10 caffeinate -i` · 머리 `63d3521b`). 상태 파일 첫 줄 `node v24.21.0`. 11:47:06 – 12:18:09. `pmset -g log` 의 마지막 ` Sleep ` 은
+11-13 19:29 — 체인 동안 잠듦 없음. load 5.3 – 9.7(코어 15). 슬롯은 두 번 다 0 개에서 잡았다.
+
+| 단계 | 결과 |
+|---|---|
+| `pnpm fmt` | rc 0 · 바뀐 파일 0(`git status --short` 는 `?? .build/` 하나) |
+| `pnpm lint` | rc 0 · 경고 94(CF 보고와 같은 수 · 바뀐 파일의 경고 0) |
+| `pnpm typecheck` | rc 0 |
+| `pnpm build` | rc 0 |
+| `pnpm test --maxWorkers=25%` | rc 0 · 629 파일 · 9553 케이스 · 통과 9550 · 실패 0 · 건너뜀 3 |
+| `pnpm test:build:serial` | rc 0 · 18 파일 · 179 케이스 · 통과 178 · 실패 0 · 건너뜀 1 |
+| `pnpm test:browser` | rc 0 · 132 파일 · 818 케이스 · 통과 816 · 실패 0 · 건너뜀 2 |
+
+`pnpm test` 의 프로젝트별(파일 · 통과 · 건너뜀): `apps/api` 192 · 2879 · 2 · `apps/web` 248 · 3753 · 1 · `packages/schema` 76 · 1180 · 0 · `packages/exporter` 27 · 489 · 0 ·
+`packages/renderer` 29 · 454 · 0 · `packages/cli` 16 · 225 · 0 · `packages/themes` 14 · 201 · 0 · `packages/mcp` 12 · 160 · 0 · `packages/theme-sdk` 7 · 71 · 0 ·
+`packages/theme-kit` 2 · 61 · 0 · `system-themes/admin` 2 · 40 · 0 · `packages/theme-gallery` 2 · 24 · 0 · `packages/test-support` 1 · 11 · 0 · `apps/playground` 1 · 2 · 0.
+실브라우저 케이스 818 = CF 보고의 809 + `apps/web/build-test/comment-focus.test.ts` 의 새 판 9(7 → 16 — M1 둘 · M2 둘 · M3 · L1 · L2 · V1 둘). CF 의 전량
+두 판에서 난 부하 실패는 이 판(load 10 안쪽)에서 하나도 안 났다.
+`apps/api/test/menu-broadcast-census.test.ts` 는 이 판(load 5 – 11)에서 한도 안에 통과했다.
+
+## 남은 것
+
+1. **사용자가 바꿀 수 있는 판단** — M1 의 미루기(포인터 한 번 누름의 상태 전환이 500ms 늦다 · OS 간격보다 느린 두 번 누름은 첫 누름이 고름), M2 의 걷히는 때
+   (캔버스 누름 — 뷰 모드에서 펼친 패널 안 단추를 눌러도 패널이 문서의 탭으로 돌아간다 · 진짜 선택이 바뀜), M3 의 범위(묶음 안 `?` 도 안 선다), V1(브리프 —
+   `q-fx-cf.md` 에 다른 답이 안 왔다).
+2. **변조에 산 줄** — M1c(`detail > 1` 걷기 — Chrome 은 빈 자리 두 번 누름도 늘 무언가를 골라 미룬 고름이 설 때의 고른 글 판정이 같은 판을 막는다. jsdom
+   케이스가 잠근다) · L1 의 `document === null` 가드(떼면 던진다).
+3. **못 잰 것** — Firefox · Safari(빈 자리 두 번 누름 · Tab 차례 · Safari 의 단추 누름 포커스), 운영 번들(`EDITOR_STACK_BUNDLE=build`), 뷰 모드에서 펼친 패널의
+   탭 줄을 눌러 상호작용 규칙(`switchTab`)이 탭을 바꾸는 판(캔버스 누름이 펼침을 걷는 것만 jsdom 으로 쟀다 — 규칙을 단 픽스처가 아니다), 남의 편집이
+   다시 잴 때 밀어낸 링이 안 끌려오는 판(같은 장치를 «축소» 로만 쟀다), 터치 · 펜의 누름(`detail` 값).
+4. 리뷰 «남은 것» 3(build-test 의 `.wb-shell-selection` 읽기 꼴 일곱 자리)은 브리프대로 안 고쳤다 — 새 케이스는 `[data-wb-selected-id]` 로 골랐다.
+5. 구현 보고 «남은 것» 2(`apps/api/test/menu-broadcast-census.test.ts` 가 붐빌 때 한도에 걸림)는 그대로다 — 아래 «게이트» 의 값.
+
+## 지침
+
+- **무엇이 틀렸나(빠졌나):** 포인터 누름의 동작을 미루는 장치(더블클릭 간격 · 디바운스)를 더하면, 그 누름 뒤 «그대로다» 를 곧바로(`frames` 두 프레임)
+  읽던 기존 케이스가 말없이 빈다 — 늦게 서는 동작을 못 봐 그 장치의 거름을 떼는 변조가 산다. 이 트랙에서 실브라우저 판 넷이 그 꼴이었다(jsdom 판은 `fireEvent.click` 의 `detail` 이 0 이라 곧바로 고르는 갈래를 타 안 비었다)
+  (고친 뒤 간격 뒤에 한 번 읽는다 — `apps/web/build-test/comment-focus.test.ts` 의 `pickSettled`). 또 Chrome 은 빈 자리를 두 번 눌러도 늘 무언가를 고른다
+  (탐침 세 점 — «앨리스» · «\n» · «수정»)라 «두 번 누름이 아무것도 안 고른 판» 은 실브라우저로 못 세운다.
+- **어느 문서 어느 절:** `.ruler/30-delegation.md`(생성물 `AGENTS.md`) 「실브라우저 판은 `apps/web/build-test/` 에 케이스로 잠근다」 문단의 «폴의 끝 조건에
+  단언할 값을 넣지 않는다» 문장 뒤.
+- **넣을 문장:** «**누름의 동작을 미루는 장치(더블클릭 간격 · 디바운스)를 더하면 그 누름 뒤 «그대로다» 를 곧바로 읽는 케이스를 센다** — 곧바로 읽으면 늦게
+  서는 동작을 못 봐 거름을 뗀 변조가 산다. 간격보다 넉넉히 뒤에 한 번 읽는다(`apps/web/build-test/comment-focus.test.ts` 의 `pickSettled`). Chrome 은 빈 자리를
+  두 번 눌러도 늘 무언가를 고른다 — «아무것도 안 고른 두 번 누름» 은 jsdom 의 `detail` 로 세운다.»
