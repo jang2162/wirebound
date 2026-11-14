@@ -136,13 +136,20 @@
  * | 몸짓 | 하는 일 |
  * |---|---|
  * | 묶음 안에 포커스가 듦(Tab · 묶음 안 단추 · 누름) | 캔버스가 그 노드에 링을 그린다(`comments/comment-pointing.tsx`) |
- * | 묶음을 누름 · 묶음 자체에 포커스가 선 채 Enter/Space(**고름**) | 그 노드가 지금 화면 상태에서 숨었으면 보이는 상태로 바꾼다(`shell/use-view-state.ts` 의 `stateShowingNode`) |
+ * | 묶음을 한 번 누름 · 묶음 자체에 포커스가 선 채 Enter/Space(**고름**) | 그 노드가 지금 화면 상태에서 숨었으면 보이는 상태로 바꾼다(`shell/use-view-state.ts` 의 `stateShowingNode`) |
  * | 머리 단추(편집 모드) | 고름 + 그 노드를 고르고 «컴포넌트» 탭으로 간다(`shell/canvas-pick.tsx` 의 `useShowComponentTab`) |
  *
  * **고름은 묶음 자신의 몸짓만이다** — 묶음 안의 단추 · 링크 · 글 상자 · 토큰 고르개를 누르거나 거기서 친 키는 그것들의 일이라 화면 상태를 안 바꾼다
  * (`pickTarget`). Tab 으로 들기만 해서도 안 바꾼다 — 훑는 동안 캔버스가 뒤집히지 않게. **진짜 선택은 머리 단추만 바꾼다** — 포커스로 고르면
  * 새 코멘트의 «달 곳» · 노드마다의 초안이 바뀌고 소프트 잠금이 선다. 사라진 노드 · 문서를 못 읽은 묶음(`present` 가 `'yes'` 가 아님)은 가리킬
  * 자리가 없어 셋 다 없다.
+ *
+ * **글을 고르는 몸짓도 고름이 아니다** — 본문을 끌어 고르기 · 두 번 · 세 번 눌러 낱말 · 줄 고르기는 글을 베끼려는 것이다. 두 번 · 세 번 누름의
+ * **첫** 클릭은 한 번 누름과 같은 값이라 그 자리에서 못 가른다 — 그래서 포인터의 한 번 누름은 고름을 더블클릭 간격(`PICK_WAIT_MS`)만큼 미루고, 그
+ * 안에 둘째 클릭(`detail > 1`)이 오면 걷는다. 끌어 고르기는 간격이 지난 뒤 묶음 안에 고른 글이 남아 가른다(`textSelectedIn`)(Chrome ·
+ * `build-test/comment-focus.test.ts` «끌어 고르기»). 미루는 동안에도 링은 곧바로 선다 — 미루는 것은 상태 전환뿐이다. 키보드 · 보조 기술이 낸
+ * 클릭(`detail === 0`)과 Enter/Space 는 더블클릭이 될 수 없어 곧바로 고른다. 간격보다 느린 두 번 누름은 첫 누름이 고름으로 선다(OS 의 더블클릭
+ * 간격을 웹이 못 읽는다).
  *
  * ## 이 패널은 오류 경계 밖이다
  *
@@ -170,6 +177,7 @@ import type { WriteConclusion, WriteNote } from './write-ledger'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { shellIcon } from '../shell/icons'
+import { DOUBLE_CLICK_MS } from '../shell/action-menu'
 import { nodeHeadingLabel } from './node-shape'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
@@ -194,6 +202,22 @@ function pickTarget(target: EventTarget, group: Element): boolean {
 }
 
 const OWN_CONTROLS = 'button, a, input, textarea, select, label, [role="listbox"], [role="option"]'
+
+/** 포인터의 한 번 누름이 고름이 되기까지 기다리는 간격(머리말 «글을 고르는 몸짓도 고름이 아니다») — 행동 메뉴가 둘째 누름으로 보는 간격과 같다. */
+export const PICK_WAIT_MS = DOUBLE_CLICK_MS
+
+/**
+ * 묶음 안에 고른 글이 있는가 — 끌어 고른 뒤다. **클릭 때가 아니라 미룬 고름이 설 때 본다** — 이미 고른 글 위를 한 번 누른 클릭은 그 클릭 때까지
+ * 고른 글이 남고(Chrome 은 클릭 뒤에 접는다) 끌어 고른 클릭과 같은 값이다.
+ */
+function textSelectedIn(group: Element): boolean {
+  const selection = group.ownerDocument.getSelection()
+  if (selection === null || selection.isCollapsed) return false
+  return (
+    (selection.anchorNode !== null && group.contains(selection.anchorNode)) ||
+    (selection.focusNode !== null && group.contains(selection.focusNode))
+  )
+}
 
 /** 고른 노드에 코멘트가 없을 때(`scope`가 `'node'`). */
 const NO_NODE_COMMENTS = '이 노드에 단 코멘트가 없습니다'
@@ -715,6 +739,15 @@ export function CommentPanel(props: {
   const mode = useEditorStore(store, (s) => s.mode)
   const viewState = useViewState(props.pageId)
   const showComponentTab = useShowComponentTab()
+  /** 미룬 고름(머리말 «글을 고르는 몸짓도 고름이 아니다»)의 타이머 — 하나뿐이다. 다른 고름 · 둘째 클릭 · 내려감이 걷는다. */
+  const pendingPick = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestShowNode = useRef<(nodeId: string) => void>(() => {})
+  const cancelPick = useCallback(() => {
+    if (pendingPick.current === null) return
+    clearTimeout(pendingPick.current)
+    pendingPick.current = null
+  }, [])
+  useEffect(() => cancelPick, [cancelPick])
   const rootRef = useRef<HTMLDivElement>(null)
   const flashed = useRef(0)
   const [flash, setFlash] = useState<{ nodeId: string; at: number } | null>(null)
@@ -1215,9 +1248,12 @@ export function CommentPanel(props: {
   const aliases = document === null ? null : aliasesOf(document)
   /** 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로(머리말 «묶음이 캔버스를 가리킨다»). */
   const showNode = (nodeId: string): void => {
+    cancelPick()
     const verdict = stateShowingNode(document, nodeId, viewState.state)
     if (verdict.change) viewState.choose(verdict.state)
   }
+  // 미룬 고름은 그때의 문서 · 상태로 판정한다 — 클릭한 렌더의 것이 아니다. 렌더 중에 싣는다 — 이 위에 일찍 돌려주는 갈래가 있어 훅을 못 둔다.
+  latestShowNode.current = showNode
   /**
    * 머리 단추 — 고름에 더해 그 노드를 고르고 «컴포넌트» 탭으로. 남이 잡아 고름이 안 섰으면 탭을 안 옮긴다(캔버스 누름과 같은 판정). 링은 탭이
    * 옮기며 걷힌다(`routes/editor.tsx` 의 `RightPanel`).
@@ -1368,7 +1404,18 @@ export function CommentPanel(props: {
                       onClick: (event: MouseEvent<HTMLLIElement>) => {
                         if (!pickTarget(event.target, event.currentTarget)) return
                         point(group.nodeId)
-                        showNode(group.nodeId)
+                        if (event.detail === 0) {
+                          showNode(group.nodeId)
+                          return
+                        }
+                        cancelPick()
+                        if (event.detail > 1) return
+                        const nodeId = group.nodeId
+                        const element = event.currentTarget
+                        pendingPick.current = setTimeout(() => {
+                          pendingPick.current = null
+                          if (!textSelectedIn(element)) latestShowNode.current(nodeId)
+                        }, PICK_WAIT_MS)
                       },
                       onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => {
                         if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return

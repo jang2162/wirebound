@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import type { Comment } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
+import { PICK_WAIT_MS } from '../../src/panels/comment-panel'
 import { HEAD_SEQ, openPage, PAGE_ID, PAGE_ROUTE, pageDoc, PROJECT_NAME, renderEditor, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다 — 포커스 · 고름이 선택을 안 바꾸는지 스토어 값으로 잰다(`../canvas/canvas.test.tsx` 의 같은 장치). */
@@ -162,6 +163,54 @@ describe('고름 — 숨었으면 보이는 상태로', () => {
     focusGroup('n_b')
     fireEvent.keyDown(group('n_b'), { key: ' ' })
     await waitFor(() => expect(switcherName()).toBe('화면 상태: 관리자'))
+  })
+})
+
+describe('포인터의 한 번 누름은 더블클릭 간격 뒤에 고른다 — 글을 고르는 몸짓은 고름이 아니다', () => {
+  /** 간격보다 넉넉히 기다린다 — 늦게 서는 고름도 이 뒤에는 섰다. */
+  const pastWait = () => act(() => new Promise((resolve) => setTimeout(resolve, PICK_WAIT_MS + 100)))
+
+  it('한 번 누름(`detail` 1)은 곧바로가 아니라 간격 뒤에 고른다', async () => {
+    await open()
+    await openCommentTab()
+
+    fireEvent.click(group('n_b'), { detail: 1 })
+    expect(switcherName()).toBe('화면 상태: 기본')
+    await pastWait()
+    expect(switcherName()).toBe('화면 상태: 관리자')
+    expect(rings()).toEqual(['n_b'])
+  })
+
+  it('간격 안의 둘째 누름(`detail` 2)이 미룬 고름을 걷는다', async () => {
+    await open()
+    await openCommentTab()
+
+    fireEvent.click(group('n_b'), { detail: 1 })
+    fireEvent.click(group('n_b'), { detail: 2 })
+    await pastWait()
+
+    expect(switcherName()).toBe('화면 상태: 기본')
+  })
+
+  it('간격이 지날 때 묶음 안에 고른 글이 있으면 고르지 않는다 — 끌어 고르기', async () => {
+    await open()
+    await openCommentTab()
+    const body = group('n_b').querySelector('.wb-shell-comment-body')
+    if (body === null) throw new Error('본문이 없습니다')
+
+    fireEvent.click(body, { detail: 1 })
+    const range = document.createRange()
+    range.selectNodeContents(body)
+    act(() => {
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    })
+    expect(window.getSelection()?.isCollapsed).toBe(false)
+    await pastWait()
+
+    expect(switcherName()).toBe('화면 상태: 기본')
+    act(() => window.getSelection()?.removeAllRanges())
   })
 })
 
