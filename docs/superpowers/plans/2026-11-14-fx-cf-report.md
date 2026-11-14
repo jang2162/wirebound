@@ -157,3 +157,39 @@ Delete · Ctrl+D · Meta+D · ↓ · Escape → 고름 `['n_a']` · 스토어 �
 | 변조 | 바꾼 것 | 실브라우저(`-t '노드 단축키'` · 실행 1) | jsdom(`comment-focus.test.tsx` · 실행 16) |
 |---|---|---|---|
 | M3a | 묶음의 `data-wb-own-shortcuts` 를 뗌 | 1 죽음 — `{ place: '묶음', key: 'Delete', selected: [] }` ≠ `['n_a']` | 1 죽음 — «묶음 안에서는 …» `[]` ≠ `['n_a']` |
+
+## L1 — 가리킨 노드가 문서에서 사라지면 가리킴을 걷는다
+
+### 바꾼 것
+
+`apps/web/src/comments/comment-pointing.tsx` 에 `CommentPointingSweep` — provider 안에 한 번 그린다(`apps/web/src/routes/editor.tsx` 의 `EditorShell`). 열린 문서에
+가리킨 노드 · 펼친 노드(M2)가 없으면 그리기 전(`useLayoutEffect`)에 걷는다. 문서를 못 읽은 판(`null`)은 «모름» 이라 안 걷는다.
+
+### 결정
+
+- **provider 가 아니라 따로 그리는 조각이다** — provider 가 문서를 구독하면 스토어 없이 provider 만 세우는 케이스(`apps/web/test/comments/comment-pointing.test.tsx`)가
+  못 선다. 조각은 렌더할 것이 없어(`null`) 문서가 바뀔 때 그것만 다시 그린다.
+- **펼침도 같은 때 걷는다** — 펼친 노드가 지워진 뒤 같은 id 로 다시 서면 지금 탭이 아닌 패널이 사람 몸짓 없이 다시 펼쳐진다(jsdom 케이스가 잰다).
+- `document === null` 가드는 혼자 죽는 변조가 없다 — 떼면 `document.root` 에서 던진다(타입 좁히기와 «모름» 둘 다다).
+
+### 잰 값
+
+픽스처: 공통 셋 + `n_c` 에 코멘트. «코멘트» 탭 → `n_c` 묶음 `focus()`(링 `['n_c']`) → 상태 전환기 단추로 포커스 → REST 로 `n_c` 를 지움 → 같은 자리에 같은 id 로
+다시 넣음(둘 다 200).
+
+| 걸음 | 고치기 전(`99af80fc`) | 고친 뒤 |
+|---|---|---|
+| 묶음 밖으로 포커스 | 링 `['n_c']` | 같음 |
+| `n_c` 지움(묶음이 «사라진 노드») | 링 `[]` | 링 `[]` |
+| 같은 id 로 다시 넣음(iframe 에 `n_c` 1) | **링 `['n_c']`**(671 줄) | 링 `[]` |
+| 양성 대조 — 다시 그 묶음 `focus()` | — | 링 `['n_c']` |
+
+jsdom(`apps/web/test/canvas/comment-pointing-ring.test.tsx`): «남이 지운 뒤 같은 id 로 다시 세워도 링이 되살지 않는다»(스토어 `applyRemoteChange` 로 지움 · 다시 넣음) ·
+«펼친 노드가 문서에서 사라지면 걷히고, 같은 id 로 다시 서도 되살지 않는다».
+
+### 혼자 죽는 변조
+
+| 변조 | 바꾼 것 | 실브라우저(`-t '되살지 않는다'` · 실행 1) | jsdom(링 파일 · 실행 15) |
+|---|---|---|---|
+| L1a | 가리킴을 안 걷음 | 1 죽음 — `[ 'n_c' ]` ≠ `[]` | 1 죽음 — «… 링이 되살지 않는다» `['n_grid']` ≠ `[]` |
+| L1b | 펼침을 안 걷음 | 산다(실브라우저 판은 펼침을 안 쓴다) | 1 죽음 — «펼친 노드가 …» 첫째 탭 글 `false` ≠ `true`(둘째 패널이 다시 펼쳐짐) |

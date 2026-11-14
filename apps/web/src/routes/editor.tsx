@@ -77,7 +77,7 @@ import { ProjectThemeProvider, useProjectTheme } from '../theme/project-theme'
 import { ProjectCodesProvider, useProjectCodes } from '../codes/project-codes'
 import { ProjectCommentIndexProvider, useCommentIndex } from '../comments/comment-index'
 import { CommentFocusContext, useCommentFocus, type CommentFocus } from '../comments/comment-focus'
-import { CommentPointingProvider, useCommentPointing } from '../comments/comment-pointing'
+import { CommentPointingProvider, CommentPointingSweep, useCommentPointing } from '../comments/comment-pointing'
 import { ThemeAlert } from '../theme/theme-alert'
 import {
   EditorStore,
@@ -894,6 +894,7 @@ function EditorShell(props: {
       <CanvasPickProvider>
         {/* «코멘트» 탭이 가리킨 노드 — 코멘트 패널이 쓰고 캔버스가 링을 그린다(`comments/comment-pointing.tsx`). 둘의 공통 조상이 셸이다. */}
         <CommentPointingProvider pageId={props.pageId}>
+          <CommentPointingSweep pageId={props.pageId} />
           {/* 접힌 쪽은 격자에서 트랙째 빠진다(`shell.css` 의 `.wb-shell-fold-side` · `.wb-shell-fold-panel`) — 상자는 DOM 에 남고 손잡이는 안 선다. */}
           <div
             className={['wb-shell', layout.sideFolded ? 'wb-shell-fold-side' : '', layout.panelFolded ? 'wb-shell-fold-panel' : '']

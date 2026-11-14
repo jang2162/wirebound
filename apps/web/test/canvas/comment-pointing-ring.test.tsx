@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import type { Comment } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
-import { canvasDocument, deselect, openPage, PAGE_ID, pageDoc, requireNode } from '../editor-harness'
+import { canvasDocument, deselect, HEAD_SEQ, openPage, PAGE_ID, pageDoc, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다 — 링이 선택이 아님을 스토어 값으로 잰다(`./canvas.test.tsx` 의 같은 장치). */
 const { createdStores } = vi.hoisted(() => ({ createdStores: [] as unknown[] }))
@@ -159,6 +159,34 @@ describe('코멘트 링 — 진짜 선택이 아니다', () => {
   })
 })
 
+describe('코멘트 링 · 펼침 — 그 노드가 문서에서 사라지면 걷힌다', () => {
+  it('남이 지운 뒤 같은 id 로 다시 세워도 링이 되살지 않는다', async () => {
+    await open()
+    deselect()
+    await openCommentTab()
+    focusGroup('n_grid')
+    expect(rings()).toEqual(['n_grid'])
+    // 포커스를 묶음 밖으로 — 사람은 다른 데를 본다.
+    act(() => (document.activeElement as HTMLElement | null)?.blur())
+
+    act(() =>
+      shellStore().applyRemoteChange(PAGE_ID, { seq: HEAD_SEQ + 1, ops: [{ op: 'remove', path: '/root/children/1' }], warnings: [] }),
+    )
+    await waitFor(() => expect(canvasDocument().querySelector('[data-wb-id="n_grid"]')).toBeNull())
+    expect(rings()).toEqual([])
+
+    act(() =>
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 2,
+        ops: [{ op: 'add', path: '/root/children/1', value: { id: 'n_grid', type: 'Text', props: { content: '표' } } }],
+        warnings: [],
+      }),
+    )
+    await waitFor(() => expect(canvasDocument().querySelector('[data-wb-id="n_grid"]')).not.toBeNull())
+    expect(rings()).toEqual([])
+  })
+})
+
 describe('코멘트 링 — 걷히는 때', () => {
   /**
    * 고름이 서는 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 그쪽이 먼저 걷는다. 누름 자체가 걷는지는 **고름이 안 서는** 누름 —
@@ -295,6 +323,35 @@ describe('코멘트 펼침 — 걷히는 때', () => {
     fireEvent.click(requireNode('n_top'))
 
     await waitFor(() => expect(drawn('n_in2')).toBe(false))
+  })
+
+  it('펼친 노드가 문서에서 사라지면 걷히고, 같은 id 로 다시 서도 되살지 않는다', async () => {
+    await openTabs()
+    pick('n_in2')
+    await waitFor(() => expect(drawn('n_in2')).toBe(true))
+
+    // 둘째 패널의 글을 남이 지운다 — 패널은 남는다.
+    act(() =>
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 1,
+        ops: [{ op: 'remove', path: '/root/children/1/children/1/children/0' }],
+        warnings: [],
+      }),
+    )
+    await waitFor(() => expect(drawn('n_in2')).toBe(false))
+    act(() =>
+      shellStore().applyRemoteChange(PAGE_ID, {
+        seq: HEAD_SEQ + 2,
+        ops: [
+          { op: 'add', path: '/root/children/1/children/1/children/0', value: { id: 'n_in2', type: 'Text', props: { content: '둘' } } },
+        ],
+        warnings: [],
+      }),
+    )
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    // 지금 탭(첫째)이 그대로라 둘째 패널 안 글은 그리지 않는다 — 펼침이 되살면 선다.
+    expect(drawn('n_in1')).toBe(true)
+    expect(drawn('n_in2')).toBe(false)
   })
 
   it('진짜 선택이 바뀌면 걷히고, 선택이 되돌아와도 되살지 않는다', async () => {

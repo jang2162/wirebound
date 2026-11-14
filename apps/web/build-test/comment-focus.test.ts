@@ -631,4 +631,57 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       await close()
     }
   })
+
+  /**
+   * **가리킨 노드가 문서에서 사라지면 가리킴을 걷는다**(L1) — 남이 그 노드를 지우고 같은 id 로 다시 세워도(되돌리기 · 다시 붙이기) 사람 몸짓 없이 링이
+   * 되살지 않는다. 쓰기는 같은 사람의 다른 탭처럼 REST 로 낸다(이 탭의 연결 id 가 없어 방송이 이 탭에 온다).
+   */
+  it('가리킨 노드를 남이 지웠다가 같은 id 로 다시 세워도 링이 되살지 않는다', async () => {
+    const P = await fixture([{ nodeId: 'n_c', body: '다에 단 말' }])
+    const { page, close } = await openTab(P)
+    try {
+      await openCommentTab(page)
+      await group(page, 'n_c').focus()
+      await frames(page)
+      expect(await rings(page)).toEqual(['n_c'])
+      // 포커스를 묶음 밖(상태 전환기)으로 — 사람은 다른 데를 본다. 링은 남는다(묶음 밖으로 나가기만 해서는 안 걷는다).
+      await page.getByRole('button', { name: /^화면 상태:/ }).focus()
+      await frames(page)
+      expect(await rings(page)).toEqual(['n_c'])
+
+      const node = { id: 'n_c', type: 'Text', props: { content: '또 다른 글' } }
+      const removed = await call('PATCH', `${P}/ops`, {
+        baseSeq: (await serverDoc(P)).headSeq,
+        ops: [{ op: 'remove', path: '/root/children/2' }],
+      })
+      expect(removed.status).toBe(200)
+      await poll(
+        '사라진 노드로 그린다',
+        () => group(page, 'n_c').textContent(),
+        (text) => (text ?? '').includes('사라진 노드'),
+      )
+      await frames(page)
+      expect(await rings(page)).toEqual([])
+
+      const back = await call('PATCH', `${P}/ops`, {
+        baseSeq: (await serverDoc(P)).headSeq,
+        ops: [{ op: 'add', path: '/root/children/2', value: node }],
+      })
+      expect(back.status).toBe(200)
+      await poll(
+        '그 노드가 다시 선다',
+        () => canvasFrame(page).locator('[data-wb-id="n_c"]').count(),
+        (count) => count === 1,
+      )
+      await frames(page)
+      expect(await rings(page)).toEqual([])
+
+      // 양성 대조 — 사람이 다시 그 묶음에 들면 선다.
+      await group(page, 'n_c').focus()
+      await frames(page)
+      expect(await rings(page)).toEqual(['n_c'])
+    } finally {
+      await close()
+    }
+  })
 })

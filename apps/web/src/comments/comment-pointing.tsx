@@ -7,7 +7,8 @@
  * - **번호 토큰이 데려온 강조(`./comment-focus.tsx` 의 `CommentFocus`)와 다른 값이다** — 그것은 주소가 노드를 **고르고** 코멘트 탭에서 묶음을
  *   잠깐 빛낸다. 이것은 코멘트 탭이 캔버스를 **가리킬** 뿐이다. 이름이 겹치지 않게 «가리킴»이라 부른다.
  * - **걷히는 때:** 다른 묶음으로 포커스가 감(그 노드로 바뀜) · 캔버스를 누름(`canvas/canvas.tsx`) · «코멘트» 탭이 안 보임(탭을 옮김 · 우측을
- *   접음 — `routes/editor.tsx` 의 `RightPanel`) · 페이지를 옮김(아래 provider — 렌더 중에 걷는다. 이펙트로 걷으면 옮긴 첫 렌더가 앞 페이지의
+ *   접음 — `routes/editor.tsx` 의 `RightPanel`) · 그 노드가 문서에서 사라짐(아래 `CommentPointingSweep` — 남이 지운 뒤 같은 id 로 다시 세워도
+ *   사람 몸짓 없이 링이 되살지 않게 값을 걷는다) · 페이지를 옮김(아래 provider — 렌더 중에 걷는다. 이펙트로 걷으면 옮긴 첫 렌더가 앞 페이지의
  *   노드 id 로 링을 잰다. `shell/use-view-state.ts` 의 `ViewStateProvider` 와 같은 꼴). 포커스가 묶음 밖으로 나가기만 해서는 안 걷는다.
  * - **깔지 않은 판**(패널 · 캔버스를 혼자 세운 케이스)은 늘 `null` 이고 `point` 는 아무것도 안 한다.
  *
@@ -19,9 +20,21 @@
  * 탭으로 떠나도 되돌리지 않는다.
  *
  * **걷히는 때:** 다른 묶음을 고름(그 노드로 바뀜) · 캔버스를 누름(뷰 모드에서 그 탭 줄을 누르면 상호작용 겹layer 의 탭이 서야 한다 — 펼침이 덮으면
- * 탭이 안 바뀐다) · 진짜 선택이 바뀜(그 선택의 펼침이 이긴다 — 고를 때의 선택을 `selection` 으로 적어 두고 캔버스가 견준다) · 페이지를 옮김.
+ * 탭이 안 바뀐다) · 그 노드가 문서에서 사라짐(`CommentPointingSweep`) · 진짜 선택이 바뀜(그 선택의 펼침이 이긴다 — 고를 때의 선택을 `selection` 으로 적어 두고 캔버스가 견준다) · 페이지를 옮김.
  */
-import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
+import { findNodeSafely } from '../edit/safe-walk'
+import { useOpenDocument } from '../store/use-editor-store'
 
 export interface CommentPointing {
   /** 가리킨 노드 — 없으면 `null`. */
@@ -99,4 +112,20 @@ const NOWHERE: CommentPointing = { nodeId: null, point: () => {}, revealed: null
 
 export function useCommentPointing(): CommentPointing {
   return useContext(CommentPointingContext) ?? NOWHERE
+}
+
+/**
+ * **가리킨 · 펼친 노드가 문서에서 사라지면 걷는다**(머리말 «걷히는 때») — provider 안에 한 번 그린다(`routes/editor.tsx` 의 `EditorShell`). 링은 요소가
+ * 없는 노드에 안 서지만 값이 남으면, 남의 되돌리기 · 다시 붙이기로 같은 id 가 다시 설 때 사람이 다른 데를 보고 있어도 링이 선다. 그리기 전에
+ * 걷는다(`useLayoutEffect`). 문서를 못 읽은 판(`null`)은 사라진 것이 아니라 모르는 것이라 안 걷는다.
+ */
+export function CommentPointingSweep(props: { pageId: string | undefined }): null {
+  const document = useOpenDocument(props.pageId)
+  const { nodeId, point, revealed, reveal } = useCommentPointing()
+  useLayoutEffect(() => {
+    if (document === null) return
+    if (nodeId !== null && findNodeSafely(document.root, nodeId) === undefined) point(null)
+    if (revealed !== null && findNodeSafely(document.root, revealed.nodeId) === undefined) reveal(null)
+  }, [document, nodeId, revealed, point, reveal])
+  return null
 }
