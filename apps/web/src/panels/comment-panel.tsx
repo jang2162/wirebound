@@ -151,6 +151,12 @@
  * 클릭(`detail === 0`)과 Enter/Space 는 더블클릭이 될 수 없어 곧바로 고른다. 간격보다 느린 두 번 누름은 첫 누름이 고름으로 선다(OS 의 더블클릭
  * 간격을 웹이 못 읽는다).
  *
+ * **묶음 안에서는 노드 단축키가 안 선다**(`[data-wb-own-shortcuts]` — `edit/editor-shortcuts.ts` 의 `shortcutsBlocked`) — «코멘트» 탭의 묶음 전부 ·
+ * 그 안의 «수정» · «삭제» 단추에서. 링은 묶음의 노드를 가리키는데 단축키는 고른 노드에 간다 — 막지 않으면 묶음을 Tab 으로 훑다 친 Delete · Cmd+D ·
+ * ↑↓ · Escape · Cmd+A 가 사람이 안 보는 노드를 지우고 복제하고 고름을 바꾼다(Chrome · `build-test/comment-focus.test.ts` «노드 단축키»). 되돌리기 ·
+ * 붙이기도 함께 안 선다 — 노드에 쓰는 명령이다. 묶음 안 글 상자의 키는 원래 글의 것이다(입력 표면). 고른 노드의 «컴포넌트» 탭 «코멘트» 묶음
+ * (`scope` `'node'`)에는 안 단다 — 그 묶음의 노드가 곧 고른 노드다.
+ *
  * ## 이 패널은 오류 경계 밖이다
  *
  * `apps/web/src`의 오류 경계는 캔버스의 `CanvasBoundary` 하나이고
@@ -1400,6 +1406,8 @@ export function CommentPanel(props: {
                 key={group.nodeId}
                 className="wb-shell-comment-group"
                 data-comment-node={group.nodeId}
+                // 노드 단축키가 이 안에서 안 선다(머리말 «묶음 안에서는 노드 단축키가 안 선다»).
+                {...(scope === 'page' ? { 'data-wb-own-shortcuts': '' } : {})}
                 {...(pointable
                   ? {
                       tabIndex: 0,

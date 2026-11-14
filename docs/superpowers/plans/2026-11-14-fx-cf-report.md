@@ -114,3 +114,46 @@ jsdom(`apps/web/test/canvas/comment-pointing-ring.test.tsx` «코멘트 펼침 �
 첫 판에서 산 둘을 고쳤다 — M2c 는 «캔버스를 누르면 걷힌다» 를 편집 모드로 세워 누름이 선택을 바꿔 선택 길(M2e 의 장치)이 먼저 걷었다. 누름이 선택을 안
 바꾸는 뷰 모드로 옮겼다. M2d(렌더 중에 «선택이 다르면 버림» 을 견주던 첫 판의 한 줄을 뗌)는 이펙트가 같은 `act` 안에서 걷어 아무 케이스도 못 갈랐다 —
 그 줄을 걷고 걷는 이펙트를 그리기 전(`useLayoutEffect`)으로 옮겨 «둘이 함께 선 판이 화면에 안 나간다» 를 한 장치로 지켰다.
+
+## M3 — 묶음에 포커스가 선 동안 노드 단축키
+
+### 바꾼 것
+
+`apps/web/src/panels/comment-panel.tsx` — «코멘트» 탭(`scope` `'page'`)의 묶음 `li` 전부에 `data-wb-own-shortcuts` 를 단다. 저장소의 장치
+(`edit/editor-shortcuts.ts` 의 `shortcutsBlocked` — 대상의 DOM 조상을 본다)가 그 안의 키 · 클립보드 이벤트에서 에디터 단축키를 안 세운다.
+
+### 결정
+
+1. **표의 명령을 고르지 않고 다 막는다** — 브리프는 `edits: true` 명령과 고르기 명령(↑↓ · Escape · Cmd+A)을 적었다. 표에 남는 것은 `?`(도움말)와
+   ← → (부모 · 첫 자식 고르기 — 고르기 명령이다)뿐이라 표지 하나로 다 막는 쪽이 맞다. 잃는 것은 묶음 안에서 친 `?` 하나다 — 메뉴 트리 상자
+   (`panels/menu-tree.tsx`)와 같은 값이다. 클립보드도 안 선다 — 묶음 안 Cmd+V 가 고른 노드 곁에 붙이지 않는다. 묶음 본문 글을 고른 Cmd+C 는 원래 브라우저의
+   글 복사다(`use-clipboard.ts` 의 `textSelected`).
+2. **«코멘트» 탭의 묶음 전부에 단다 — 가리킬 수 없는 묶음(사라진 노드 · 문서를 못 읽음)도.** 그 묶음 안 «수정» · «삭제» 단추에서도 Delete 가 고른 노드에
+   간다(리뷰 «4» 의 «같은 길»). 링이 없어도 묶음은 고른 노드의 것이 아니다. «컴포넌트» 탭의 «코멘트» 묶음(`scope` `'node'`)에는 안 단다 — 그 묶음의
+   노드가 곧 고른 노드다.
+3. **묶음 안 글 상자는 손대지 않았다** — 고치는 상자 · 토큰 고르개는 이미 입력 표면(`isTypingSurface`)이라 단축키가 안 서고 키는 글에 먹는다(케이스가 잰다).
+
+### 잰 값
+
+픽스처: 공통 셋 + `n_c` 에 코멘트. 캔버스에서 `n_a` 를 누른 뒤 «코멘트» 탭 → 자리(묶음 `li[n_c]` · 그 안 «수정» 단추)마다 키를 하나씩 `focus()` → `press` →
+150ms 뒤 고른 외곽선(`data-wb-selected-id` · `data-wb-member-id`)을 읽고, 끝에 400ms 뒤 서버를 읽는다.
+
+| 값 | 고치기 전(`ce7804f1`) | 고친 뒤 |
+|---|---|---|
+| 묶음 · Delete 뒤 고름 | **`[]`**(`n_a` 가 지워짐 — 첫 걸음에서 죽음) | `['n_a']` |
+| 자리 둘 × 키 여덟(Delete · Backspace · Meta+d · ↓ · ↑ · Escape · Meta+a · Meta+z) 뒤 고름 | — | 열여섯 다 `['n_a']` |
+| 서버 뿌리 자식 · `headSeq` | — | `n_a · n_b · n_c` · 앞과 같음 |
+| 링 | — | `['n_c']` |
+| 고치는 상자 — End · Backspace / Meta+a · «새 말» | — | «다에 단 » / «새 말» · 고름 `['n_a']` · 서버 그대로 |
+| 양성 대조 — 캔버스 `n_a` 누름 뒤 Delete | — | `headSeq` 가 오르고 뿌리 자식 `n_b · n_c` |
+
+jsdom(`apps/web/test/panels/comment-focus.test.tsx` «묶음 안에서는 노드 단축키가 안 선다»): 묶음 `n_b` · 그 «수정» 단추 · 사라진 노드의 묶음 `n_z` 에서
+Delete · Ctrl+D · Meta+D · ↓ · Escape → 고름 `['n_a']` · 스토어 문서 뿌리 자식 그대로. 대조로 문서 몸에서 친 Delete 가 `n_a` 를 지운다.
+
+같은 영역의 실브라우저 파일(`comment-token-picker` · `comment-token-review` · `comment-tokens` · `keyboard-holes`) 4 파일 27 케이스 초록(load 3).
+
+### 혼자 죽는 변조
+
+| 변조 | 바꾼 것 | 실브라우저(`-t '노드 단축키'` · 실행 1) | jsdom(`comment-focus.test.tsx` · 실행 16) |
+|---|---|---|---|
+| M3a | 묶음의 `data-wb-own-shortcuts` 를 뗌 | 1 죽음 — `{ place: '묶음', key: 'Delete', selected: [] }` ≠ `['n_a']` | 1 죽음 — «묶음 안에서는 …» `[]` ≠ `['n_a']` |

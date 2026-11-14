@@ -554,4 +554,81 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       }
     })
   }
+
+  /**
+   * **묶음에 포커스가 선 동안 노드 단축키가 고른 노드에 안 간다**(M3) — 링이 가리키는 노드와 고른 노드가 달라, 묶음에서 친 Delete 가 사람이 안 보는
+   * 노드를 지웠다. 묶음 `li` 와 그 안(«수정» · «삭제» 단추)에서 편집 명령 · 고르기 명령이 안 선다. 묶음 안 글 상자의 글 편집 키는 글에 먹는다.
+   */
+  async function serverDoc(P: string): Promise<{ children: string[]; headSeq: number }> {
+    const response = await call('GET', P)
+    const children = (response.body.schema.root.children as { id: string }[]).map((child) => child.id)
+    return { children, headSeq: response.body.headSeq }
+  }
+  const selectedIds = (page: Page) =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[data-wb-selected-id], [data-wb-member-id]')].map(
+        (element) => element.getAttribute('data-wb-selected-id') ?? element.getAttribute('data-wb-member-id'),
+      ),
+    )
+
+  it('묶음 · 그 안 «수정» 단추에 포커스가 선 채 노드 단축키는 고른 노드를 안 바꾼다 — 글 상자의 키는 글에 먹는다', async () => {
+    const P = await fixture([{ nodeId: 'n_c', body: '다에 단 말' }])
+    const { page, close } = await openTab(P)
+    try {
+      await canvasFrame(page).locator('[data-wb-id="n_a"]').click()
+      await poll(
+        'n_a 를 골랐다',
+        () => selectedOutline(page),
+        (list) => list.join() === 'n_a',
+      )
+      await openCommentTab(page)
+      const before = await serverDoc(P)
+      expect(before.children).toEqual(['n_a', 'n_b', 'n_c'])
+
+      const KEYS = ['Delete', 'Backspace', 'Meta+d', 'ArrowDown', 'ArrowUp', 'Escape', 'Meta+a', 'Meta+z'] as const
+      const places = [
+        { name: '묶음', focus: () => group(page, 'n_c').focus() },
+        { name: '«수정» 단추', focus: () => group(page, 'n_c').getByRole('button', { name: '수정', exact: true }).focus() },
+      ]
+      for (const place of places) {
+        for (const key of KEYS) {
+          await place.focus()
+          await page.keyboard.press(key)
+          await page.waitForTimeout(150)
+          expect({ place: place.name, key, selected: await selectedIds(page) }).toEqual({ place: place.name, key, selected: ['n_a'] })
+        }
+      }
+      await page.waitForTimeout(400)
+      expect(await serverDoc(P)).toEqual(before)
+      // 링은 그대로 묶음의 노드다.
+      expect(await rings(page)).toEqual(['n_c'])
+
+      // 묶음 안 글 상자 — Backspace · Cmd+A 는 글에 먹는다.
+      await group(page, 'n_c').getByRole('button', { name: '수정', exact: true }).click()
+      const box = group(page, 'n_c').getByRole('textbox', { name: '코멘트 수정' })
+      await box.waitFor()
+      await box.focus()
+      await page.keyboard.press('End')
+      await page.keyboard.press('Backspace')
+      expect(await box.inputValue()).toBe('다에 단 ')
+      await page.keyboard.press('Meta+a')
+      await page.keyboard.type('새 말')
+      expect(await box.inputValue()).toBe('새 말')
+      expect(await selectedIds(page)).toEqual(['n_a'])
+      expect(await serverDoc(P)).toEqual(before)
+
+      // 양성 대조 — 캔버스로 포커스를 돌리면 Delete 가 고른 노드를 지운다.
+      await group(page, 'n_c').getByRole('button', { name: '취소', exact: true }).click()
+      await canvasFrame(page).locator('[data-wb-id="n_a"]').click()
+      await page.keyboard.press('Delete')
+      await poll(
+        'Delete 가 n_a 를 지운다',
+        () => serverDoc(P),
+        (doc) => doc.headSeq > before.headSeq,
+      )
+      expect((await serverDoc(P)).children).toEqual(['n_b', 'n_c'])
+    } finally {
+      await close()
+    }
+  })
 })

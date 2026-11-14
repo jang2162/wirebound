@@ -246,6 +246,41 @@ describe('고름이 아닌 것 — 묶음 안의 단추 · 글 상자', () => {
   })
 })
 
+describe('묶음 안에서는 노드 단축키가 안 선다', () => {
+  const rootChildren = () =>
+    shellStore()
+      .getState()
+      .document?.root.children?.map((child) => child.id) ?? []
+
+  it('묶음 · 그 안 «수정» 단추에서 친 Delete · Cmd+D · ↓ · Escape 가 고른 노드를 안 바꾼다', async () => {
+    await open()
+    fireEvent.click(requireNode('n_a'))
+    await waitFor(() => expect(shellStore().getState().selectedNodeIds).toEqual(['n_a']))
+    await openCommentTab()
+
+    const edit = within(group('n_b')).getByRole('button', { name: '수정' })
+    for (const target of [group('n_b'), edit, group('n_z')]) {
+      // jsdom 의 `navigator` 는 mac 이 아니라 복제는 Ctrl+D 다(`platformOf`) — 둘 다 친다.
+      const keys = [
+        { key: 'Delete' },
+        { key: 'd', ctrlKey: true, code: 'KeyD' },
+        { key: 'd', metaKey: true, code: 'KeyD' },
+        { key: 'ArrowDown' },
+        { key: 'Escape' },
+      ]
+      for (const key of keys) {
+        fireEvent.keyDown(target, key)
+      }
+    }
+    expect(shellStore().getState().selectedNodeIds).toEqual(['n_a'])
+    expect(rootChildren()).toEqual(['n_a', 'n_b'])
+
+    // 양성 대조 — 묶음 밖(문서 몸)에서 친 Delete 는 고른 노드를 지운다.
+    fireEvent.keyDown(document.body, { key: 'Delete' })
+    await waitFor(() => expect(rootChildren()).toEqual(['n_b']))
+  })
+})
+
 describe('가리킬 자리가 없는 묶음 — 사라진 노드 · 문서를 못 읽음', () => {
   it('사라진 노드의 묶음 — Tab 정지점 · 머리 단추가 없고 누름도 아무것도 안 한다', async () => {
     await open()
