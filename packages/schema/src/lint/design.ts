@@ -74,8 +74,8 @@ const STRUCTURAL_GAPS: readonly { container: string; requires: string }[] = [
  * 항목이 없어 **타입체크가 먼저 죽는다**(`ISSUE_SEVERITY`와 같은 장치). 새 코드가 조용히
  * `document-invalid`로 떨어지는 경로가 없다.
  *
- * 상호작용 셋이 ③으로 가는 것은 「lint 규칙」의 줄(*"대상 노드가 삭제된 상호작용 규칙"*)이 그
- * 부류를 가리키기 때문이다. 셋을 갈라 세 규칙으로 두면 그 절에 없는 줄이 둘 생긴다.
+ * 상호작용 넷(대상 상태가 없는 `view-state-missing` 포함)이 ③으로 가는 것은 「lint 규칙」의 줄(*"대상 노드 · 화면 상태가 삭제된
+ * 상호작용 규칙"*)이 그 부류를 가리키기 때문이다. 넷을 갈라 규칙 넷으로 두면 그 절에 없는 줄이 셋 생긴다.
  *
  * **테스트가 이 표를 통째로 못박는다**(`test/lint-mapping.test.ts`). 타입은 *"항목이 있는가"*만
  * 보므로 **오른쪽 값을 조용히 다른 줄로 옮기는 경로**가 타입만으로는 남는다 — 그 변이는
@@ -86,6 +86,7 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   'missing-interaction-target': 'interaction-target',
   'invalid-interaction-target': 'interaction-target',
   'invalid-interaction-prop': 'interaction-target',
+  'view-state-missing': 'interaction-target',
   'unknown-type': 'document-invalid',
   'invalid-props': 'document-invalid',
   'children-not-allowed': 'document-invalid',

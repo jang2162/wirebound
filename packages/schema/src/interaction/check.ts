@@ -31,7 +31,7 @@
 import { propSchema } from '../component/define'
 import { getComponent } from '../component/registry'
 import { getKoreanErrorMap } from '../locale'
-import type { InteractionAction, WbNode } from '../node'
+import { DEFAULT_VIEW_STATE, type InteractionAction, type ViewState, type WbNode } from '../node'
 import type { ValidationCode } from '../validate'
 
 /**
@@ -40,7 +40,7 @@ import type { ValidationCode } from '../validate'
  */
 export type InteractionIssueCode = Extract<
   ValidationCode,
-  'missing-interaction-target' | 'invalid-interaction-target' | 'invalid-interaction-prop'
+  'missing-interaction-target' | 'invalid-interaction-target' | 'invalid-interaction-prop' | 'view-state-missing'
 >
 
 /** 액션 하나의 문제. 문제가 없으면 `null`이다 — *"모른다"*가 아니라 *"없다"*이다. */
@@ -66,6 +66,29 @@ export type TargetlessAction = Extract<InteractionAction, { type: 'closeModal' }
 /** 대상이 없는 액션인가. 대상을 거르는 자리(붙이기 · 모듈 저장 · 검증)가 이것으로 먼저 넘긴다. */
 export function isTargetlessAction(action: InteractionAction): action is TargetlessAction {
   return action.type === 'closeModal'
+}
+
+/** 타겟이 **그 문서의 화면 상태**인 액션(`setViewState`). 노드도 페이지도 아니다 — 노드 id 를 다루는 자리(붙이기 · 모듈 · id 재발급)가 이것을 먼저 가른다. */
+export type ViewStateAction = Extract<InteractionAction, { type: 'setViewState' }>
+
+/** 화면 상태를 바꾸는 액션인가. */
+export function isViewStateAction(action: InteractionAction): action is ViewStateAction {
+  return action.type === 'setViewState'
+}
+
+/**
+ * 화면 상태 바꾸기 하나를 그 문서의 상태 목록과 대조한다. `DEFAULT_VIEW_STATE`(기본 화면)는 늘 맞다. 목록이 없는 문서(레이아웃 · 상태 없는
+ * 페이지)는 기본만 맞다. **저장 게이트와 런타임이 함께 부른다** — 상태를 지운 뒤 누르면 저장할 때 본 경고와 같은 문장이 선다.
+ */
+export function checkViewStateAction(viewStates: readonly ViewState[] | undefined, action: ViewStateAction): ActionProblem | null {
+  const target = typeof action.target === 'string' ? action.target : ''
+  if (target === DEFAULT_VIEW_STATE) return null
+  if (target.trim().length === 0) {
+    return { code: 'view-state-missing', message: `${action.type}의 대상 상태를 아직 고르지 않았습니다` }
+  }
+  const known = Array.isArray(viewStates) && viewStates.some((state: unknown) => (state as { id?: unknown } | null)?.id === target)
+  if (known) return null
+  return { code: 'view-state-missing', message: `${action.type}의 대상 상태가 페이지의 상태 목록에 없습니다: ${target}` }
 }
 
 /** 액션의 대상 글자 — 대상 없는 액션이면 `undefined`. */

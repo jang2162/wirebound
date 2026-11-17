@@ -29,13 +29,24 @@ export function renameStatesByName(current: unknown, incoming: readonly ViewStat
   return rename
 }
 
-/** 노드(와 자손) 보임의 상태를 표대로 바꾼 사본(`renameStatesByName` 의 표). 바꾼 뒤 겹친 상태는 하나로 접는다. 입력을 바꾸지 않는다. */
+/**
+ * 노드(와 자손) 보임의 상태와 화면 상태 바꾸기(`setViewState`)의 대상을 표대로 바꾼 사본(`renameStatesByName` 의 표). 바꾼 뒤 겹친 상태는 하나로
+ * 접는다. 입력을 바꾸지 않는다.
+ */
 export function renameVisibilityStates(node: WbNode, rename: ReadonlyMap<string, string>): WbNode {
   // 자식 줄은 몸통 · 구역 전부다(`mapChildLists`) — 구역 안 노드의 보임도 바꾼다.
   const next: WbNode = { ...mapChildLists(node, (child) => renameVisibilityStates(child, rename)) }
   if (node.visibility !== undefined) {
     const states = [...new Set(node.visibility.states.map((state) => rename.get(state) ?? state))]
     next.visibility = { mode: node.visibility.mode, states }
+  }
+  if (node.interactions !== undefined) {
+    next.interactions = node.interactions.map((interaction) => ({
+      ...interaction,
+      actions: interaction.actions.map((action) =>
+        action.type === 'setViewState' && rename.has(action.target) ? { ...action, target: rename.get(action.target)! } : action,
+      ),
+    }))
   }
   return next
 }

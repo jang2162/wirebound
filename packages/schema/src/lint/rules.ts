@@ -90,7 +90,7 @@ export const LINT_RULES = [
   },
   {
     id: 'interaction-target',
-    spec: '대상 노드가 삭제된 상호작용 규칙',
+    spec: '대상 노드 · 화면 상태가 삭제된 상호작용 규칙',
     group: 'document',
     owner: 'schema',
     // `checkNodeAction`이 이미 판정한다. 그 severity를 그대로 나른다.

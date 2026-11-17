@@ -283,15 +283,21 @@ describe('ValidationIssue.severity', () => {
    * 누군가 그 자리를 `warning`으로 채우면 이 케이스가 죽는다. **그것이 이 케이스가 사는
    * 이유다:** 새 경고는 근거를 적고 이 목록을 고쳐야 지나간다.
    *
-   * 상호작용 셋이 경고인 근거는 `validate.ts`의 `ISSUE_SEVERITY` 머리말에 있다 —
-   * 요지는 *"`error`로 두면 타겟이 된 노드를 지우는 편집이 막힌다"*이고,
+   * 상호작용 셋과 `view-state-missing`이 경고인 근거는 `validate.ts`의 `ISSUE_SEVERITY` 머리말에 있다 —
+   * 요지는 *"`error`로 두면 타겟이 된 노드(상태)를 지우는 편집이 막힌다"*이고,
    * `test/interaction-validate.test.ts`가 그 성질을 잰다.
    */
-  it('경고인 코드는 넷이다 — ignored-variant와 상호작용 셋', () => {
+  it('경고인 코드는 다섯이다 — ignored-variant와 상호작용 넷', () => {
     const warnings = Object.entries(ISSUE_SEVERITY)
       .filter(([, severity]) => severity === 'warning')
       .map(([code]) => code)
-    expect(warnings).toEqual(['ignored-variant', 'missing-interaction-target', 'invalid-interaction-target', 'invalid-interaction-prop'])
+    expect(warnings).toEqual([
+      'ignored-variant',
+      'missing-interaction-target',
+      'invalid-interaction-target',
+      'invalid-interaction-prop',
+      'view-state-missing',
+    ])
   })
 
   it('그 밖의 코드는 전부 error다', () => {

@@ -207,6 +207,29 @@ describe('다른 페이지로 붙일 때 상태를 이름으로 맞춘다(`edit/
     await waitFor(() => expect(infoTexts()).toEqual([`상태 "admin" 보임 1곳을 뺐습니다. ${clearedOnlyNotice(1)}`]))
   })
 
+  it('화면 상태 바꾸기의 대상도 같은 이름의 상태로 옮기고 · 없는 이름은 그 액션을 뺀다 · 기본은 그대로', async () => {
+    const opener = (id: string, target: string): WbNode => ({
+      ...button(id, '열기'),
+      interactions: [{ on: 'click', actions: [{ type: 'setViewState', target }] }],
+    })
+    const srv = server(target([OTHER_ADMIN]))
+    await openPage(srv.held(), { apiOverrides: srv.api })
+    const envelope = writeNodesEnvelope(
+      [opener('b-a', 's_admin'), opener('b-b', 's_guest'), opener('b-c', 'default')],
+      CURRENT_DOCUMENT_VERSION,
+      [ADMIN, GUEST],
+    )
+    expect(clip('paste', envelope).prevented).toBe(true)
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    const pasted = srv.calls[0]!.map((op) => (op as { value: WbNode }).value)
+    expect(pasted.map((node) => node.interactions?.[0]?.actions[0])).toEqual([
+      { type: 'setViewState', target: 's_page_admin' },
+      undefined,
+      { type: 'setViewState', target: 'default' },
+    ])
+    expect(errorsOf(srv.held())).toEqual([])
+  })
+
   it('같은 id 는 이름이 달라도 그대로다(같은 페이지 · 이름을 고친 복사)', async () => {
     const { pasted } = await pasteInto(
       target([{ id: 's_admin', name: '운영자' }]),

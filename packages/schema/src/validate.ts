@@ -1,11 +1,11 @@
 import { ONE_SELECTED_MESSAGE } from './component/catalog/input'
 import { picksOneChoice } from './component/code-binding'
 import { BODY_ZONE, placementsOf, type ComponentDef, type ComponentPlace } from './component/define'
-import { checkNodeAction, isPageTargetAction, isTargetlessAction } from './interaction/check'
+import { checkNodeAction, checkViewStateAction, isPageTargetAction, isTargetlessAction, isViewStateAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
-import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type ViewState, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { zoneList, zonePointer } from './zones'
 import { getKoreanErrorMap } from './locale'
@@ -61,6 +61,11 @@ export type ValidationCode =
    */
   | 'invalid-interaction-prop'
   /**
+   * `setViewState`의 대상이 기본(`DEFAULT_VIEW_STATE`)도 그 문서 `viewStates`의 id 도 아니다 — 상태를 지웠거나 아직 안 골랐다. 레이아웃 문서는
+   * 상태가 없어 기본만 맞다. 상호작용 셋과 같은 무게(경고)다 — 상태를 지우는 편집이 422 가 되지 않게.
+   */
+  | 'view-state-missing'
+  /**
    * **편집이 목록에 없는 상태를 가리키는 보임을 새로 만들었다** — 목록에서 뺀 상태(편집 전에는 있던 id)를 보임이 아직 가리키거나, 편집이 목록 밖
    * 상태를 보임에 넣었다. 노드는 그 보임의 노드다. 문서 하나만 보고는 «새로»를 알 수 없어 `validatePage`는 이 코드를 안 낸다 — 저장 경계(편집
    * 파이프라인)가 편집 전후로 `checkViewStateRemoval`을 부른다. 편집 전부터 목록 밖이던 가리킴은 여기 안 온다(lint 의 `view-state-unknown`).
@@ -91,9 +96,9 @@ export type IssueSeverity = 'error' | 'warning'
  * error가 되는데, 그 안전한 기본값이 곧 "새 코드가 severity를 정하지 않았다"는 신호를
  * 지운다. 필수로 두면 컴파일러가 그 자리를 가리킨다.)
  *
- * **`warning`이 넷이다.** `ignored-variant`는 *"작성자가 적은 값이 버려진다"*는 알림이지
+ * **`warning`이 다섯이다.** `ignored-variant`는 *"작성자가 적은 값이 버려진다"*는 알림이지
  * 문서를 무효로 만드는 사실이 아니다 — 그 값이 없어도 문서는 그대로 그려진다. 상호작용
- * 셋이 `warning`인 근거는 아래 따로 적는다. 나머지는 「정방향 흐름」이 막아야 한다고 정한 것이므로
+ * 셋과 `view-state-missing`이 `warning`인 근거는 아래 따로 적는다(상태 대상도 같은 까닭이다 — 상태를 지우는 편집이 막히면 안 된다). 나머지는 「정방향 흐름」이 막아야 한다고 정한 것이므로
  * 내리지 않는다.
  *
  * ---
@@ -129,6 +134,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'missing-interaction-target': 'warning',
   'invalid-interaction-target': 'warning',
   'invalid-interaction-prop': 'warning',
+  'view-state-missing': 'warning',
   'state-cases-left': 'error',
   'invalid-code-ref': 'error',
 }
@@ -208,7 +214,7 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   const envelopeIssues = validateEnvelope(doc, PageEnvelopeSchema)
   if (envelopeIssues.length > 0) return envelopeIssues
 
-  const issues = validateTree(doc.root, ROOT_TYPES)
+  const issues = validateTree(doc.root, ROOT_TYPES, doc.viewStates)
   // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
   if (doc.root.visibility !== undefined) {
     issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
@@ -400,7 +406,8 @@ function throwOnFirstIssue(issues: ValidationIssue[]): void {
   }
 }
 
-function validateTree(root: WbNode, rootTypes: readonly string[]): ValidationIssue[] {
+/** `viewStates` — 그 문서의 상태 목록(`setViewState`의 대상을 대조한다). 레이아웃 · 프리셋 묶음은 없다(기본만 맞다). */
+function validateTree(root: WbNode, rootTypes: readonly string[], viewStates?: readonly ViewState[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   /**
    * 지나온 노드를 id로 든다. **`Set`이 아니라 `Map`인 것은 상호작용 검사 때문이다** —
@@ -483,7 +490,7 @@ function validateTree(root: WbNode, rootTypes: readonly string[]): ValidationIss
   }
 
   for (const { node, path } of withInteractions) {
-    issues.push(...checkInteractions(node, path, seen))
+    issues.push(...checkInteractions(node, path, seen, viewStates))
   }
 
   return issues
@@ -582,7 +589,12 @@ function placementName(places: readonly ComponentPlace[]): string {
  * 빈 페이지 타겟이 저장 경로에서 경고가 되기 시작한다. 런타임만 그것을 본다(그쪽은
  * *"눌렀는데 아무 일도 안 일어난다"*를 막아야 한다).
  */
-function checkInteractions(node: WbNode, path: string, seen: ReadonlyMap<string, WbNode>): ValidationIssue[] {
+function checkInteractions(
+  node: WbNode,
+  path: string,
+  seen: ReadonlyMap<string, WbNode>,
+  viewStates: readonly ViewState[] | undefined,
+): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const interactions = node.interactions ?? []
 
@@ -591,7 +603,8 @@ function checkInteractions(node: WbNode, path: string, seen: ReadonlyMap<string,
       // 페이지 경로를 받는 둘은 여기서 끝난다(위 머리말). 팝업 닫기는 대상이 없다.
       if (isPageTargetAction(action) || isTargetlessAction(action)) continue
 
-      const problem = checkNodeAction(seen, action)
+      // 화면 상태 바꾸기는 노드가 아니라 그 문서의 상태 목록과 대조한다.
+      const problem = isViewStateAction(action) ? checkViewStateAction(viewStates, action) : checkNodeAction(seen, action)
       if (problem === null) continue
 
       issues.push(makeIssue(problem.code, node.id, `${path}/interactions/${index}/actions/${actionIndex}`, problem.message))

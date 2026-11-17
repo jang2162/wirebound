@@ -88,7 +88,8 @@ function rewrite(node: WbNode, mapping: Map<string, string>): WbNode {
     next.interactions = node.interactions.map((interaction) => ({
       ...interaction,
       actions: interaction.actions.map((action) => {
-        const mapped = 'target' in action ? mapping.get(action.target) : undefined
+        // 화면 상태 바꾸기의 대상은 상태 id 라 노드 id 표로 옮기지 않는다.
+        const mapped = 'target' in action && action.type !== 'setViewState' ? mapping.get(action.target) : undefined
         const copied = mapped ? { ...action, target: mapped } : { ...action }
         // **`setProp.value`도 임의 JSON이다** — `props`와 같은 이유로 깊이 복사한다.
         // `'value' in`으로 보는 것은 값이 `undefined`인 키와 없는 키를 가르기 위해서다.

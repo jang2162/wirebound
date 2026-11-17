@@ -50,6 +50,15 @@ const SwitchTabActionSchema = z.strictObject({
   target: z.string(),
 })
 
+/**
+ * 화면 상태 바꾸기 — `target`은 그 문서의 상태 id 또는 `DEFAULT_VIEW_STATE`다. 목록에 있는지는 봉투가 아니라 검증(`view-state-missing` · 경고)이
+ * 본다 — 상태를 지우는 편집이 422 가 되지 않게.
+ */
+const SetViewStateActionSchema = z.strictObject({
+  type: z.literal('setViewState'),
+  target: z.string(),
+})
+
 const NavigateActionSchema = z.strictObject({
   type: z.literal('navigate'),
   target: z.string(),
@@ -65,11 +74,12 @@ const CloseModalActionSchema = z.strictObject({
   type: z.literal('closeModal'),
 })
 
-/** 상호작용 액션. 고정 6종이며 `type`으로 판별한다 — 그 밖의 타입(스크립트 등)은 허용하지 않는다. */
+/** 상호작용 액션. 고정 7종이며 `type`으로 판별한다 — 그 밖의 타입(스크립트 등)은 허용하지 않는다. */
 const InteractionActionSchema = z.discriminatedUnion('type', [
   SetPropActionSchema,
   SetVisibleActionSchema,
   SwitchTabActionSchema,
+  SetViewStateActionSchema,
   NavigateActionSchema,
   OpenModalActionSchema,
   CloseModalActionSchema,

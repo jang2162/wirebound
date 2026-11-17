@@ -122,6 +122,8 @@ function emptyAction(type: InteractionAction['type']): InteractionAction {
       return { type: 'setVisible', target: '', value: false }
     case 'switchTab':
       return { type: 'switchTab', target: '' }
+    case 'setViewState':
+      return { type: 'setViewState', target: '' }
     case 'navigate':
       return { type: 'navigate', target: '' }
     case 'openModal':
