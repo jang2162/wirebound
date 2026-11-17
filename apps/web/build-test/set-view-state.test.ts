@@ -11,6 +11,7 @@
  * | 뷰 모드 — 지운 상태 | 대상 상태를 지우는 편집이 저장된다(경고) · 누르면 끊김 문장이 서고 화면은 그대로 | 4 |
  * | 번들 — 열고 닫기 | 1 과 같고 · 뷰어 고르개와 주소 해시가 따라간다 | 1 |
  * | 번들 — 팝업 겹 | 2 와 같다 | 2 |
+ * | 번들 — 화면 모드 | `#wb-screen` 에서 [등록] 해도 해시를 안 덮어 새로고침이 화면 모드로 다시 연다 | RV-VS L2 |
  *
  * 나간 뒤 주소(`?state=`)의 축은 «나간 뒤 주소» 케이스가 갖는다 — 주소 맞춤(`shell/view-state-address.ts`)을 떼면 «모드를 나가면» · «떠났다
  * 돌아옴» 의 `search` 도 함께 죽는다. «떠났다 돌아옴» 은 페이지를 옮길 때 앞 페이지의 기록을 버리는 판에서 혼자 죽는다.
@@ -245,6 +246,27 @@ describe.skipIf(!전제.ok)('화면 상태 바꾸기 — 실브라우저', () =>
       }
     })
 
+    it('RV-VS L2 — 화면 모드(`#wb-screen`)에서 [등록] 해도 해시가 그대로다 · 새로고침이 화면 모드로 다시 연다', async () => {
+      const { context, page } = await openBundlePage(stack, bundle.pages['관리자-목록']!, {
+        viewport: { width: 1280, height: 800 },
+        screen: true,
+      })
+      try {
+        await page.locator('.wb-export-canvas [data-wb-id="n_add"]').click()
+        await settle(() => present(page.mainFrame(), '.wb-export-canvas [data-wb-id="n_detail_text"]'))
+        const added = { ...(await bundleScreen(page)), screen: await screenMode(page) }
+        await page.reload()
+        await page.waitForSelector('html[data-wb-ready]', { state: 'attached', timeout: 15_000 })
+        const reload = { hash: await page.evaluate(() => location.hash), screen: await screenMode(page) }
+        expect({ added, reload }).toEqual({
+          added: { detail: true, select: 's_detail', hash: '#wb-screen', screen: true },
+          reload: { hash: '#wb-screen', screen: true },
+        })
+      } finally {
+        await context.close()
+      }
+    })
+
     it('Focus 2 — 팝업 안의 상태 바꾸기는 그 겹만 · 닫았다 다시 열면 기본', async () => {
       const { context, page } = await openBundlePage(stack, bundle.pages['관리자-목록']!, { viewport: { width: 1280, height: 800 } })
       try {
@@ -324,6 +346,11 @@ async function bundleScreen(page: Page): Promise<{ detail: boolean; select: stri
     select: (document.querySelector('.wb-export-state-select') as HTMLSelectElement | null)?.value ?? '',
     hash: location.hash,
   }))
+}
+
+/** 번들이 화면 모드(셸을 숨긴 판)로 섰는가. */
+async function screenMode(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.documentElement.classList.contains('wb-export-screen'))
 }
 
 /** 맨 위 팝업 겹에 «추가 칸»(팝업의 상태가 숨긴 노드)이 섰는가. */

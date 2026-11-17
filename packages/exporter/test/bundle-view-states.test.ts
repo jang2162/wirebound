@@ -50,15 +50,15 @@ const STATE_PAGE: PageDocument = {
   },
 }
 
-function stateBundle() {
+function stateBundle(page: PageDocument = STATE_PAGE) {
   return exportBundle({
-    pages: [{ title: '회원 목록', document: STATE_PAGE, comments: [{ nodeId: 'n_approve', body: '관리자만' }] }],
+    pages: [{ title: '회원 목록', document: page, comments: [{ nodeId: 'n_approve', body: '관리자만' }] }],
     runtimeJs: '/* runtime */',
   })
 }
 
-function load(): void {
-  const html = String(stateBundle().files.find((file) => file.path === 'pages/회원-목록.html')!.content)
+function load(page: PageDocument = STATE_PAGE): void {
+  const html = String(stateBundle(page).files.find((file) => file.path === 'pages/회원-목록.html')!.content)
   const parsed = new DOMParser().parseFromString(html, 'text/html')
   document.head.innerHTML = parsed.head.innerHTML
   document.body.innerHTML = parsed.body.innerHTML
@@ -253,6 +253,56 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(marker()).not.toBeNull()
     choose('default')
     expect(marker()).toBeNull()
+  })
+})
+
+/** STATE_PAGE 에 «관리자로» 단추(`setViewState s_admin`)를 더한 문서 — 상호작용이 상태를 바꾸는 판. */
+const SWITCH_PAGE: PageDocument = {
+  ...STATE_PAGE,
+  root: {
+    ...STATE_PAGE.root,
+    children: [
+      ...(STATE_PAGE.root.children ?? []),
+      {
+        id: 'n_to_admin',
+        type: 'Button',
+        props: { label: '관리자로' },
+        interactions: [{ on: 'click', actions: [{ type: 'setViewState', target: 's_admin' }] }],
+      },
+    ],
+  },
+}
+
+function pressToAdmin(): void {
+  const button = document.querySelector('.wb-export-canvas [data-wb-id="n_to_admin"]')
+  if (button === null) throw new Error('«관리자로» 단추가 없다')
+  act(() => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+  })
+}
+
+describe('런타임 — 상호작용이 상태를 바꾸면', () => {
+  it('전환기와 주소 해시가 따라간다', async () => {
+    load(SWITCH_PAGE)
+    await run()
+    pressToAdmin()
+    expect({ select: select().value, hash: window.location.hash, approve: canvasText().includes('승인') }).toEqual({
+      select: 's_admin',
+      hash: '#state=s_admin',
+      approve: true,
+    })
+  })
+
+  it('화면 모드(`#wb-screen`)에서는 해시를 안 덮는다 — 전환기만 따라간다(새로고침이 화면 모드로 다시 연다 · RV-VS L2)', async () => {
+    history.replaceState(null, '', '#wb-screen')
+    load(SWITCH_PAGE)
+    await run()
+    pressToAdmin()
+    expect({ select: select().value, hash: window.location.hash, approve: canvasText().includes('승인') }).toEqual({
+      select: 's_admin',
+      hash: '#wb-screen',
+      approve: true,
+    })
   })
 })
 

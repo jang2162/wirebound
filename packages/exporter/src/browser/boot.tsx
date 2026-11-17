@@ -165,7 +165,7 @@ function stateFromHash(hash: string, ids: ReadonlySet<string>): string | null {
 /**
  * 셸의 전환기(상태 목록이 있는 페이지만 싣는다)와 주소 해시를 마운트에 잇는다. 전환기가 없으면 아무것도 안 건다. 건 것을 거두는 함수(`unwire`)
  * 를 낸다 — 마운트를 내리면 함께 거둔다(케이스가 한 창에서 여러 번 세운다). `reflect` 는 상호작용이 바꾼 상태를 전환기와 해시에 싣는다 —
- * 전환기로 고른 것과 같은 주소가 된다(해시를 바꿔 써도 `hashchange` 는 안 난다 — `replaceState`).
+ * 전환기로 고른 것과 같은 주소가 된다(해시를 바꿔 써도 `hashchange` 는 안 난다 — `replaceState`). 화면 모드에서는 해시를 안 쓴다.
  */
 function wireStatePicker(
   win: Window,
@@ -206,7 +206,8 @@ function wireStatePicker(
     },
     reflect: (state) => {
       select.value = state ?? DEFAULT_VIEW_STATE
-      writeHash(state)
+      // 화면 모드(`#wb-screen` — PPTX 를 찍는 판 · 셸과 전환기가 숨는다)의 해시를 덮으면 새로고침이 셸을 세운다 — 전환기 값만 싣는다.
+      if (!win.document.documentElement.classList.contains(SCREEN_CLASS)) writeHash(state)
     },
   }
 }
