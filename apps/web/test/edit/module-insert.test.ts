@@ -144,6 +144,35 @@ describe('moduleInsertOps', () => {
     expect(boxed.visibility).toEqual({ mode: 'only', states: ['s_admin'] })
   })
 
+  /**
+   * **상태 대상 액션도 보임과 같은 까닭으로 끊긴 것으로 다룬다**(RV-VS L3) — 모듈에는 상태가 없다. 저장이 빼지만(`moduleNodesForSave`) 그 앞에
+   * 저장된 묶음 · 손으로 넣은 행에 남았어도 넣기가 뺀다 — 넣는 페이지에 같은 id 의 상태가 있어도 붙지 않는다. 기본(`default`)은 남는다.
+   */
+  it('«화면 상태 바꾸기» 의 상태 대상은 빼고 센다 — 넣는 페이지에 그 상태가 있어도 · 기본은 남는다', () => {
+    const toggle: WbNode = {
+      id: 'm_toggle',
+      type: 'Button',
+      props: { label: '열기' },
+      interactions: [
+        {
+          on: 'click',
+          actions: [
+            { type: 'setViewState', target: 's_admin' },
+            { type: 'setViewState', target: 'default' },
+          ],
+        },
+      ],
+    }
+    const before = doc({ viewStates: [{ id: 's_admin', name: '관리자' }] })
+    const edit = moduleInsertOps(before, [toggle], target(before, null), NO_PAGES, counter())
+    if ('reason' in edit) throw new Error(edit.reason)
+    const placed = applyOps(before, edit.ops).root.children![2]!
+    expect({ targets: placed.interactions![0]!.actions.map(actionTarget), dropped: edit.droppedActions }).toEqual({
+      targets: ['default'],
+      dropped: 1,
+    })
+  })
+
   it('자식을 안 받는 부모 자리면 까닭 — `addInside` 판정의 설명', () => {
     const before = doc()
     const edit = moduleInsertOps(before, NODES, { parentId: 'n-text', index: 0, placement: 'inside' }, NO_PAGES)

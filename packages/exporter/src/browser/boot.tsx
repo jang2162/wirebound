@@ -98,7 +98,10 @@ export async function boot(env: BootEnv): Promise<BootResult> {
     }
 
     const states = stateIds(data.document)
+    /** 상호작용이 바꾼 상태를 셸에 싣는다 — 전환기를 걸고 나서 채운다(`wireStatePicker`). */
+    let reflect: (state: string | null) => void = () => {}
     const mount = mountExportDocument(canvas, {
+      onViewState: (state) => reflect(state),
       viewState: stateFromHash(win.location.hash, states),
       document: data.document,
       theme,
@@ -113,7 +116,9 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       standing: failures,
       ...(env.navigate === undefined ? {} : { navigate: env.navigate }),
     })
-    const unwire = wireStatePicker(win, mount, states)
+    const picker = wireStatePicker(win, mount, states)
+    reflect = picker.reflect
+    const unwire = picker.unwire
     const unfollow = wireMarkerHash(win, canvas)
     const unmount = mount.unmount
     mount.unmount = () => {
@@ -158,23 +163,32 @@ function stateFromHash(hash: string, ids: ReadonlySet<string>): string | null {
 }
 
 /**
- * 셸의 전환기(상태 목록이 있는 페이지만 싣는다)와 주소 해시를 마운트에 잇는다. 전환기가 없으면 아무것도 안 건다. 건 것을 거두는 함수를
- * 낸다 — 마운트를 내리면 함께 거둔다(케이스가 한 창에서 여러 번 세운다).
+ * 셸의 전환기(상태 목록이 있는 페이지만 싣는다)와 주소 해시를 마운트에 잇는다. 전환기가 없으면 아무것도 안 건다. 건 것을 거두는 함수(`unwire`)
+ * 를 낸다 — 마운트를 내리면 함께 거둔다(케이스가 한 창에서 여러 번 세운다). `reflect` 는 상호작용이 바꾼 상태를 전환기와 해시에 싣는다 —
+ * 전환기로 고른 것과 같은 주소가 된다(해시를 바꿔 써도 `hashchange` 는 안 난다 — `replaceState`). 화면 모드에서는 해시를 안 쓴다.
  */
-function wireStatePicker(win: Window, mount: ExportMount, ids: ReadonlySet<string>): () => void {
-  const found = win.document.getElementById(STATE_SELECT_ID)
-  if (found === null || found.tagName !== 'SELECT') return () => {}
-  const select = found as HTMLSelectElement
-  select.value = stateFromHash(win.location.hash, ids) ?? DEFAULT_VIEW_STATE
-  const onChange = (): void => {
-    const state = ids.has(select.value) ? select.value : null
-    mount.setViewState(state)
+function wireStatePicker(
+  win: Window,
+  mount: ExportMount,
+  ids: ReadonlySet<string>,
+): { unwire: () => void; reflect: (state: string | null) => void } {
+  const writeHash = (state: string | null): void => {
     const { pathname, search } = win.location
     win.history.replaceState(
       win.history.state,
       '',
       state === null ? `${pathname}${search}` : `${STATE_HASH_PREFIX}${encodeURIComponent(state)}`,
     )
+  }
+  const found = win.document.getElementById(STATE_SELECT_ID)
+  // 전환기가 없는 페이지(상태 목록이 없다)는 기본으로만 바뀐다 — 그대로라 해시(번호 닻 따위)를 안 건드린다.
+  if (found === null || found.tagName !== 'SELECT') return { unwire: () => {}, reflect: () => {} }
+  const select = found as HTMLSelectElement
+  select.value = stateFromHash(win.location.hash, ids) ?? DEFAULT_VIEW_STATE
+  const onChange = (): void => {
+    const state = ids.has(select.value) ? select.value : null
+    mount.setViewState(state)
+    writeHash(state)
   }
   const onHash = (): void => {
     const hash = win.location.hash
@@ -185,9 +199,16 @@ function wireStatePicker(win: Window, mount: ExportMount, ids: ReadonlySet<strin
   }
   select.addEventListener('change', onChange)
   win.addEventListener('hashchange', onHash)
-  return () => {
-    select.removeEventListener('change', onChange)
-    win.removeEventListener('hashchange', onHash)
+  return {
+    unwire: () => {
+      select.removeEventListener('change', onChange)
+      win.removeEventListener('hashchange', onHash)
+    },
+    reflect: (state) => {
+      select.value = state ?? DEFAULT_VIEW_STATE
+      // 화면 모드(`#wb-screen` — PPTX 를 찍는 판 · 셸과 전환기가 숨는다)의 해시를 덮으면 새로고침이 셸을 세운다 — 전환기 값만 싣는다.
+      if (!win.document.documentElement.classList.contains(SCREEN_CLASS)) writeHash(state)
+    },
   }
 }
 

@@ -8,6 +8,12 @@
  *   (`shell/view-state-address.ts` 가 페이지를 열 때 읽는다).
  * - **목록에 없는 상태는 기본이다.** 고른 상태를 남이 지웠거나 아직 문서가 안 실렸으면 `state` 는 `null` 이다 — 렌더러가 목록 밖 id 를
  *   기본으로 읽는 것(`renderDocument`)과 같은 결이다. 고른 값 자체는 지우지 않는다(남의 삭제를 되돌리면 다시 선다).
+ * - **뷰 모드를 나가면 그 페이지의 들어가기 전 고름으로 돌아간다**(`viewMode` — 정본 「상호작용」 「실행」 의 «모드가 리셋»). 뷰 모드에서는
+ *   상호작용(«화면 상태 바꾸기» — `canvas/canvas.tsx`)도 · 전환기도 같은 값을 바꾸고 모두가 그 값을 보지만, 시연은 어느 페이지의 편집 화면에도
+ *   남지 않는다. 뷰 모드 동안 연 페이지마다 들어가기 전 고름을 적어 두고(들어간 페이지는 그때의 고름 · 뷰 모드에서 처음 연 페이지는 기본 —
+ *   페이지를 옮기면 고름이 기본으로 돌아가므로), 페이지를 옮겨도 앞 페이지의 기록을 버리지 않는다. 나갈 때 선 페이지가 그 기록으로 돌아간다 —
+ *   떠났다 돌아와 나가도 들어가기 전 고름이다. 되돌림도 렌더 중에 한다(위와 같은 까닭). 주소 `?state=` 는 `shell/view-state-address.ts` 가
+ *   나갈 때 되돌린 고름으로 맞춘다.
  * - **깔지 않은 판**(컴포넌트를 혼자 그리는 케이스)은 늘 기본이고 `choose` 는 아무것도 안 한다.
  *
  * 상태를 고른 채 편집해도 노드는 하나다 — 숨은 노드도 고르고 고칠 수 있다(구조 트리가 흐리게 그린다 · 캔버스는 안 그린다).
@@ -28,15 +34,43 @@ interface ViewStateContextValue {
 
 const ViewStateContext = createContext<ViewStateContextValue | null>(null)
 
-export function ViewStateProvider(props: { pageId: string | undefined; children: ReactNode }): ReactElement {
+export function ViewStateProvider(props: {
+  pageId: string | undefined
+  /** 지금 뷰 모드인가 — 나갈 때 들어가기 전 고름으로 되돌린다(머리말). 안 주면 늘 편집 모드다. */
+  viewMode?: boolean
+  children: ReactNode
+}): ReactElement {
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const [seenPage, setSeenPage] = useState(props.pageId)
+  const viewMode = props.viewMode === true
+  const [seenMode, setSeenMode] = useState(viewMode)
+  /** 뷰 모드 동안 연 페이지마다 들어가기 전 고름(기본이면 `null`) — 나갈 때 선 페이지가 되돌린다. 뷰 모드가 아니면 `null`. */
+  const [beforeView, setBeforeView] = useState<ReadonlyMap<string, string | null> | null>(null)
+  let before = beforeView
   // 페이지가 바뀐 렌더에서 곧바로 지운다(머리말 «페이지를 옮기면 …»).
   let current = chosen
   if (seenPage !== props.pageId) {
     setSeenPage(props.pageId)
     setChosen(null)
     current = null
+    // 뷰 모드에서 처음 연 페이지의 들어가기 전 고름은 기본이다 — 이미 적은 페이지(떠났다 돌아옴)는 그 기록을 둔다.
+    if (before !== null && props.pageId !== undefined && !before.has(props.pageId)) {
+      before = new Map(before).set(props.pageId, null)
+      setBeforeView(before)
+    }
+  }
+  if (seenMode !== viewMode) {
+    setSeenMode(viewMode)
+    if (viewMode) {
+      before = props.pageId === undefined ? new Map() : new Map([[props.pageId, current?.pageId === props.pageId ? current.state : null]])
+      setBeforeView(before)
+    } else {
+      const state = props.pageId === undefined ? null : (before?.get(props.pageId) ?? null)
+      const back = state === null || props.pageId === undefined ? null : { pageId: props.pageId, state }
+      setChosen(back)
+      setBeforeView(null)
+      current = back
+    }
   }
   const value = useMemo(() => ({ chosen: current, setChosen }), [current])
   return createElement(ViewStateContext.Provider, { value }, props.children)

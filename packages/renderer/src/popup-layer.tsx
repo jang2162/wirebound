@@ -11,10 +11,11 @@
  * | 포커스 | 열면 맨 위 상자 안의 첫 포커스 받는 요소로 · Tab 은 그 상자 안을 돈다 · 닫으면 연 요소로 돌려준다 |
  * | 겹 | 다섯까지(`POPUP_DEPTH_MAX`) — 아래 겹은 `inert` 다 |
  * | 상호작용 | 팝업 문서마다 제 겹layer — 닫으면 사라지고 다시 열면 처음 판이다 |
+ * | 화면 상태 | 팝업 문서마다 제 상태(처음엔 기본) — 그 팝업 안의 «화면 상태 바꾸기» 는 그 겹만 바꾸고 부른 쪽에 안 넘긴다(연 화면의 상태는 그대로). 겹layer 와 같은 수명 |
  *
  * 문서 · 테마 · 상태를 바꾸지 않는다 — 열린 목록은 부른 쪽이 들고(`usePopupStack`), 이 층은 그린다.
  */
-import type { AnyDocument, CodeIndex } from '@wirebound/schema'
+import { DEFAULT_VIEW_STATE, type AnyDocument, type CodeIndex } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { EMPTY_OVERLAY, type InteractionOverlay } from './interaction/runtime'
@@ -156,6 +157,8 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
   const onClose = stack.pop
   const layerRef = useRef<HTMLDivElement | null>(null)
   const [overlays, setOverlays] = useState<Readonly<Record<string, InteractionOverlay>>>({})
+  /** 팝업 겹마다의 화면 상태(머리말 표) — 없으면 기본. */
+  const [viewStates, setViewStates] = useState<Readonly<Record<string, string | null>>>({})
   const composing = useRef(false)
   const shown = useRef<readonly OpenPopup[]>(NO_POPUPS)
 
@@ -182,6 +185,11 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
     const closed = before.filter((popup) => !popups.includes(popup))
     if (closed.length > 0) {
       setOverlays((prev) => {
+        const next = { ...prev }
+        for (const popup of closed) delete next[popup.key]
+        return next
+      })
+      setViewStates((prev) => {
         const next = { ...prev }
         for (const popup of closed) delete next[popup.key]
         return next
@@ -264,10 +272,21 @@ export function PopupLayer(props: PopupLayerProps): ReactElement | null {
               theme={props.theme}
               codes={props.codes}
               overlay={overlays[popup.key] ?? EMPTY_OVERLAY}
+              viewState={viewStates[popup.key] ?? null}
               onNodeError={props.onNodeError}
               onEvent={(event) => {
                 setOverlays((prev) => (prev[popup.key] === event.overlay ? prev : { ...prev, [popup.key]: event.overlay }))
-                props.onEvent(event, popup)
+                // 이 겹의 상태 바꾸기는 여기서 끝난다 — 부른 쪽이 연 화면의 상태를 바꾸지 않게 요청에서 뺀다.
+                const own = event.requests.filter((request) => request.type === 'setViewState')
+                const last = own[own.length - 1]
+                if (last !== undefined) {
+                  const next = last.target === DEFAULT_VIEW_STATE ? null : last.target
+                  setViewStates((prev) => (prev[popup.key] === next ? prev : { ...prev, [popup.key]: next }))
+                }
+                props.onEvent(
+                  own.length === 0 ? event : { ...event, requests: event.requests.filter((request) => request.type !== 'setViewState') },
+                  popup,
+                )
               }}
             />
           </div>
@@ -283,10 +302,12 @@ function PopupDocument(props: {
   theme: ThemeDefinition | undefined
   codes: CodeIndex | undefined
   overlay: InteractionOverlay
+  viewState: string | null
   onEvent: (event: InteractionEvent) => void
   onNodeError: ((error: NodeRenderError) => void) | undefined
 }): ReactElement {
   return renderDocument(props.popup.document, {
+    viewState: props.viewState,
     ...(props.theme === undefined ? {} : { theme: props.theme }),
     ...(props.onNodeError === undefined ? {} : { onNodeError: props.onNodeError }),
     ...(props.popup.assetUrl === undefined ? {} : { assetUrl: props.popup.assetUrl }),

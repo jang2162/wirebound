@@ -146,7 +146,7 @@ describe('② 어느 메뉴에도 연결되지 않은 페이지', () => {
   })
 })
 
-describe('③ 대상 노드가 삭제된 상호작용 규칙', () => {
+describe('③ 대상 노드 · 화면 상태가 삭제된 상호작용 규칙', () => {
   it('checkNodeAction의 판정을 그대로 나른다 — severity를 바꾸지 않는다', () => {
     const button = node('Button', {
       interactions: [{ on: 'click', actions: [{ type: 'setVisible', target: 'n_00dead000001', value: true }] }],

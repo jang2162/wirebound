@@ -25,7 +25,7 @@ import {
   type InteractionRequest,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import { childLists, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
+import { childLists, DEFAULT_VIEW_STATE, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { flushSync } from 'react-dom'
@@ -57,6 +57,11 @@ export interface ExportMountInput {
   navigate?: (href: string) => void
   /** 처음 그릴 화면 상태(`RenderOptions.viewState`). 없거나 목록 밖이면 기본이다. */
   viewState?: string | null
+  /**
+   * 상호작용(«화면 상태 바꾸기»)이 그 페이지의 상태를 바꿨다 — 셸의 전환기 · 주소 해시가 따라간다(`boot.tsx`). 전환기 · 해시가 바꾼 것
+   * (`ExportMount.setViewState`)은 여기로 안 온다. 덮개 위 팝업 안의 상태 바꾸기는 그 겹의 것이라 안 온다(`PopupLayer`).
+   */
+  onViewState?: (viewState: string | null) => void
 }
 
 export interface ExportMount {
@@ -167,12 +172,19 @@ function ExportCanvas(props: {
   }, [container])
 
   /**
-   * 요청을 처리하고 할 말을 낸다 — 페이지와 덮개 위 팝업이 같은 길을 쓴다. «팝업 열기» 는 실린 팝업이면 쌓고(겹이 차면 말한다), 아니면 이동과
+   * 요청을 처리하고 할 말을 낸다 — 페이지와 덮개 위 팝업이 같은 길을 쓴다. «화면 상태 바꾸기» 는 그 페이지의 상태를 바꾸고 셸에 알린다(팝업
+   * 겹의 것은 층이 처리해 여기 안 온다). «팝업 열기» 는 실린 팝업이면 쌓고(겹이 차면 말한다), 아니면 이동과
    * 같다(그 페이지 파일로 · 없음 · 둘 이상). «팝업 닫기» 는 맨 위를 닫고, 열린 것이 없으면 말한다.
    */
   const handle = (requests: readonly InteractionRequest[]): string[] => {
     const added: string[] = []
     for (const request of requests) {
+      if (request.type === 'setViewState') {
+        const next = request.target === DEFAULT_VIEW_STATE ? null : request.target
+        setViewState(next)
+        input.onViewState?.(next)
+        continue
+      }
       if (request.type === 'closeModal') {
         if (!popups.pop()) added.push(isPopupDocument(input.document) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP)
         continue

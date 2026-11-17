@@ -10,7 +10,8 @@
  * (`drag/use-placement.ts` 의 `onModuleDrop`).
  *
  * **넣은 노드는 보임 없이 들어간다** — 모든 상태에서 보이고 지금 고른 상태와 무관하다(설계 spec «B3» · «C2»). 모듈 저장이 보임을 걷지만
- * (`moduleNodesForSave` — 화면과 서버) 그 앞에 저장된 묶음 · 손으로 넣은 행에 남았어도 여기서 걷는다.
+ * (`moduleNodesForSave` — 화면과 서버) 그 앞에 저장된 묶음 · 손으로 넣은 행에 남았어도 여기서 걷는다. 같은 까닭으로 «화면 상태 바꾸기» 의 상태
+ * 대상(기본 말고)도 넣는 페이지에 같은 id 의 상태가 있든 없든 빼고 센다.
  *
  * **순수 함수이고 던지지 않는다**(`edit/paste-ops.ts` · `./palette-add.ts` 와 같은 층).
  */
@@ -54,7 +55,8 @@ export function moduleInsertOps(
 ): ModuleInsert | { reason: string } {
   const prepared = prepareNodesForPaste(
     nodes.map(withoutVisibility),
-    { node: (id) => findNodeSafely(document.root, id) !== undefined, page: keepPage },
+    // 상태 대상은 늘 끊긴 것이다 — 모듈에는 상태가 없다(보임을 걷는 것과 같은 까닭 · 머리말). 기본(`default`)은 `prepareNodesForPaste` 가 남긴다.
+    { node: (id) => findNodeSafely(document.root, id) !== undefined, page: keepPage, state: () => false },
     generate,
   )
   const edit = insertMany(document, target.parentId, target.index, prepared.nodes, '넣지', dropZoneOf(target))

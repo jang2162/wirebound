@@ -538,15 +538,25 @@ export function EditorShellRoute(): ReactElement {
               <PlacementRegionsProvider>
                 {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
-                <ViewStateProvider pageId={params.pageId}>
+                <ModeViewStateProvider pageId={params.pageId}>
                   <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
-                </ViewStateProvider>
+                </ModeViewStateProvider>
               </PlacementRegionsProvider>
             </ProjectCommentIndexProvider>
           </ProjectCodesProvider>
         </ProjectThemeProvider>
       </CanvasDocumentProvider>
     </EditorStoreProvider>
+  )
+}
+
+/** 화면 상태 보관을 스토어의 모드에 묶는다 — 뷰 모드를 나가면 들어가기 전 고름으로 돌아간다(`shell/use-view-state.ts` 머리말). */
+function ModeViewStateProvider(props: { pageId: string | undefined; children: ReactNode }): ReactElement {
+  const mode = useEditorStore(useEditorStoreInstance(), (s) => s.mode)
+  return (
+    <ViewStateProvider pageId={props.pageId} viewMode={mode === 'view'}>
+      {props.children}
+    </ViewStateProvider>
   )
 }
 

@@ -108,8 +108,23 @@ export {
 } from './clipboard'
 export type { DroppedStates } from './clipboard'
 
-export type { ActionProblem, InteractionIssueCode, NodeTargetAction, PageTargetAction, TargetlessAction } from './interaction/check'
-export { actionTarget, checkNodeAction, checkPageAction, isPageTargetAction, isTargetlessAction } from './interaction/check'
+export type {
+  ActionProblem,
+  InteractionIssueCode,
+  NodeTargetAction,
+  PageTargetAction,
+  TargetlessAction,
+  ViewStateAction,
+} from './interaction/check'
+export {
+  actionTarget,
+  checkNodeAction,
+  checkPageAction,
+  checkViewStateAction,
+  isPageTargetAction,
+  isTargetlessAction,
+  isViewStateAction,
+} from './interaction/check'
 
 export type { ComponentNoun, InteractionSentence, NamingContext } from './interaction/describe'
 export {

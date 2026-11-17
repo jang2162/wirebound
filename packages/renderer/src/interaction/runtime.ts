@@ -25,12 +25,16 @@
  * **상태를 안 드는 것이 「HTML 정적 번들」에도 필요하다** — 정적 번들에는 React가 없을 수 있고, 거기서도
  * 같은 함수로 같은 답이 나와야 한다.
  *
- * ## `navigate`·`openModal`·`closeModal`은 실행하지 않고 알린다
+ * ## `navigate`·`openModal`·`closeModal`·`setViewState`는 실행하지 않고 알린다
  *
  * 앞의 둘의 타겟은 `"page:관리자/회원/상세"`이고 **다른 페이지**다. 렌더러는 페이지를 모른다 —
  * 문서 하나만 받는다. **그래서 요청으로 내보낸다**(`InteractionRequest`): 앱이 라우팅하고,
  * 정적 번들은 링크로 바꾼다. **경계를 그 자리에 둔다.** 팝업 열기 · 닫기는 받는 쪽의 덮개 층(`PopupLayer`)이 쌓고 걷는다 —
  * 이 함수가 그리는 문서 하나는 자기가 덮개 위에 떴는지 모른다.
+ *
+ * 화면 상태 바꾸기도 같다 — 지금 상태는 받는 쪽(뷰 모드의 캔버스 · 번들 뷰어 · 팝업 겹)이 든다. 같은 누름의 뒤 액션(`setProp` 등)은 그대로
+ * 돌아 겹layer에 얹힌다 — 바뀐 상태에서 숨은 노드를 겨눈 값도 얹혀, 그 노드가 보이는 상태가 되면 그 값으로 그려진다. 대상 판정은 노드가
+ * 문서에 있는지로 하고 지금 보이는지는 보지 않는다(상태를 모른다).
  *
  * ## 깨진 규칙을 조용히 지나가지 않는다
  *
@@ -46,13 +50,16 @@
 import {
   BODY_ZONE,
   checkNodeAction,
+  checkViewStateAction,
   childLists,
   checkPageAction,
   isPageTargetAction,
   isTargetlessAction,
+  isViewStateAction,
   type InteractionAction,
   type InteractionIssueCode,
   type InteractionTrigger,
+  type ViewState,
   type WbNode,
 } from '@wirebound/schema'
 
@@ -93,6 +100,15 @@ export type InteractionRequest =
   | {
       /** 맨 위 팝업을 닫는다 — 대상이 없다. */
       type: 'closeModal'
+      sourceNodeId: string
+    }
+  | {
+      /**
+       * 그 문서의 화면 상태를 `target`(상태 id 또는 `DEFAULT_VIEW_STATE`)으로 바꾼다. **받는 쪽이 상태를 든다** — 이 런타임은 상태를 들지 않는다
+       * (머리말). 대상이 목록에 있는지는 이미 판정했다(목록 밖이면 요청 대신 `issues`). 팝업 겹 안의 요청은 그 겹의 상태를 바꾼다.
+       */
+      type: 'setViewState'
+      target: string
       sourceNodeId: string
     }
 
@@ -165,6 +181,8 @@ export function runInteraction(
   nodeId: string,
   trigger: InteractionTrigger,
   overlay: InteractionOverlay = EMPTY_OVERLAY,
+  /** 그 문서의 화면 상태 목록 — `setViewState`의 대상을 대조한다. 레이아웃 · 목록 없는 페이지는 기본만 맞다. */
+  viewStates?: readonly ViewState[],
 ): InteractionResult {
   const empty: InteractionResult = { overlay, requests: [], issues: [], matched: 0, applied: 0 }
   if (root === null || root === undefined) return empty
@@ -211,6 +229,16 @@ export function runInteraction(
       }
       if (isTargetlessAction(action)) {
         requests.push({ type: action.type, sourceNodeId: nodeId })
+        continue
+      }
+      if (isViewStateAction(action)) {
+        // 저장 게이트와 같은 판정이다 — 지운 상태를 누르면 저장 때 본 경고의 문장이 선다.
+        const problem = checkViewStateAction(viewStates, action)
+        if (problem !== null) {
+          report(problem.message, problem.code)
+          continue
+        }
+        requests.push({ type: 'setViewState', target: action.target, sourceNodeId: nodeId })
         continue
       }
 

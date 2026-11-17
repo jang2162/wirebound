@@ -12,10 +12,11 @@ import { ISSUE_SEVERITY } from '../src/validate'
 describe('ValidationCode → lint 규칙', () => {
   it('표가 이 매핑 그대로다', () => {
     expect(VALIDATION_RULE).toEqual({
-      // ③ *"대상 노드가 삭제된 상호작용 규칙"* — 상호작용 셋을 한 줄로 묶는다.
+      // ③ *"대상 노드 · 화면 상태가 삭제된 상호작용 규칙"* — 상호작용 넷을 한 줄로 묶는다.
       'missing-interaction-target': 'interaction-target',
       'invalid-interaction-target': 'interaction-target',
       'invalid-interaction-prop': 'interaction-target',
+      'view-state-missing': 'interaction-target',
       // 「lint 규칙」 밖 — 문서가 규격을 어긴 것들.
       'unknown-type': 'document-invalid',
       'invalid-props': 'document-invalid',

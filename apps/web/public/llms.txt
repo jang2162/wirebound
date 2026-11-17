@@ -103,6 +103,7 @@ Nodes carry no styles. Appearance comes from the project theme.
 - `setProp` `{ target: <node id>, prop, value }` — set a prop of another node.
 - `setVisible` `{ target: <node id>, value: boolean }` — show or hide a node.
 - `switchTab` `{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.
+- `setViewState` `{ target: <view state id> | "default" }` — switch the screen of the document holding the rule to that state from its own `viewStates` (`"default"` is the base screen). Inside an open popup it switches that popup only. A target missing from the list is a warning, not an error.
 - `navigate` `{ target: "page:<menu path>" }` — go to another page.
 - `openModal` `{ target: "page:<menu path>" }` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is `Popup`.
 - `closeModal` `{}` — no target; close the top-most open popup.

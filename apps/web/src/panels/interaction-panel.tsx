@@ -2,12 +2,12 @@
  * 우측의 상호작용 탭 — 설계서 「설계서 화면 구조」의 셋째 탭(속성 · 코멘트 다음)이고,
  * 설계서 「상호작용」 「모델」의 규칙을 저작한다.
  *
- * ## 화면이 「상호작용」 「모델」의 고정 6종을 그대로 보인다
+ * ## 화면이 「상호작용」 「모델」의 고정 7종을 그대로 보인다
  *
- * 「상호작용」 「모델」: *"액션 타입은 위 6종으로 고정한다. 스크립트나 표현식은 허용하지 않는다."*
+ * 「상호작용」 「모델」: *"액션 타입은 위 7종으로 고정한다. 스크립트나 표현식은 허용하지 않는다."*
  * **자유 입력 자리가 없는 것이 그 문장을 화면에서 지키는 방식이다** — 트리거는 4종
- * `<select>`, 액션 타입은 6종 `<select>`, 노드 타겟은 **문서의 노드 목록**에서, 페이지 타겟은 **프로젝트 트리의 페이지 목록**(팝업
- * 페이지 먼저)에서 고른다. 손으로 적는 곳은 셋뿐이고 전부 값이지 코드가 아니다: 목록 밖 페이지 경로(`navigate`·`openModal` — 아직 없는
+ * `<select>`, 액션 타입은 7종 `<select>`, 노드 타겟은 **문서의 노드 목록**에서, 화면 상태 타겟은 **그 페이지의 상태 트리**(기본 + 상태)에서,
+ * 페이지 타겟은 **프로젝트 트리의 페이지 목록**(팝업 페이지 먼저)에서 고른다. 손으로 적는 곳은 셋뿐이고 전부 값이지 코드가 아니다: 목록 밖 페이지 경로(`navigate`·`openModal` — 아직 없는
  * 페이지 · 다른 프로젝트에서 가져온 규칙), `setProp`의 값, 그리고 카탈로그에 없는 타겟의 prop 이름. 팝업 닫기(`closeModal`)는 대상이 없다.
  *
  * ## 저작은 이미 있는 편집 경로를 탄다
@@ -50,9 +50,13 @@
  */
 import { useEffect, useState, type ReactElement } from 'react'
 import {
+  DEFAULT_VIEW_STATE,
   describeInteraction,
   describeNode,
   getComponent,
+  isolateBidi,
+  viewStateName,
+  viewStateOrder,
   listInteractionSentences,
   namingContexts,
   type CodeIndex,
@@ -88,6 +92,12 @@ export const MANY_TARGETS = '상호작용은 노드 하나를 골랐을 때 겁�
 const NO_INTERACTIONS = '아직 상호작용이 없습니다'
 /** 아직 타겟을 고르지 않은 액션의 선택지 문안. */
 const UNSET_TARGET_OPTION = '— 대상을 고르세요 —'
+/** «화면 상태 바꾸기» 의 대상이 목록에 없다(지운 상태) — 고른 값을 그대로 보여 고칠 길을 남긴다. 문장의 «사라진 상태» 와 같은 말이다. */
+export function missingStateOption(id: string): string {
+  return `사라진 상태 (${id})`
+}
+/** 상태가 없는 페이지의 «화면 상태 바꾸기» — 기본 하나만 고를 수 있다. */
+export const NO_VIEW_STATES = '이 페이지에는 화면 상태가 없습니다 — 상태를 먼저 만드세요'
 
 /** 트리거 4종. **「상호작용」 「모델」이 고정한 것이고 화면은 그대로 보인다.** */
 const TRIGGERS: readonly { value: InteractionTrigger; label: string }[] = [
@@ -97,11 +107,12 @@ const TRIGGERS: readonly { value: InteractionTrigger; label: string }[] = [
   { value: 'submit', label: '제출' },
 ]
 
-/** 액션 6종. 순서는 「상호작용」 「모델」의 예와 같다. */
+/** 액션 7종. 순서는 「상호작용」 「모델」의 예와 같다. */
 const ACTION_TYPES: readonly { value: InteractionAction['type']; label: string }[] = [
   { value: 'setProp', label: '속성 바꾸기' },
   { value: 'setVisible', label: '보이기·숨기기' },
   { value: 'switchTab', label: '탭 전환' },
+  { value: 'setViewState', label: '화면 상태 바꾸기' },
   { value: 'navigate', label: '페이지 이동' },
   { value: 'openModal', label: '팝업 열기' },
   { value: 'closeModal', label: '팝업 닫기' },
@@ -122,6 +133,8 @@ function emptyAction(type: InteractionAction['type']): InteractionAction {
       return { type: 'setVisible', target: '', value: false }
     case 'switchTab':
       return { type: 'switchTab', target: '' }
+    case 'setViewState':
+      return { type: 'setViewState', target: '' }
     case 'navigate':
       return { type: 'navigate', target: '' }
     case 'openModal':
@@ -379,7 +392,14 @@ function ActionRow(props: {
         </select>
       </label>
 
-      {action.type === 'closeModal' ? null : action.type === 'navigate' || action.type === 'openModal' ? (
+      {action.type === 'closeModal' ? null : action.type === 'setViewState' ? (
+        <ViewStateTargetField
+          document={doc}
+          value={action.target}
+          disabled={disabled}
+          onCommit={(value) => onChange({ ...action, target: value })}
+        />
+      ) : action.type === 'navigate' || action.type === 'openModal' ? (
         <PageTargetField
           projectId={props.projectId}
           value={action.target}
@@ -448,6 +468,47 @@ function ActionRow(props: {
     </div>
   )
 }
+
+/**
+ * «화면 상태 바꾸기» 의 대상 — 그 페이지의 상태 트리(«기본» + 트리 차례 · 하위 상태는 깊이만큼 들인다). 상태가 없는 페이지는 «기본» 하나와
+ * 안내를 보인다. 목록에 없는 대상(지운 상태)은 «사라진 상태» 로 그대로 보인다 — 지우지 않는다(노드 대상과 같다).
+ */
+function ViewStateTargetField(props: {
+  document: PageDocument
+  value: string
+  disabled: boolean
+  onCommit: (value: string) => void
+}): ReactElement {
+  const states = Array.isArray(props.document.viewStates) ? props.document.viewStates : []
+  const order = viewStateOrder(states)
+  const known = props.value === '' || props.value === DEFAULT_VIEW_STATE || states.some((state) => state.id === props.value)
+  return (
+    <>
+      <label className="wb-shell-field wb-shell-field-oneline">
+        대상 상태
+        <select
+          className="wb-shell-select"
+          disabled={props.disabled}
+          value={props.value}
+          onChange={(event) => props.onCommit(event.target.value)}
+        >
+          <option value="">{UNSET_TARGET_OPTION}</option>
+          <option value={DEFAULT_VIEW_STATE}>{viewStateName(states, DEFAULT_VIEW_STATE)}</option>
+          {order.map(({ state, depth }) => (
+            <option key={state.id} value={state.id}>
+              {`${STATE_INDENT.repeat(depth)}${isolateBidi(state.name)}`}
+            </option>
+          ))}
+          {!known && <option value={props.value}>{missingStateOption(props.value)}</option>}
+        </select>
+      </label>
+      {states.length === 0 && <p className="wb-shell-panel-notice">{NO_VIEW_STATES}</p>}
+    </>
+  )
+}
+
+/** 하위 상태를 들이는 글자 — 깊이마다 둘(고르개 항목은 꾸밀 수 없다). */
+const STATE_INDENT = '\u00a0\u00a0'
 
 /**
  * `setProp`의 prop과 값.

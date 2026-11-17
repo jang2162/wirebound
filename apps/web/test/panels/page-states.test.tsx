@@ -19,7 +19,7 @@ import { applyOps, invertOps, walkNodes, type PageDocument, type PatchOp, type V
 import type { ApiClient } from '../../src/api/client'
 import type { PageDetail, PatchResult, TreeMenuNode } from '../../src/api/types'
 import { DESCRIBE_STATE_LABEL, SAVE_STATE_DESCRIPTION_LABEL, STATE_DESCRIPTION_LABEL, STATE_NAME_LABEL } from '../../src/panels/page-states'
-import { REMOVE_STATE_TITLE, STATES_CHANGED, STATES_RECHECK } from '../../src/panels/remove-state-dialog'
+import { REMOVE_STATE_TITLE, STATES_CHANGED, STATES_RECHECK, brokenInteractionsSentence } from '../../src/panels/remove-state-dialog'
 import type { EditorStore } from '../../src/store/editor-store'
 import { HEAD_SEQ, OTHER_PAGE_ID, OTHER_PAGE_TITLE, PAGE_ID, PROJECT_ID, openPage, pageDetail, pageDoc } from '../editor-harness'
 import '../../src/catalog-setup'
@@ -423,6 +423,38 @@ describe('상태 삭제 확인', () => {
     const dialog = screen.getByRole('dialog', { name: REMOVE_STATE_TITLE })
     fireEvent.click(within(dialog).getAllByRole('button').at(-1)!, { detail: 1 })
   }
+
+  /**
+   * **끊길 «화면 상태 바꾸기» 를 함께 말한다**(RV-VS L4) — 지우는 상태(와 하위 상태)로 바꾸는 동작이 든 노드 수다. 상태를 지워도 그 동작은 남아
+   * 끊긴다(경고 `view-state-missing` — 저장은 된다). 함께 지워지는 노드 안의 동작 · 남는 상태 · 기본으로 바꾸는 동작은 안 센다.
+   */
+  it('지우는 상태 · 하위 상태로 바꾸는 상호작용이 든 노드 수를 «상호작용 N곳이 끊깁니다» 로 말한다', async () => {
+    const to = (id: string, ...targets: string[]): WbNode => ({
+      id,
+      type: 'Button',
+      props: { label: id },
+      interactions: [{ on: 'click', actions: targets.map((target) => ({ type: 'setViewState' as const, target })) }],
+    })
+    const base = doc()
+    const children: WbNode[] = [
+      ...base.root.children!,
+      to('n-to-admin', 's_admin'),
+      // 한 노드에 둘이어도 한 곳이다.
+      to('n-to-login', 's_login', 's_admin'),
+      to('n-to-guest', 's_guest'),
+      to('n-to-default', 'default'),
+      // 함께 지워지는 노드 안의 동작은 사라진다 — 끊기지 않는다.
+      { id: 'n-login-card', type: 'Card', visibility: { mode: 'only', states: ['s_login'] }, children: [to('n-in-login', 's_admin')] },
+    ]
+    await open({ document: { ...base, root: { ...base.root, children } } })
+    chooseItem(openStateMenu('로그인'), '삭제')
+    expect(dialogShown().sentences).toEqual([
+      '"로그인" 상태와 하위 상태 1개(관리자)를 지웁니다.',
+      '노드 4개가 함께 삭제됩니다 · 노드 1개는 남은 상태에서만 보임이 유지됩니다.',
+      brokenInteractionsSentence(2),
+    ])
+    expect(brokenInteractionsSentence(2)).toBe('상호작용 2곳이 끊깁니다 — 지우는 상태로 바꾸는 동작이 남습니다.')
+  })
 
   it('상태 · 하위 상태 · 보임이 걸린 노드 셋을 말하고, 보낸 묶음이 바꾼 것이 상자가 말한 것과 같다 · 되돌리기 한 번에 돌아온다', async () => {
     const srv = await open()

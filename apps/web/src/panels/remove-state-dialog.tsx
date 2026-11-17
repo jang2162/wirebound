@@ -9,6 +9,7 @@
  * | 함께 지워지는 노드(이름) | `removedNodeIds` — `only` 가 비어 지워지는 노드와 그 자손 |
  * | 보임을 걷는 노드 수 | `clearedNodeIds` — `except` 가 비어 모든 상태에서 보이게 되는 노드 |
  * | 보임을 줄이는 노드 수 | `trimmedNodeIds` — 남은 상태로 바뀌는 노드 |
+ * | 끊기는 상호작용 수 | 지우는 상태로 바꾸는 «화면 상태 바꾸기» 가 든 노드(지워지는 노드 밖) — 삭제는 그 동작을 안 고친다(경고로 남는다) |
  *
  * 편집 하나 — 되돌리기 한 번에 상태 · 보임 · 노드가 함께 돌아온다.
  *
@@ -16,11 +17,12 @@
  *
  * **보인 것과 보낼 묶음이 같은지를 id 집합으로 견준다** — 연 뒤 남이 그 상태에 보임을 걸거나 · 지울 노드를 바꾸거나 · 하위 상태를 더하면
  * «삭제»가 보내지 않고 새 집합으로 다시 서며 «목록이 바뀌었습니다» 한 줄을 띄운다(메뉴 연쇄 삭제 `./menu-delete-dialog.tsx` 와 같은 꼴 — 확인
- * 단추가 «새 목록 확인»이 되고 첫 누름은 안 보낸다). 지울 · 고칠 노드 안에 남이 잡은 노드가 있으면 «삭제»를 끄고 까닭을 단다(`editBlockedBy` —
+ * 단추가 «새 목록 확인»이 되고 첫 누름은 안 보낸다). 끊기는 상호작용 수는 견주지 않는다 — 보낼 묶음을 안 바꾸므로 그 줄만 따라 고쳐 선다. 지울 · 고칠 노드 안에 남이 잡은 노드가 있으면 «삭제»를 끄고 까닭을 단다(`editBlockedBy` —
  * 서버도 423 으로 막는다).
  */
 import { useId, useState, type ReactElement } from 'react'
 import {
+  isViewStateAction,
   nodeRowLabel,
   removeViewStateOps,
   walkNodes,
@@ -62,6 +64,11 @@ export function removeStateCounts(counts: { removed: number; cleared: number; tr
   return parts.length === 0 ? '이 상태에 보임이 걸린 노드는 없습니다.' : `${parts.join(' · ')}.`
 }
 
+/** 셋째 문장 — 지우는 상태로 바꾸는 «화면 상태 바꾸기» 가 든 노드 수(삭제는 그 동작을 안 고친다 — 끊긴 채 남는다). */
+export function brokenInteractionsSentence(count: number): string {
+  return `상호작용 ${count}곳이 끊깁니다 — 지우는 상태로 바꾸는 동작이 남습니다.`
+}
+
 /** 삭제가 바꾸는 것 — 상자가 보이는 것과 보내는 것이 이 하나에서 나온다. 검증 전 문서에서 걷기가 던지면 `null`. */
 interface Removal {
   ops: PatchOp[]
@@ -69,6 +76,8 @@ interface Removal {
   removed: { id: string; label: string }[]
   cleared: number
   trimmed: number
+  /** 지우는 상태로 바꾸는 동작이 든 노드 수 — 함께 지워지는 노드는 안 센다(동작째 사라진다). 열쇠에 안 든다 — 보낼 묶음을 안 바꾼다. */
+  broken: number
   /** 네 집합을 정렬해 이은 글 — 견줄 열쇠. */
   key: string
 }
@@ -79,9 +88,16 @@ function removal(doc: PageDocument, stateId: string, codes: CodeIndex | undefine
     if (result === null) return null
     const states = Array.isArray(doc.viewStates) ? doc.viewStates : []
     const gone = new Set(result.removedNodeIds)
+    const goneStates = new Set(result.removedStateIds)
     const removed: { id: string; label: string }[] = []
+    let broken = 0
     for (const { node } of walkNodes(doc.root)) {
       if (gone.has(node.id)) removed.push({ id: node.id, label: nodeRowLabel(node as WbNode, codes) })
+      else if (
+        node.interactions?.some(({ actions }) => actions.some((action) => isViewStateAction(action) && goneStates.has(action.target)))
+      ) {
+        broken += 1
+      }
     }
     const sorted = (ids: readonly string[]): string => [...ids].sort().join(',')
     return {
@@ -90,6 +106,7 @@ function removal(doc: PageDocument, stateId: string, codes: CodeIndex | undefine
       removed,
       cleared: result.clearedNodeIds.length,
       trimmed: result.trimmedNodeIds.length,
+      broken,
       key: [result.removedStateIds, result.removedNodeIds, result.clearedNodeIds, result.trimmedNodeIds].map(sorted).join('|'),
     }
   } catch {
@@ -179,6 +196,9 @@ function OpenRemoveStateDialog(props: {
           <p className="wb-shell-view-states-sentence">
             {removeStateCounts({ removed: pending.removed.length, cleared: pending.cleared, trimmed: pending.trimmed })}
           </p>
+        )}
+        {pending !== null && pending.broken > 0 && (
+          <p className="wb-shell-view-states-sentence">{brokenInteractionsSentence(pending.broken)}</p>
         )}
         {shown.length > 0 && (
           <ul className="wb-shell-view-states-removed" aria-label="함께 지워지는 노드">

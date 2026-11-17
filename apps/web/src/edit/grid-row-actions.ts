@@ -12,7 +12,8 @@
  *
  * **바깥 노드의 상호작용이 그 행(이나 그 안)을 가리키면 못 뗀다** — 뒤 행은 새 id 라 바깥의 대상이 안 따라가, 떼기 전에는 모든 줄에 닿던 동작(숨기기 ·
  * 행 꼴 바꾸기)이 떼어 낸 뒤 첫 줄에만 닿는다(리뷰 `docs/superpowers/plans/2026-10-26-rv-grb-report.md` M5). 대상을 함께 옮기는 길(동작을 뒤 행 몫으로
- * 하나 더 짓기)은 그 동작이 바깥 노드의 것이라 행 하나를 떼는 묶음이 남의 노드를 고치게 된다 — 고르지 않았다.
+ * 하나 더 짓기)은 그 동작이 바깥 노드의 것이라 행 하나를 떼는 묶음이 남의 노드를 고치게 된다 — 고르지 않았다. «화면 상태 바꾸기» 의 대상은 노드가 아니라
+ * 상태라 안 센다(상태 id 가 행 안 노드 id 와 같은 글자여도 — 붙이기 · 모듈 · id 재발급과 같은 가름).
  *
  * ## 열 틀로 칸 짓기 — 지금 그린 꼴을 칸으로 옮긴다
  *
@@ -60,7 +61,9 @@ import {
   MAX_OPS_PER_EDIT,
   applyOps,
   getByPointer,
+  isViewStateAction,
   zoneList,
+  type InteractionAction,
   type PageDocument,
   type PatchOp,
   type WbNode,
@@ -123,7 +126,8 @@ function targetedFromOutside(document: PageDocument, row: WbNode): boolean {
       const actions = (interaction as { actions?: unknown } | null)?.actions
       if (!Array.isArray(actions)) continue
       for (const action of actions as unknown[]) {
-        const target = (action as { target?: unknown } | null)?.target
+        if (action === null || typeof action !== 'object' || isViewStateAction(action as InteractionAction)) continue
+        const target = (action as { target?: unknown }).target
         if (typeof target === 'string' && inside.has(target)) return true
       }
     }

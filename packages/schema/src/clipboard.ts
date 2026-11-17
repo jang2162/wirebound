@@ -17,7 +17,7 @@
  */
 import { z } from 'zod'
 import { DocumentEnvelopeSchema, ViewStatesSchema } from './envelope'
-import { isPageTargetAction, isTargetlessAction } from './interaction/check'
+import { isPageTargetAction, isTargetlessAction, isViewStateAction } from './interaction/check'
 import { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, type Migration } from './migrate'
 import { DEFAULT_VIEW_STATE, type Interaction, type InteractionAction, type PageDocument, type ViewState, type WbNode } from './node'
 import { collectNodeIds, remapNodeIds } from './tree'
@@ -179,6 +179,7 @@ export function readNodesEnvelope(
  * | 붙이는 노드(자손 포함) | 늘 — 새 id 로 따라간다 |
  * | 그 밖의 노드 id | `keep.node(id)` 가 참(붙이는 문서에 그 노드가 있다) |
  * | 페이지 대상(`navigate` · `openModal`) | `keep.page(target)` 가 참(지금 프로젝트에 그 페이지가 있다) |
+ * | 화면 상태 대상(`setViewState`) | 기본이거나 `keep.state(target)` 가 참(붙일 페이지에 그 상태가 있다) |
  * | 빈 대상(아직 안 고름) · 대상 없는 동작(팝업 닫기) | 늘 — 밖을 가리키는 것이 아니다 |
  *
  * 뺀 동작은 `droppedActions` 로 센다. **동작이 다 빠진 상호작용은 상호작용째 빼고**, 그래서 상호작용이 하나도 안 남으면
@@ -206,6 +207,7 @@ export function prepareNodesForPaste(
     if (isTargetlessAction(action)) return true
     if (action.target.trim() === '') return true
     if (isPageTargetAction(action)) return keep.page(action.target)
+    if (isViewStateAction(action)) return action.target === DEFAULT_VIEW_STATE || keepState(action.target)
     return inside.has(action.target) || keep.node(action.target)
   }
 

@@ -872,7 +872,7 @@ function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: Render
   const onEvent = options.interaction?.onEvent
   let overlay = (native === undefined ? undefined : GESTURE_OVERLAY.get(native)) ?? options.interaction?.overlay
   for (const trigger of TRIGGERS_OF[dom] ?? []) {
-    const result = runInteraction(root, node.id, trigger, overlay)
+    const result = runInteraction(root, node.id, trigger, overlay, options.viewStates)
     overlay = result.overlay
     // **아무 규칙도 없으면 알리지 않는다.** 노드마다 트리거가 하나뿐인 것이 보통이라
     // 그러지 않으면 빈 결과가 늘 하나씩 따라 나간다.

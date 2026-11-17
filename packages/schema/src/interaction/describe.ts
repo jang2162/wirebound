@@ -58,7 +58,15 @@ import { CATALOG_DEFS } from '../component/catalog/index'
 import { getComponent } from '../component/registry'
 import { isolateBidi } from '../bidi'
 import { nodeAlias, viewStateName } from '../display'
-import type { AnyDocument, Interaction, InteractionAction, InteractionTrigger, ViewState, WbNode } from '../node'
+import {
+  DEFAULT_VIEW_STATE,
+  type AnyDocument,
+  type Interaction,
+  type InteractionAction,
+  type InteractionTrigger,
+  type ViewState,
+  type WbNode,
+} from '../node'
 import { pageTargetPath } from '../page-target'
 import { walkNodes } from '../tree'
 import { childLists } from '../zones'
@@ -149,6 +157,12 @@ const UNSET_PAGE = '아직 정해지지 않은 페이지'
  * (`그리드가 로 바뀝니다`) — 미확정을 **아무 말도 하지 않는 것으로 접은** 형태다.
  */
 const UNSET_PROP = '아직 고르지 않은 속성'
+/**
+ * `setViewState`의 대상 상태가 문서의 목록에 없다 — 지운 상태다. 사라진 노드(`MISSING_NODE`)와 같은 꼴로 말한다. 아직 안 고른 것은
+ * `UNSET_STATE`다.
+ */
+const MISSING_STATE = '사라진 상태'
+const UNSET_STATE = '아직 고르지 않은 상태'
 /** 라벨을 문장에 실을 때의 상한. 넘으면 잘리고 `…`가 붙는다. */
 const LABEL_MAX = 20
 
@@ -207,6 +221,8 @@ interface NodeIndex {
   /** 노드 id → 부모와 그 안의 자리(구역 · 차례) — 탭 바꾸기가 패널의 부모 `Tabs`와 패널 차례를 읽는다. */
   parents: Map<string, { parent: WbNode; index: number }>
   naming: Map<string, NamingContext>
+  /** 그 문서의 화면 상태 목록 — `setViewState`가 상태를 이름으로 부른다. 레이아웃은 없다. */
+  viewStates: readonly ViewState[] | undefined
   /** 공통코드 표 — 문장이 부르는 모든 이름(트리거 · 대상 · 탭)이 이 하나를 읽는다. */
   codes: CodeIndex | undefined
 }
@@ -218,7 +234,8 @@ function nodeIndex(document: AnyDocument, codes: CodeIndex | undefined): NodeInd
     nodes.set(node.id, node)
     if (parent !== null && !parents.has(node.id)) parents.set(node.id, { parent, index })
   }
-  return { nodes, parents, naming: namingContexts(document), codes }
+  const viewStates = (document as { viewStates?: ViewState[] }).viewStates
+  return { nodes, parents, naming: namingContexts(document), viewStates: Array.isArray(viewStates) ? viewStates : undefined, codes }
 }
 
 /**
@@ -266,7 +283,7 @@ function targetName(index: NodeIndex, target: string): string {
   return node === undefined ? MISSING_NODE : nodeName(node, index.naming.get(node.id), index.codes)
 }
 
-/** 액션 하나의 절. **5종이 모두 여기 있다** — 유니온이라 빠뜨리면 컴파일러가 잡는다. */
+/** 액션 하나의 절. **7종이 모두 여기 있다** — 유니온이라 빠뜨리면 컴파일러가 잡는다. */
 function actionClause(index: NodeIndex, action: InteractionAction): string {
   const nodes = index.nodes
   switch (action.type) {
@@ -312,6 +329,8 @@ function actionClause(index: NodeIndex, action: InteractionAction): string {
       const which = label === undefined ? `${at.index + 1}번째 탭` : `"${label}" 탭`
       return `${tabs}${subjectParticle(tabs)} ${which}${directionParticle(which)} 바뀝니다`
     }
+    case 'setViewState':
+      return `화면이 ${viewStatePhrase(index.viewStates, action.target)}로 바뀝니다`
     case 'navigate':
       return `${pageName(action.target)}${directionParticle(pageName(action.target))} 이동합니다`
     case 'openModal': {
@@ -433,6 +452,17 @@ export function describePageTarget(target: string): string {
 function pageName(target: string): string {
   const path = pageTargetPath(target)
   return path.length === 0 ? UNSET_PAGE : `${isolateBidi(path)} 페이지`
+}
+
+/**
+ * `setViewState`의 대상을 부르는 말 — «기본 상태» · «‘상세 열림’ 상태» · 지웠으면 «사라진 상태» · 안 골랐으면 «아직 고르지 않은 상태». 뒤에
+ * 붙는 조사(«로»)는 늘 «상태» 뒤라 받침을 셀 일이 없다. 이름은 사람이 지은 글이라 방향 제어를 가둔다.
+ */
+function viewStatePhrase(viewStates: readonly ViewState[] | undefined, target: string): string {
+  if (target === DEFAULT_VIEW_STATE) return '기본 상태'
+  if (typeof target !== 'string' || target.trim().length === 0) return UNSET_STATE
+  const state = viewStates?.find((entry: unknown) => (entry as { id?: unknown } | null)?.id === target)
+  return typeof state?.name === 'string' ? `‘${isolateBidi(state.name)}’ 상태` : MISSING_STATE
 }
 
 /** `setProp`의 값을 문장에 싣는 모양. 문자열은 따옴표로 감싸 낱말 경계를 보인다. */

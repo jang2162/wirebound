@@ -7,6 +7,8 @@
  *   아니라 뒤로 가기가 그것을 하나씩 밟지 않는다). 기본이면 질의를 걷는다. 편집하는 사람의 편집 모드는 주소를 안 고친다 — 편집 화면의 주소는
  *   페이지를 가리키는 것이지 읽는 상태가 아니다. 편집 모드에서 고른 뒤 뷰 모드로 오면 그때 싣는다. viewer 는 편집 모드 단추를 눌러도
  *   편집할 수 없어 늘 읽는 화면이다 — 모드와 상관없이 쓴다.
+ * - **쓰기를 멈추는 렌더(뷰 모드를 나감)에 한 번 더 쓴다.** 나갈 때 화면은 들어가기 전 고름으로 돌아가는데(`shell/use-view-state.ts`) 주소가
+ *   뷰 모드의 것으로 남으면 새로고침 · 복사한 주소가 나간 뒤의 화면과 다른 상태로 연다. 그 한 번 뒤로는 편집 모드 규칙대로 안 쓴다.
  * - **문서가 실린 뒤에만 쓴다.** 실리기 전에는 목록이 비어 주소의 상태가 «없는 id» 로 읽혀, 쓰기가 연 주소의 질의를 걷어 버린다. 문서는
  *   읽기(페이지를 연 첫 커밋)보다 늦게 실려 쓰기는 늘 읽은 값 위에서 돈다.
  */
@@ -24,6 +26,13 @@ export function useViewStateAddress(pageId: string | undefined, writes: boolean)
   const loaded = useOpenDocument(pageId) !== null
   /** 주소를 읽은 페이지 — 그 페이지에서는 다시 안 읽는다(고른 뒤의 주소가 고른 값을 되돌리지 않게). */
   const [readFor, setReadFor] = useState<string | undefined>(undefined)
+  /** 쓰기를 멈춘 렌더에서 선다 — 그 렌더의 고름(되돌린 고름)으로 주소를 한 번 맞춘다(머리말). */
+  const [wrote, setWrote] = useState(writes)
+  const [leftWriting, setLeftWriting] = useState(false)
+  if (wrote !== writes) {
+    setWrote(writes)
+    setLeftWriting(!writes)
+  }
 
   useEffect(() => {
     if (pageId === undefined || readFor === pageId) return
@@ -33,7 +42,8 @@ export function useViewStateAddress(pageId: string | undefined, writes: boolean)
   }, [pageId, readFor, params, choose])
 
   useEffect(() => {
-    if (!writes || pageId === undefined || !loaded) return
+    if (!(writes || leftWriting) || pageId === undefined || !loaded) return
+    if (leftWriting) setLeftWriting(false)
     if ((params.get(STATE_QUERY) ?? null) === state) return
     setParams(
       (previous) => {
@@ -44,5 +54,5 @@ export function useViewStateAddress(pageId: string | undefined, writes: boolean)
       },
       { replace: true },
     )
-  }, [writes, pageId, loaded, state, params, setParams])
+  }, [writes, leftWriting, pageId, loaded, state, params, setParams])
 }
