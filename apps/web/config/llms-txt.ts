@@ -138,6 +138,7 @@ const ACTIONS: Record<string, string> = {
   setProp: '`{ target: <node id>, prop, value }` — set a prop of another node.',
   setVisible: '`{ target: <node id>, value: boolean }` — show or hide a node.',
   switchTab: '`{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.',
+  setViewState: `\`{ target: <view state id> | "${DEFAULT_VIEW_STATE}" }\` — switch the screen of the document holding the rule to that state from its own \`viewStates\` (\`"${DEFAULT_VIEW_STATE}"\` is the base screen). Inside an open popup it switches that popup only. A target missing from the list is a warning, not an error.`,
   navigate: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — go to another page.`,
   openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is \`Popup\`.`,
   closeModal: '`{}` — no target; close the top-most open popup.',

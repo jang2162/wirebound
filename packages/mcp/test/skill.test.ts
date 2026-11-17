@@ -187,6 +187,9 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'navigate',
       'kind',
       'popup',
+      // 화면 상태 바꾸기 — 액션 · 견주는 액션
+      'setViewState',
+      'setVisible',
       // 공통코드의 꼴 — 노드 칸 · 응답 필드
       'code',
       'resolved',

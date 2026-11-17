@@ -172,6 +172,27 @@
 ]
 ```
 
+**누름으로 상태를 바꾸기** — 상호작용 액션 `setViewState` 다. 대상은 그 규칙이 든 문서의 `viewStates` 의 id 이거나 `"default"`(기본 화면)다.
+목록 행 · [등록] 이 상세 폼을 여는 흐름은 상세를 상태로 숨기고(`visibility`) 여는 단추에 그 상태로 바꾸는 `setViewState` 를, [취소] 에
+`"default"` 로 바꾸는 `setViewState` 를 단다. `setVisible` 은 상태가 숨긴 노드를 드러내지 못한다. 팝업 안의 규칙은 그 팝업의 상태만 바꾼다. 상태를
+지워도 그 상태를 가리키는 `setViewState` 는 지우지 않아도 저장된다 — `validate` 가 경고한다(`interaction-target`).
+
+<!-- wirebound:example set-view-state -->
+```json
+[
+  {
+    "op": "add",
+    "path": "/root/children/-",
+    "value": {
+      "id": "n_open_login",
+      "type": "Button",
+      "props": { "label": "로그인 화면 보기" },
+      "interactions": [{ "on": "click", "actions": [{ "type": "setViewState", "target": "s_login" }] }]
+    }
+  }
+]
+```
+
 `validate` 는 목록에 없는 상태를 가리키는 보임(`warning`) · 어느 보임도 안 가리키는 상태(`info`)를 말한다. `info` 는 결함이 아니다 —
 `infos` 로 따로 센다.
 
