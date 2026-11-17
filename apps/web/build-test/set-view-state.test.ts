@@ -6,13 +6,14 @@
  * | 뷰 모드 — 열고 닫기 | 상태가 숨긴 상세를 [등록] 이 열고 [취소] 가 기본으로 닫는다 · 셸 전환기가 그 상태를 보인다 | 1 |
  * | 뷰 모드 — 모드를 나가면 | 편집 모드에서 고른 «상세 열림» → 뷰 모드에서 [취소] 로 기본 → 편집 모드로 오면 «상세 열림» 으로 돌아간다 · 주소도 | 3 |
  * | 뷰 모드 — 나간 뒤 주소 | 기본에서 들어가 [등록] → 나가면 주소 `?state=` 가 걷히고 새로고침이 기본으로 연다 | RV-VS M1 |
+ * | 뷰 모드 — 떠났다 돌아옴 | 뷰 모드 동안 다른 페이지에 갔다 돌아와 나가도 · 다른 페이지에서 나가도 그 페이지의 들어가기 전 고름이다 | RV-VS L1 |
  * | 뷰 모드 — 팝업 겹 | 팝업 안의 [더보기] 는 그 겹만 바꾸고 연 화면은 그대로 · 닫았다 다시 열면 기본 | 2 |
  * | 뷰 모드 — 지운 상태 | 대상 상태를 지우는 편집이 저장된다(경고) · 누르면 끊김 문장이 서고 화면은 그대로 | 4 |
  * | 번들 — 열고 닫기 | 1 과 같고 · 뷰어 고르개와 주소 해시가 따라간다 | 1 |
  * | 번들 — 팝업 겹 | 2 와 같다 | 2 |
  *
- * 나간 뒤 주소(`?state=`)의 축은 «나간 뒤 주소» 케이스가 갖는다 — 주소 맞춤(`shell/view-state-address.ts`)을 떼면 «모드를 나가면» 의
- * `search` 도 함께 죽는다.
+ * 나간 뒤 주소(`?state=`)의 축은 «나간 뒤 주소» 케이스가 갖는다 — 주소 맞춤(`shell/view-state-address.ts`)을 떼면 «모드를 나가면» · «떠났다
+ * 돌아옴» 의 `search` 도 함께 죽는다. «떠났다 돌아옴» 은 페이지를 옮길 때 앞 페이지의 기록을 버리는 판에서 혼자 죽는다.
  *
  * 번들은 저장소 빌드의 산출물(api 가 `packages/*\/dist` 를 읽는다)로 그린다 — `pnpm build` 가 먼저다.
  */
@@ -125,6 +126,58 @@ describe.skipIf(!전제.ok)('화면 상태 바꾸기 — 실브라우저', () =>
           reload: { detail: false, switcher: '화면 상태: 기본', notices: [] },
         })
       })
+    })
+
+    it('RV-VS L1 — 뷰 모드 동안 다른 페이지에 갔다 돌아와 나가면 들어가기 전 고름 · 다른 페이지에서 나가면 그 페이지의 기본', async () => {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator('[data-wb-id="n_add"]').waitFor()
+        await switcher(page).click()
+        await page.getByRole('menuitemradio', { name: '상세 열림' }).click()
+        await canvasFrame(page).locator('[data-wb-id="n_detail_text"]').waitFor()
+        await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await page.locator('.wb-shell-mode[aria-pressed="true"]', { hasText: '뷰 모드' }).waitFor()
+        // 「다른」 에서 그 페이지의 상태를 바꾼 뒤 「목록」 으로 돌아온다 — 페이지를 옮기면 고름은 기본이다.
+        await page.getByRole('link', { name: '다른', exact: true }).click()
+        await canvasFrame(page).locator('[data-wb-id="n_b_add"]').click()
+        await settle(async () => present(await canvasDocument(page), '[data-wb-id="n_b_detail"]'))
+        const onOther = {
+          bDetail: await present(await canvasDocument(page), '[data-wb-id="n_b_detail"]'),
+          switcher: await switcher(page).getAttribute('aria-label'),
+        }
+        await page.getByRole('link', { name: '목록', exact: true }).click()
+        await canvasFrame(page).locator('[data-wb-id="n_add"]').waitFor()
+        const returned = await screen(page, await canvasDocument(page))
+        await toEdit(page)
+        const edit = await canvasDocument(page)
+        await settle(() => present(edit, '[data-wb-id="n_detail_text"]'))
+        await settle(async () => search(page) === '?state=s_detail')
+        const exit = { ...(await screen(page, edit)), search: search(page) }
+        // 「다른」 에서 나간다 — 그 페이지는 뷰 모드 전에 고른 것이 없다.
+        await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await page.locator('.wb-shell-mode[aria-pressed="true"]', { hasText: '뷰 모드' }).waitFor()
+        await page.getByRole('link', { name: '다른', exact: true }).click()
+        await canvasFrame(page).locator('[data-wb-id="n_b_add"]').click()
+        await settle(async () => search(page) === '?state=s_detail')
+        const otherInView = { bDetail: await present(await canvasDocument(page), '[data-wb-id="n_b_detail"]'), search: search(page) }
+        await toEdit(page)
+        await settle(async () => search(page) === '')
+        const otherExit = {
+          bDetail: await present(await canvasDocument(page), '[data-wb-id="n_b_detail"]'),
+          switcher: await switcher(page).getAttribute('aria-label'),
+          search: search(page),
+        }
+        expect({ onOther, returned, exit, otherInView, otherExit }).toEqual({
+          onOther: { bDetail: true, switcher: '화면 상태: B 상세' },
+          returned: { detail: false, switcher: '화면 상태: 기본', notices: [] },
+          exit: { detail: true, switcher: '화면 상태: 상세 열림', notices: [], search: '?state=s_detail' },
+          otherInView: { bDetail: true, search: '?state=s_detail' },
+          otherExit: { bDetail: false, switcher: '화면 상태: 기본', search: '' },
+        })
+      } finally {
+        await context.close()
+      }
     })
 
     it('Focus 2 — 팝업 안의 상태 바꾸기는 그 겹만 바꾸고 연 화면은 그대로 · 닫았다 다시 열면 기본', async () => {
@@ -300,7 +353,8 @@ async function withView(stack: EditorStack, path: string, run: (page: Page, fram
 
 /**
  * 메뉴 «관리자» 아래 — «목록»(화면: 상태 «상세 열림» · «임시» · [등록] · 상세 카드(상세 열림에서만 — 안에 [취소]) · [팝업 열기] · [끊긴 열기](임시로))
- * · «팝업»(팝업: 상태 «더보기»(id 는 연 화면의 «상세 열림» 과 같은 `s_detail`) · [더보기] · 추가 칸(더보기에서만)). 픽스처를 세운 뒤 «임시» 를 목록에서 지운다 — [끊긴 열기] 만 그것을 가리킨다.
+ * · «팝업»(팝업: 상태 «더보기»(id 는 연 화면의 «상세 열림» 과 같은 `s_detail`) · [더보기] · 추가 칸(더보기에서만))
+ * · «다른»(화면: 상태 «B 상세»(id `s_detail`) · [B 등록] · B 상세 글(B 상세에서만)). 픽스처를 세운 뒤 «임시» 를 목록에서 지운다 — [끊긴 열기] 만 그것을 가리킨다.
  */
 async function fixture(
   stack: EditorStack,
@@ -315,6 +369,7 @@ async function fixture(
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const list = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '목록', kind: 'page' }), '목록')
   const popup = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '팝업', kind: 'popup' }), '팝업')
+  const other = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '다른', kind: 'page' }), '다른')
   const listOps = [
     {
       op: 'add',
@@ -355,6 +410,17 @@ async function fixture(
     },
   ]
   ok(await call('PATCH', `/projects/${project.id}/pages/${popup.id}/ops`, { baseSeq: 0, ops: popupOps }), 'ops 팝업')
+  // «다른» 의 상태 id 도 «목록» 과 같은 글자다 — 떠났다 돌아온 판이 페이지 id 가 아니라 글자로 되돌리면 섞인다.
+  const otherOps = [
+    { op: 'add', path: '/viewStates', value: [{ id: 's_detail', name: 'B 상세' }] },
+    { op: 'add', path: '/root/children/0', value: button('n_b_add', 'B 등록', [{ type: 'setViewState', target: 's_detail' }]) },
+    {
+      op: 'add',
+      path: '/root/children/1',
+      value: { id: 'n_b_detail', type: 'Text', props: { content: 'B 상세 글' }, visibility: { mode: 'only', states: ['s_detail'] } },
+    },
+  ]
+  ok(await call('PATCH', `/projects/${project.id}/pages/${other.id}/ops`, { baseSeq: 0, ops: otherOps }), 'ops 다른')
   // «임시» 를 지운다 — 보임은 안 가리키고 [끊긴 열기] 의 액션만 가리킨다.
   const removed = await call('PATCH', `/projects/${project.id}/pages/${list.id}/ops`, {
     baseSeq: 1,
