@@ -1,16 +1,17 @@
 /**
  * **코멘트 묶음이 캔버스를 가리킨다 — 실브라우저 판**(설계 `docs/superpowers/specs/2026-11-13-comment-focus-design.md`). «코멘트» 탭의 묶음에
- * 포커스가 들면 캔버스의 그 노드에 고른 것과 같은 링이 서고, 묶음을 누르면 숨은 노드가 보이는 화면 상태로 바뀌며, 머리 단추는 그 노드를 골라
- * «컴포넌트» 탭으로 간다. jsdom 판은 `test/panels/comment-focus.test.tsx` · `test/canvas/comment-pointing-ring.test.tsx`.
+ * 포커스가 들면 그것이 곧 고름이다 — 캔버스의 그 노드에 고른 것과 같은 링이 서고, 숨은 노드가 보이는 화면 상태로 바뀌고, 가려진 패널이
+ * 펼쳐지고, 칸 밖이면 굴려 들인다. 머리 단추는 그 노드를 골라 «컴포넌트» 탭으로 간다. jsdom 판은 `test/panels/comment-focus.test.tsx` ·
+ * `test/canvas/comment-pointing-ring.test.tsx`.
  *
- * jsdom 이 못 내는 것만 여기서 잰다 — Tab 차례로 묶음에 듦, 누름이 포커스를 준 뒤 클릭이 뒤따르는 차례(묶음 안 단추 · 링크 · 글 상자를
- * 누르면 포커스는 묶음 안으로 들어 링은 서되 상태는 안 바뀐다), 링의 자리.
+ * jsdom 이 못 내는 것만 여기서 잰다 — Tab 차례로 묶음에 듦, 누름이 포커스를 준 뒤 클릭이 뒤따르는 차례, 고름 곧바로 뒤의 둘째 몸짓, 링의 자리.
  *
  * | 무엇이 거짓이면 죽나 |
  * |---|
  * | Tab 으로 든 묶음의 노드에 링이 안 서거나 그 노드 상자와 1px 넘게 어긋난다 · 포커스로 선택 · «달 곳» · 초안이 바뀐다 |
- * | Tab 으로 들기만 해도 상태가 바뀐다 · 숨은 노드의 묶음을 눌러도 그 노드가 안 보인다 |
- * | 묶음 안의 «수정» · 고치는 상자의 Enter · 토큰 링크 · «삭제» 가 상태를 바꾼다 |
+ * | Tab 으로 들거나 묶음 · 그 안 단추 · 글 상자를 눌러도 숨은 노드가 곧바로 안 보인다 · 글을 고르는 몸짓에 고른 글이 사라진다 |
+ * | 고름 곧바로 뒤의 둘째 몸짓(구조 트리 줄 · 전환기 · 캔버스 누름 · 휠 · 페이지 옮김)이 낸 화면을 고름이 뒤에 덮는다 |
+ * | 묶음 안 토큰 링크가 데려간 노드가 그 묶음의 고름(상태)에 가려진다 |
  * | 고른 외곽선이 링 때문에 옮거나 사라진다 · 머리 단추가 고르지 않거나 «컴포넌트» 탭으로 안 간다 |
  * | 뷰 모드에 머리 단추가 서거나 묶음 누름이 링 · 상태 전환을 안 한다 · 캔버스 누름 · 탭 옮김에 링이 남는다 |
  */
@@ -97,15 +98,24 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       [...document.querySelectorAll('[data-wb-selected-id]')].map((element) => element.getAttribute('data-wb-selected-id')),
     )
   const frames = (page: Page) => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
-  /**
-   * 포인터의 한 번 누름은 고름을 더블클릭 간격만큼 미룬다(`src/panels/comment-panel.tsx` 의 `PICK_WAIT_MS`). «상태가 그대로다» 는 그 간격보다
-   * 넉넉히 뒤에 읽는다 — 곧바로 읽으면 늦게 서는 고름을 못 본다.
-   */
-  const pickSettled = (page: Page) => page.waitForTimeout(900)
-  /** 미룬 고름이 선 뒤 상태를 한 번 읽는다 — 단언할 값을 폴로 기다리지 않는다(그 값을 깨는 변조가 시간 초과로 죽는다). */
-  const pickedInto = async (page: Page, name: string) => {
-    await pickSettled(page)
+  /** 고름은 곧바로 선다 — 두 프레임 뒤 상태를 한 번 읽는다(폴로 기다리지 않는다 — 그 값을 깨는 변조가 시간 초과로 죽는다). */
+  const stateIs = async (page: Page, name: string) => {
+    await frames(page)
     expect(await switcherName(page)).toBe(`화면 상태: ${name}`)
+  }
+  /**
+   * 머리 전환기에서 상태를 고른다 — 포커스가 묶음 밖으로 나간다. 앞 누름에서 더블클릭 간격을 넘겨 연다 — 같은 자리의 메뉴 항목을 간격 안에 다시
+   * 누르면 둘째 누름으로 삼킨다(`src/shell/action-menu.tsx` 의 `DOUBLE_CLICK_MS`).
+   */
+  const chooseState = async (page: Page, name: string) => {
+    await page.waitForTimeout(600)
+    await page.getByRole('button', { name: /^화면 상태:/ }).click()
+    await page.getByRole('menuitemradio', { name, exact: true }).click()
+    await poll(
+      `상태 ${name}`,
+      () => switcherName(page),
+      (label) => label === `화면 상태: ${name}`,
+    )
   }
   const focusedGroup = (page: Page) =>
     page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('data-comment-node') ?? null)
@@ -162,90 +172,155 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
     }
   })
 
-  it('숨은 노드의 묶음 — Tab 으로 들면 그대로, 누르면 보이는 상태로 바뀌고 링이 선다', async () => {
+  it('숨은 노드의 묶음 — Tab 으로 들면 곧 보이는 상태로 바뀌고 링이 선다 · 사람이 상태를 바꾼 뒤 묶음을 다시 누르면 다시 고른다', async () => {
     const P = await fixture()
     const { page, close } = await openTab(P)
     try {
       await openCommentTab(page)
-      await tabInto(page, 'n_b')
-      await frames(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
-      expect(await rings(page)).toEqual([])
       expect(await canvasFrame(page).locator('[data-wb-id="n_b"]').count()).toBe(0)
-
-      // 묶음의 맨 글(작성자 줄)을 누른다 — 단추 · 링크가 아닌 자리.
-      await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
-      await pickedInto(page, '관리자')
+      await tabInto(page, 'n_b')
+      await stateIs(page, '관리자')
       await frames(page)
-
       expect(await rings(page)).toEqual(['n_b'])
       expect(await canvasFrame(page).locator('[data-wb-id="n_b"]').isVisible()).toBe(true)
+
+      // 사람이 기본으로 되돌린다 — 포커스가 전환기로 나간다. 묶음의 맨 글(작성자 줄)을 누르면 다시 든 포커스가 고른다.
+      await chooseState(page, '기본')
+      await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
+      await stateIs(page, '관리자')
     } finally {
       await close()
     }
   })
 
-  it('묶음 안의 «수정» · 고치는 상자의 Enter · 토큰 링크 · «삭제» 는 상태를 안 바꾼다 — 포커스는 묶음 안으로 든다', async () => {
+  it('묶음 안의 «수정» · 고치는 상자 · «삭제» 를 누르면 포커스가 들어 곧 고른다 · 그 단추의 일은 그대로 한다', async () => {
     const P = await fixture()
     const { page, close } = await openTab(P)
     try {
       await openCommentTab(page)
       const b = group(page, 'n_b')
 
-      // «수정» 을 누른다 — 고치는 상자가 선다(누른 단추는 상자로 바뀌어 내려간다).
+      // «수정» 을 누른다 — 고름(관리자)과 함께 고치는 상자가 선다.
       await b.getByRole('button', { name: '수정', exact: true }).first().click()
       const box = b.getByRole('textbox', { name: '코멘트 수정' })
       await box.waitFor()
-      await pickSettled(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
-      // 상자를 누르면 포커스가 묶음 안으로 든다 — 그 누름도 · 거기서 친 Enter 도 고름이 아니다.
+      await stateIs(page, '관리자')
+
+      // 사람이 기본으로 되돌린 뒤 상자를 누르면 다시 든 포커스가 고른다 — 친 글은 상자에 먹는다.
+      await chooseState(page, '기본')
       await box.click()
       expect(
         await page.evaluate(() => document.activeElement?.closest('[data-comment-node]')?.getAttribute('data-comment-node') ?? null),
       ).toBe('n_b')
-      await page.keyboard.press('Enter')
-      await pickSettled(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
+      await stateIs(page, '관리자')
+      const typed = await box.inputValue()
+      await page.keyboard.type('!')
+      expect((await box.inputValue()).length).toBe(typed.length + 1)
       await b.getByRole('button', { name: '취소', exact: true }).click()
 
-      // 키보드로 «수정» — 단추에 포커스를 두고 Enter.
+      // 키보드로 «수정» — 단추에 포커스를 두면(묶음 밖에서 듦) 고르고, Enter 는 상자를 연다.
+      await chooseState(page, '기본')
       await b.getByRole('button', { name: '수정', exact: true }).first().focus()
+      await stateIs(page, '관리자')
       await page.keyboard.press('Enter')
       await box.waitFor()
-      await frames(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
       await b.getByRole('button', { name: '취소', exact: true }).click()
 
-      // 토큰 링크 — 같은 페이지의 `n_a` 번호로 간다(그 노드를 고르고 강조). 상태는 그대로다.
-      const link = b.locator('.wb-shell-comment-body a')
-      await link.waitFor()
-      await link.click()
-      await poll(
-        '토큰이 그 노드를 고른다',
-        () => selectedOutline(page),
-        (list) => list.join() === 'n_a',
-      )
-      await pickSettled(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
-
-      // «삭제» — 둘째 코멘트를 지운다.
-      await openCommentTab(page)
-      await group(page, 'n_b').getByRole('button', { name: '삭제', exact: true }).last().click()
+      // «삭제» — 둘째 코멘트를 지운다(고름과 함께).
+      await chooseState(page, '기본')
+      await b.getByRole('button', { name: '삭제', exact: true }).last().click()
       await poll(
         '코멘트가 지워진다',
-        () => group(page, 'n_b').locator('.wb-shell-comment').count(),
+        () => b.locator('.wb-shell-comment').count(),
         (count) => count === 1,
       )
-      await pickSettled(page)
-      expect(await switcherName(page)).toBe('화면 상태: 기본')
-
-      // 양성 대조 — 같은 판에서 묶음 자체를 누르면 바뀐다.
-      await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
-      await pickedInto(page, '관리자')
+      expect(await switcherName(page)).toBe('화면 상태: 관리자')
     } finally {
       await close()
     }
   })
+
+  /**
+   * **묶음 안 토큰 링크가 데려간 노드는 그 묶음의 고름에 가려지지 않는다** — 링크를 누르면 포커스가 묶음에 든다. 그것이 고름이면 묶음의 노드를
+   * 보이는 상태로 바꾼 뒤 링크가 데려간 노드를 고르는데, 데려간 노드가 그 상태에서 숨으면 고른 노드가 캔버스에 안 선다. 픽스처: `n_x` 는 기본에서만
+   * 보이고(`except s_admin`), `n_b`(관리자에서만)의 코멘트가 `n_x` 의 번호를 가리킨다.
+   */
+  for (const mode of ['편집 모드', '뷰 모드'] as const) {
+    it(`${mode} — 묶음 안 토큰 링크가 데려간 노드가 그 묶음의 고름에 가려지지 않는다`, async () => {
+      const P = await fixture()
+      const pageId = P.split('/').at(-1)!
+      const added = await call('PATCH', `${P}/ops`, {
+        baseSeq: (await call('GET', P)).body.headSeq,
+        ops: [
+          {
+            op: 'add',
+            path: '/root/children/3',
+            value: {
+              id: 'n_x',
+              type: 'Text',
+              props: { content: '기본에서만 보이는 글' },
+              visibility: { mode: 'except', states: ['s_admin'] },
+            },
+          },
+        ],
+      })
+      expect(added.status).toBe(200)
+      const projectId = P.split('/')[2]!
+      const menu = (await call('POST', `/projects/${projectId}/menu`, { parentId: null, title: '나' })).body
+      const secondId = (await call('POST', `/projects/${projectId}/pages`, { menuNodeId: menu.id, title: '둘째' })).body.id as string
+      for (const [nodeId, body] of [
+        ['n_x', '엑스에 단 말'],
+        ['n_b', `여기로 [엑스](wb:comment/${pageId}/n_x) 가 보세요`],
+        ['n_b', `저기로 [둘째](wb:page/${secondId}) 가 보세요`],
+      ] as const) {
+        const res = await call('POST', `${P}/comments`, { nodeId, body })
+        expect(res.status).toBe(201)
+      }
+      const { page, close } = await openTab(P)
+      try {
+        if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await openCommentTab(page)
+        await canvasFrame(page).locator('[data-wb-id="n_x"]').waitFor()
+        const link = group(page, 'n_b').locator('.wb-shell-comment-body a[href*="node=n_x"]')
+        await link.waitFor()
+        expect(await focusedGroup(page)).toBe(null)
+
+        await link.click()
+        await poll(
+          '토큰이 n_x 를 데려간다',
+          () => page.evaluate(() => new URL(location.href).searchParams.get('node')),
+          (node) => node === null,
+        )
+        await page.waitForTimeout(700)
+        await frames(page)
+        expect({
+          state: await switcherName(page),
+          drawn: await canvasFrame(page).locator('[data-wb-id="n_x"]').count(),
+          ...(mode === '편집 모드' ? { selected: await selectedOutline(page) } : {}),
+        }).toEqual({ state: '화면 상태: 기본', drawn: 1, ...(mode === '편집 모드' ? { selected: ['n_x'] } : {}) })
+
+        // 다른 페이지로 데려가는 토큰 — 데려간 페이지 · 돌아온 페이지 다 기본이다.
+        await openCommentTab(page)
+        await group(page, 'n_b').locator(`.wb-shell-comment-body a[href$="/pages/${secondId}"]`).click()
+        await poll(
+          '둘째 페이지가 선다',
+          () => page.evaluate(() => location.pathname),
+          (path) => path.endsWith(secondId),
+        )
+        await page.waitForTimeout(700)
+        expect(await switcherName(page)).toBe('화면 상태: 기본')
+        await page.goBack()
+        await canvasFrame(page).locator('[data-wb-id="n_x"]').waitFor()
+        await page.waitForTimeout(700)
+        expect({ state: await switcherName(page), drawn: await canvasFrame(page).locator('[data-wb-id="n_x"]').count() }).toEqual({
+          state: '화면 상태: 기본',
+          drawn: 1,
+        })
+      } finally {
+        await close()
+      }
+    })
+  }
 
   it('편집 모드에서 다른 노드를 고른 채 — 고른 외곽선은 그대로 · 링은 따로', async () => {
     const P = await fixture()
@@ -260,7 +335,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       await openCommentTab(page)
 
       await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
-      await pickedInto(page, '관리자')
+      await stateIs(page, '관리자')
       await frames(page)
 
       expect(await rings(page)).toEqual(['n_b'])
@@ -303,7 +378,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       expect(await page.locator('.wb-shell-comment-group-pick').count()).toBe(0)
 
       await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
-      await pickedInto(page, '관리자')
+      await stateIs(page, '관리자')
       await frames(page)
 
       expect(await rings(page)).toEqual(['n_b'])
@@ -345,8 +420,8 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
   })
 
   /**
-   * **글을 고르는 몸짓은 고름이 아니다**(M1) — 묶음 안 본문을 끌어 고르기 · 두 번 · 세 번 눌러 낱말 · 줄 고르기는 글을 베끼려는 것이다. 포커스는
-   * 묶음 안으로 들어 링은 서되 화면 상태는 그대로이고 고른 글이 남는다. 상태는 고름이 기다리는 간격(`PICK_WAIT_MS`)보다 넉넉히 뒤에 읽는다.
+   * **글을 고르는 몸짓도 고름이다** — 묶음 안 본문을 끌어 고르기 · 두 번 · 세 번 눌러 낱말 · 줄 고르기도 포커스를 묶음에 들인다. 화면 상태가 곧바로
+   * 바뀌고, 고른 글은 그대로 남는다(베낄 수 있다). 걸음마다 상태를 기본으로 되돌려 포커스를 묶음 밖으로 내고 시작한다.
    */
   const LOREM = 'lorem ipsum dolor sit amet consectetur'
   const BODY_B = '.wb-shell-comments [data-comment-node="n_b"] .wb-shell-comment-body'
@@ -382,7 +457,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
   const clearSelection = (page: Page) => page.evaluate(() => window.getSelection()?.removeAllRanges())
 
   for (const mode of ['편집 모드', '뷰 모드'] as const) {
-    it(`${mode} — 묶음 안 본문을 끌어 고르기 · 두 번 · 세 번 누르기는 상태를 안 바꾸고 고른 글이 남는다`, async () => {
+    it(`${mode} — 묶음 안 본문을 끌어 고르기 · 두 번 · 세 번 누르기도 곧바로 고르고 고른 글이 남는다`, async () => {
       const P = await fixture([{ nodeId: 'n_b', body: LOREM }])
       const { page, close } = await openTab(P)
       try {
@@ -406,34 +481,25 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
           await page.mouse.move(from.x - 2 + ((to.x - from.x + 2) * step) / 10, from.y + ((to.y - from.y) * step) / 10)
         }
         await page.mouse.up()
-        await pickSettled(page)
-        expect(await switcherName(page)).toBe('화면 상태: 기본')
+        await stateIs(page, '관리자')
         expect(await selectedText(page)).toBe('lorem ipsum dolo')
         expect(await focusedGroup(page)).toBe('n_b')
-        // 숨은 노드라 링이 없다 — 상태가 그대로라는 같은 값이다.
-        expect(await rings(page)).toEqual([])
+        expect(await rings(page)).toEqual(['n_b'])
 
         // 두 번 눌러 낱말.
+        await chooseState(page, '기본')
         await clearSelection(page)
         const word = await charAt(page, BODY_B, lorem, 8)
         await page.mouse.dblclick(word.x, word.y)
-        await pickSettled(page)
-        expect(await switcherName(page)).toBe('화면 상태: 기본')
+        await stateIs(page, '관리자')
         expect(await selectedText(page)).toBe('ipsum')
 
         // 세 번 눌러 줄.
+        await chooseState(page, '기본')
         await clearSelection(page)
         await page.mouse.click(word.x, word.y, { clickCount: 3 })
-        await pickSettled(page)
-        expect(await switcherName(page)).toBe('화면 상태: 기본')
+        await stateIs(page, '관리자')
         expect((await selectedText(page)).trim()).toBe(LOREM)
-
-        // 양성 대조 — 같은 판에서 본문의 맨 글을 한 번 누르면 고름이다.
-        await clearSelection(page)
-        await page.mouse.click(word.x, word.y)
-        await pickedInto(page, '관리자')
-        await frames(page)
-        expect(await rings(page)).toEqual(['n_b'])
       } finally {
         await close()
       }
@@ -441,8 +507,9 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
   }
 
   /**
-   * **안 보이는 탭 패널 · 접힌 검색폼 안 노드**(M2) — 화면 상태가 아니라 부모가 숨긴 노드다. 고름(누름 · 묶음 Enter)이면 그 노드가 보이게 펼친 판으로
-   * 그리고(렌더러 `reveal` — 진짜 선택과 같은 장치) 링이 그 노드에 선다. 포커스로는 안 펼친다. 다른 묶음으로 옮겨도 되돌리지 않는다. 문서는 그대로다.
+   * **안 보이는 탭 패널 · 접힌 검색폼 안 노드**(M2) — 화면 상태가 아니라 부모가 숨긴 노드다. 고름(포커스가 듦 · 누름 · 묶음 Enter)이면 그 노드가 보이게
+   * 펼친 판으로 그리고(렌더러 `reveal` — 진짜 선택과 같은 장치) 링이 그 노드에 선다. 묶음 밖으로 떠나도 되돌리지 않고, 다른 묶음을 고르면 그 고름이
+   * 이긴다. 문서는 그대로다.
    */
   async function hiddenParentFixture(): Promise<string> {
     const project = (await call('POST', '/projects', { name: '안 보이는 부모', slug: `cfh-${Date.now().toString(36)}` })).body
@@ -500,7 +567,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
   const drawn = (page: Page, nodeId: string) => canvasFrame(page).locator(`[data-wb-id="${nodeId}"]`).count()
 
   for (const mode of ['편집 모드', '뷰 모드'] as const) {
-    it(`${mode} — 안 보이는 탭 패널 · 접힌 검색폼 안 노드의 묶음을 고르면 펼쳐 그리고 링이 선다 · 포커스로는 안 펼친다`, async () => {
+    it(`${mode} — 안 보이는 탭 패널 · 접힌 검색폼 안 노드의 묶음에 포커스가 들면 곧 펼쳐 그리고 링이 선다`, async () => {
       const P = await hiddenParentFixture()
       const before = await serverParents(P)
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
@@ -515,15 +582,8 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
         expect(await drawn(page, 'n_sf_in')).toBe(0)
         expect(await drawn(page, 'n_in1')).toBe(1)
 
-        // 포커스만 — 안 펼친다.
+        // 포커스가 곧 고름 — 둘째 탭을 펼친 판으로 그리고 링이 선다.
         await group(page, 'n_in2').focus()
-        await pickSettled(page)
-        expect(await drawn(page, 'n_in2')).toBe(0)
-        expect(await rings(page)).toEqual([])
-
-        // 고름(작성자 줄 누름) — 둘째 탭을 펼친 판으로 그리고 링이 선다.
-        await group(page, 'n_in2').locator('.wb-shell-comment-author').first().click()
-        await pickSettled(page)
         await frames(page)
         expect(await drawn(page, 'n_in2')).toBe(1)
         expect(await drawn(page, 'n_in1')).toBe(0)
@@ -532,20 +592,27 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
         expect(node!.width).toBeGreaterThan(0)
         for (const key of ['x', 'y', 'width', 'height'] as const) expect(Math.abs(ring![key] - node![key])).toBeLessThanOrEqual(1)
 
-        // 다른 묶음으로 옮겨도 되돌리지 않는다.
+        // 묶음 밖(우측 «코멘트» 탭 단추)으로 떠나도 되돌리지 않는다.
+        await page.getByRole('tab', { name: '코멘트', exact: true }).focus()
+        await page.waitForTimeout(200)
+        expect(await drawn(page, 'n_in2')).toBe(1)
+
+        // 다른 묶음에 들면 그 고름이 이긴다 — 펼침은 하나라 둘째 탭이 걷힌다.
         await group(page, 'n_top').focus()
         await frames(page)
         expect(await rings(page)).toEqual(['n_top'])
-        expect(await drawn(page, 'n_in2')).toBe(1)
+        expect(await drawn(page, 'n_in2')).toBe(0)
+        expect(await drawn(page, 'n_in1')).toBe(1)
 
-        // 접힌 검색폼 — 묶음에 포커스를 두고 Enter.
-        await group(page, 'n_sf_in').focus()
-        await frames(page)
-        expect(await drawn(page, 'n_sf_in')).toBe(0)
-        await page.keyboard.press('Enter')
+        // 접힌 검색폼 — 묶음을 누른다.
+        await group(page, 'n_sf_in').locator('.wb-shell-comment-author').first().click()
         await frames(page)
         expect(await drawn(page, 'n_sf_in')).toBe(1)
         expect(await rings(page)).toEqual(['n_sf_in'])
+        // 거듭 고름(묶음 Enter)은 같은 답이다.
+        await page.keyboard.press('Enter')
+        await frames(page)
+        expect(await drawn(page, 'n_sf_in')).toBe(1)
 
         // 문서는 그대로다 — 펼침은 이 화면에서만이다.
         expect(await serverParents(P)).toEqual(before)
@@ -730,7 +797,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
 
       // 양성 대조 — 안 고른 노드를 가리키면 링이 따로 선다.
       await group(page, 'n_b').locator('.wb-shell-comment-author').first().click()
-      await pickedInto(page, '관리자')
+      await stateIs(page, '관리자')
       await frames(page)
       expect(await rings(page)).toEqual(['n_b'])
     } finally {
@@ -877,9 +944,9 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
         expect(mid).toBeGreaterThan(0)
         expect((await scrollLog(page)).writes).toBe(2)
 
-        // 고름(작성자 줄 누름) — 이미 보여 더 안 굴린다.
+        // 고름(포커스가 선 묶음의 작성자 줄 누름) — 이미 보여 더 안 굴린다.
         await group(page, 'n_t35').locator('.wb-shell-comment-author').first().click()
-        await pickSettled(page)
+        await frames(page)
         expect((await scrollLog(page)).writes).toBe(2)
 
         // 사람이 칸을 굴려 링을 밀어내면 끌려오지 않는다 — 다시 재는 때(줌)에도 칸에 안 쓴다.
@@ -898,11 +965,25 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
         expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(false)
         expect((await scrollLog(page)).writes).toBe(2)
 
-        // 같은 묶음을 다시 고르면(링은 그대로) 다시 들인다 — 고름은 사람의 몸짓이다.
+        // 같은 묶음을 다시 고르면(링은 그대로) 다시 들인다 — 고름은 사람의 몸짓이다. 포커스는 «축소» 단추에 있어 누름이 다시 든 포커스다.
         await group(page, 'n_t35').locator('.wb-shell-comment-author').first().click()
-        await pickSettled(page)
+        await frames(page)
         expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(true)
         expect((await scrollLog(page)).writes).toBe(3)
+
+        // 포커스가 선 채 휠로 밀어낸 뒤 그 묶음을 다시 누름 — 새 `focus` 없이 누름이 고른다.
+        await page.mouse.move(pane!.x + pane!.width / 2, pane!.y + pane!.height / 2)
+        await page.mouse.wheel(0, 700)
+        await poll(
+          '휠이 칸을 굴린다',
+          () => inPane(page, '[data-wb-comment-pointed="n_t35"]'),
+          (place) => place !== null && !place.inside,
+        )
+        expect(await focusedGroup(page)).toBe('n_t35')
+        await group(page, 'n_t35').locator('.wb-shell-comment-author').first().click()
+        await frames(page)
+        expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(true)
+        expect((await scrollLog(page)).writes).toBe(4)
 
         if (mode === '편집 모드') {
           // 머리 단추로 고른 진짜 선택 — 칸 밖이면 굴려 들인다.
@@ -910,7 +991,7 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
           await frames(page)
           expect(await selectedOutline(page)).toEqual(['n_t69'])
           expect((await inPane(page, '[data-wb-selected-id="n_t69"]'))?.inside).toBe(true)
-          expect((await scrollLog(page)).writes).toBe(4)
+          expect((await scrollLog(page)).writes).toBe(5)
         }
 
         // 튐 — 칸 밖의 스크롤 상자는 그 사이 안 움직였다.
@@ -922,4 +1003,248 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       }
     })
   }
+
+  /**
+   * **고름 곧바로 뒤의 둘째 몸짓을 고름이 덮지 않는다** — 고름은 묶음에 포커스가 드는 그 렌더에 선다. 묶음을 누른 뒤 더블클릭 간격(500ms) 안에
+   * 구조 트리 줄 · 전환기 · 캔버스 누름 · 휠 · 페이지 옮김을 해도, 그 몸짓이 낸 화면이 700ms 뒤에도 그대로다. 둘째 몸짓까지의 틈을 재서 간격 안인지를
+   * 카나리아로 둔다(간격 밖이면 늦게 서는 고름이 있어도 이 판이 못 가른다). 두 페이지는 같은 id 의 문서다 — 옮겨 간 페이지에 같은 노드가 있다.
+   */
+  const GESTURE_DOC = [
+    {
+      op: 'add',
+      path: '/viewStates',
+      value: [
+        { id: 's_admin', name: '관리자' },
+        { id: 's_guest', name: '손님' },
+      ],
+    },
+    { op: 'add', path: '/root/children/0', value: { id: 'n_top', type: 'Text', props: { content: '맨 위 글' } } },
+    {
+      op: 'add',
+      path: '/root/children/1',
+      value: { id: 'n_b', type: 'Text', props: { content: '관리자 글' }, visibility: { mode: 'only', states: ['s_admin'] } },
+    },
+    {
+      op: 'add',
+      path: '/root/children/2',
+      value: {
+        id: 'n_tabs',
+        type: 'Tabs',
+        props: { active: 0 },
+        children: [
+          {
+            id: 'n_p1',
+            type: 'TabPanel',
+            props: { label: '첫 탭' },
+            children: [{ id: 'n_in1', type: 'Text', props: { content: '첫 탭 안 글' } }],
+          },
+          {
+            id: 'n_p2',
+            type: 'TabPanel',
+            props: { label: '둘째 탭' },
+            children: [{ id: 'n_in2', type: 'Text', props: { content: '둘째 탭 안 글' } }],
+          },
+        ],
+      },
+    },
+    {
+      op: 'add',
+      path: '/root/children/3',
+      value: {
+        id: 'n_btn1',
+        type: 'Button',
+        props: { label: '첫 탭으로' },
+        interactions: [{ on: 'click', actions: [{ type: 'switchTab', target: 'n_p1' }] }],
+      },
+    },
+  ]
+
+  async function gestureFixture(): Promise<{ first: string; second: string }> {
+    const project = (await call('POST', '/projects', { name: '둘째 몸짓', slug: `cfg-${Date.now().toString(36)}` })).body
+    const menu = (await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '가' })).body
+    const paths: string[] = []
+    for (const title of ['첫째', '둘째']) {
+      const pageId = (await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title })).body.id as string
+      const P = `/projects/${project.id}/pages/${pageId}`
+      const seeded = await call('PATCH', `${P}/ops`, { baseSeq: 0, ops: GESTURE_DOC })
+      if (seeded.status >= 300) throw new Error(`seed ${seeded.status} ${JSON.stringify(seeded.body)}`)
+      paths.push(P)
+    }
+    const [first, second] = paths as [string, string]
+    for (const nodeId of ['n_top', 'n_b', 'n_in2']) {
+      const res = await call('POST', `${first}/comments`, { nodeId, body: `${nodeId} 에 단 말` })
+      if (res.status !== 201) throw new Error(`comment ${res.status} ${JSON.stringify(res.body)}`)
+    }
+    return { first, second }
+  }
+
+  /** 첫째 페이지를 열고(뷰 모드면 옮기고) «코멘트» 탭에 선다. */
+  async function openGesture(first: string, mode: '편집 모드' | '뷰 모드') {
+    const opened = await stack.openTab(stack.users.alice, { viewport: { width: 1600, height: 900 } })
+    const { page } = opened
+    await page.goto(first)
+    await canvasFrame(page).locator('[data-wb-id="n_top"]').waitFor()
+    if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+    await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+    await group(page, 'n_in2').waitFor()
+    return opened
+  }
+
+  /** 묶음의 작성자 줄을 누르고 곧 `then` 을 한다 — 누른 때부터 `then` 이 끝날 때까지의 틈(ms)을 돌려준다. */
+  async function pickThen(page: Page, nodeId: string, then: () => Promise<void>): Promise<number> {
+    await group(page, nodeId).locator('.wb-shell-comment-author').first().click()
+    const pressed = Date.now()
+    await then()
+    return Date.now() - pressed
+  }
+
+  /** 늦게 서는 고름이 있으면 섰을 때까지 기다린다 — 더블클릭 간격(500ms)보다 넉넉히. */
+  const later = (page: Page) => page.waitForTimeout(700)
+  const stateQuery = (page: Page) => page.evaluate(() => new URL(location.href).searchParams.get('state'))
+
+  it('편집 모드 — 묶음을 누른 곧 뒤 구조 트리 줄로 고른 노드가 캔버스에 그려진 채 남는다', async () => {
+    const { first } = await gestureFixture()
+    const { context, page } = await openGesture(first, '편집 모드')
+    try {
+      const gap = await pickThen(page, 'n_in2', () =>
+        page.locator('.wb-shell-region[aria-label="구조 트리"] [data-tree-row][data-tree-id="n_in1"] .wb-shell-structure-node').click(),
+      )
+      expect(gap).toBeLessThan(450)
+      await later(page)
+      await frames(page)
+      expect({
+        selected: await selectedOutline(page),
+        in1: await drawn(page, 'n_in1'),
+        in2: await drawn(page, 'n_in2'),
+      }).toEqual({ selected: ['n_in1'], in1: 1, in2: 0 })
+    } finally {
+      await context.close()
+    }
+  })
+
+  for (const mode of ['편집 모드', '뷰 모드'] as const) {
+    it(`${mode} — 묶음을 누른 곧 뒤 전환기에서 고른 상태가 남는다`, async () => {
+      const { first } = await gestureFixture()
+      const { context, page } = await openGesture(first, mode)
+      try {
+        const gap = await pickThen(page, 'n_b', async () => {
+          await page.getByRole('button', { name: /^화면 상태:/ }).click()
+          await page.getByRole('menuitemradio', { name: '손님', exact: true }).click()
+        })
+        expect(gap).toBeLessThan(450)
+        await later(page)
+        expect(await switcherName(page)).toBe('화면 상태: 손님')
+        if (mode === '뷰 모드') expect(await stateQuery(page)).toBe('s_guest')
+      } finally {
+        await context.close()
+      }
+    })
+  }
+
+  it('뷰 모드 — 묶음을 누른 곧 뒤 캔버스 누름 · 단추의 탭 바꿈이 남는다', async () => {
+    const { first } = await gestureFixture()
+    const { context, page } = await openGesture(first, '뷰 모드')
+    try {
+      // 캔버스의 다른 노드를 누름 — 펼침이 걷혀 문서의 탭(첫 탭)이다.
+      const gap = await pickThen(page, 'n_in2', () => canvasFrame(page).locator('[data-wb-id="n_top"]').click())
+      expect(gap).toBeLessThan(450)
+      await later(page)
+      await frames(page)
+      expect({ in1: await drawn(page, 'n_in1'), in2: await drawn(page, 'n_in2') }).toEqual({ in1: 1, in2: 0 })
+
+      // 단추의 상호작용(`switchTab` → 첫 탭) — 펼친 둘째 탭을 고른 곧 뒤 누른다.
+      await group(page, 'n_top').focus()
+      const gap2 = await pickThen(page, 'n_in2', () => canvasFrame(page).locator('[data-wb-id="n_btn1"]').click())
+      expect(gap2).toBeLessThan(450)
+      await later(page)
+      await frames(page)
+      expect({ in1: await drawn(page, 'n_in1'), in2: await drawn(page, 'n_in2') }).toEqual({ in1: 1, in2: 0 })
+    } finally {
+      await context.close()
+    }
+  })
+
+  it('편집 모드 — 묶음을 누른 곧 뒤 휠로 굴린 칸이 끌려오지 않는다', async () => {
+    const P = await longFixture()
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+    try {
+      await page.goto(P)
+      await canvasFrame(page).locator('[data-wb-id="n_t69"]').waitFor()
+      await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+      await group(page, 'n_t35').waitFor()
+      const pane = await page.locator('.wb-shell-canvas').boundingBox()
+      const gap = await pickThen(page, 'n_t35', async () => {
+        await page.mouse.move(pane!.x + pane!.width / 2, pane!.y + pane!.height / 2)
+        await page.mouse.wheel(0, 900)
+      })
+      expect(gap).toBeLessThan(450)
+      await poll(
+        '휠이 칸을 굴려 링이 칸 밖이다',
+        () => inPane(page, '[data-wb-comment-pointed="n_t35"]'),
+        (place) => place !== null && !place.inside,
+      )
+      const wheeled = await paneScroll(page)
+      await later(page)
+      expect(await paneScroll(page)).toBe(wheeled)
+      expect((await inPane(page, '[data-wb-comment-pointed="n_t35"]'))?.inside).toBe(false)
+    } finally {
+      await context.close()
+    }
+  })
+
+  for (const mode of ['편집 모드', '뷰 모드'] as const) {
+    it(`${mode} — 묶음을 누른 곧 뒤 옮겨 간 페이지(같은 id 의 문서)에 그 고름이 닿지 않는다`, async () => {
+      const { first, second } = await gestureFixture()
+      const { context, page } = await openGesture(first, mode)
+      const secondId = second.split('/').at(-1)!
+      try {
+        for (const nodeId of ['n_b', 'n_in2']) {
+          if (nodeId === 'n_in2') {
+            await page.goto(first)
+            await canvasFrame(page).locator('[data-wb-id="n_top"]').waitFor()
+            if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+            await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+            await group(page, nodeId).waitFor()
+          }
+          const gap = await pickThen(page, nodeId, () => page.getByRole('link', { name: '둘째', exact: true }).click())
+          expect(gap).toBeLessThan(450)
+          await poll(
+            '둘째 페이지가 선다',
+            () => page.evaluate(() => location.pathname),
+            (path) => path.endsWith(secondId),
+          )
+          await canvasFrame(page).locator('[data-wb-id="n_top"]').waitFor()
+          await later(page)
+          await frames(page)
+          expect({
+            nodeId,
+            state: await switcherName(page),
+            query: await stateQuery(page),
+            in1: await drawn(page, 'n_in1'),
+            in2: await drawn(page, 'n_in2'),
+          }).toEqual({ nodeId, state: '화면 상태: 기본', query: null, in1: 1, in2: 0 })
+        }
+      } finally {
+        await context.close()
+      }
+    })
+  }
+
+  it('편집 모드 — 우측 탭을 옮겼다 «코멘트» 로 돌아와도 다시 고르지 않는다', async () => {
+    const { first } = await gestureFixture()
+    const { context, page } = await openGesture(first, '편집 모드')
+    try {
+      await group(page, 'n_b').focus()
+      await stateIs(page, '관리자')
+      await chooseState(page, '기본')
+      await page.getByRole('tab', { name: '페이지 정보', exact: true }).click()
+      await page.getByRole('tab', { name: '코멘트', exact: true }).click()
+      await group(page, 'n_b').waitFor()
+      await later(page)
+      expect(await focusedGroup(page)).toBe(null)
+      expect(await switcherName(page)).toBe('화면 상태: 기본')
+    } finally {
+      await context.close()
+    }
+  })
 })

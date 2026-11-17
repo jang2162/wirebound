@@ -171,8 +171,14 @@ describe('코멘트 링 — 진짜 선택이 아니다', () => {
     deselect()
     await openCommentTab()
 
+    // 포커스가 곧 고름이라 그 노드가 보이는 상태로 바뀌고 링이 선다(`../panels/comment-focus.test.tsx`).
     focusGroup('n_admin')
-    expect(canvasDocument().querySelector('[data-wb-id="n_admin"]')).toBeNull()
+    await waitFor(() => expect(rings()).toEqual(['n_admin']))
+
+    // 사람이 그 노드가 숨는 상태로 바꾸면 — 가리킨 채 링은 없다.
+    fireEvent.click(screen.getByRole('button', { name: /^화면 상태:/ }))
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: '기본' }))
+    await waitFor(() => expect(canvasDocument().querySelector('[data-wb-id="n_admin"]')).toBeNull())
     expect(rings()).toEqual([])
 
     // 양성 대조 — 보이는 노드로 옮기면 선다.
@@ -311,28 +317,27 @@ describe('코멘트 펼침 — 걷히는 때', () => {
 
   const drawn = (nodeId: string) => canvasDocument().querySelector(`[data-wb-id="${nodeId}"]`) !== null
 
-  /** 묶음을 고른다 — 포커스를 두고 Enter(곧바로 고른다). */
-  function pick(nodeId: string): void {
-    focusGroup(nodeId)
-    const group = document.querySelector<HTMLElement>(`[data-comment-node="${nodeId}"]`)
-    if (group === null) throw new Error(`묶음이 없습니다: ${nodeId}`)
-    fireEvent.keyDown(group, { key: 'Enter' })
-  }
+  /** 묶음을 고른다 — 포커스가 곧 고름이다. */
+  const pick = focusGroup
 
-  it('포커스로는 안 펼치고 고르면 펼친다 · 다른 묶음으로 옮겨도 남는다', async () => {
+  it('포커스가 들면 곧 펼친다 · 묶음 밖으로 떠나도 남고 · 다른 묶음에 들면 그 고름이 이긴다', async () => {
     await openTabs()
-    expect(drawn('n_in2')).toBe(false)
-
-    focusGroup('n_in2')
     expect(drawn('n_in2')).toBe(false)
 
     pick('n_in2')
     await waitFor(() => expect(drawn('n_in2')).toBe(true))
     expect(rings()).toEqual(['n_in2'])
 
+    // 묶음 밖(우측 탭 단추)으로 — 되돌리지 않는다.
+    act(() => screen.getByRole('tab', { name: '코멘트' }).focus())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+    expect(drawn('n_in2')).toBe(true)
+
+    // 다른 묶음에 듦은 그 묶음의 고름이다 — 펼침은 그 노드로 바뀌어 둘째 탭이 걷힌다(펼침은 하나다).
     focusGroup('n_top')
     expect(rings()).toEqual(['n_top'])
-    expect(drawn('n_in2')).toBe(true)
+    await waitFor(() => expect(drawn('n_in2')).toBe(false))
+    expect(drawn('n_in1')).toBe(true)
   })
 
   it('캔버스를 누르면 걷힌다 — 뷰 모드(누름이 선택을 안 바꾼다)', async () => {

@@ -1,6 +1,6 @@
 /**
- * **코멘트 묶음이 캔버스를 가리킨다**(`src/panels/comment-panel.tsx` 머리말 «묶음이 캔버스를 가리킨다») — 포커스는 링, «고름»(묶음 누름 · 묶음
- * 자체의 Enter/Space)은 숨은 노드를 보이는 화면 상태로, 머리 단추(편집 모드)는 진짜 선택 + «컴포넌트» 탭.
+ * **코멘트 묶음이 캔버스를 가리킨다**(`src/panels/comment-panel.tsx` 머리말 «묶음이 캔버스를 가리킨다») — 포커스가 곧 «고름»(묶음에 포커스가 듦 ·
+ * 묶음 누름 · 묶음 자체의 Enter/Space)이라 링과 함께 곧바로 숨은 노드를 보이는 화면 상태로, 머리 단추(편집 모드)는 진짜 선택 + «컴포넌트» 탭.
  *
  * jsdom 이라 누름이 포커스를 안 옮긴다 — 포커스 · 누름 · 키를 따로 낸다. 실브라우저의 차례(누름이 포커스를 주고 클릭이 뒤따름)는
  * `build-test/comment-focus.test.ts` 가 잰다.
@@ -10,7 +10,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageDocument } from '@wirebound/schema'
 import type { Comment } from '../../src/api/types'
 import type { EditorStore } from '../../src/store/editor-store'
-import { PICK_WAIT_MS } from '../../src/panels/comment-panel'
 import { HEAD_SEQ, openPage, PAGE_ID, PAGE_ROUTE, pageDoc, PROJECT_NAME, renderEditor, requireNode } from '../editor-harness'
 
 /** 셸이 만든 스토어를 쥔다 — 포커스 · 고름이 선택을 안 바꾸는지 스토어 값으로 잰다(`../canvas/canvas.test.tsx` 의 같은 장치). */
@@ -109,20 +108,29 @@ function tabSelected(name: string): string | null {
   return screen.getByRole('tab', { name }).getAttribute('aria-selected')
 }
 
-describe('포커스 — 링만 · 상태와 선택은 그대로', () => {
-  it('숨은 노드의 묶음에 포커스 — 상태 · 선택이 그대로이고, 그 노드를 가리킨 채다', async () => {
+describe('포커스가 곧 고름 — 링 · 보이는 상태가 곧바로 · 선택은 그대로', () => {
+  it('숨은 노드의 묶음에 포커스 — 그 렌더에서 보이는 상태로 바뀌고 링이 선다 · 선택은 그대로다', async () => {
     await open()
     await openCommentTab()
     const selected = shellStore().getState().selectedNodeIds
 
     focusGroup('n_b')
 
-    expect(switcherName()).toBe('화면 상태: 기본')
+    expect(switcherName()).toBe('화면 상태: 관리자')
+    expect(rings()).toEqual(['n_b'])
     expect(shellStore().getState().selectedNodeIds).toEqual(selected)
-    expect(rings()).toEqual([])
-    // 가리킨 것은 `n_b` 다 — 사람이 상태를 바꾸면 그 노드에 링이 선다.
+  })
+
+  it('보이는 노드의 묶음에 포커스 — 상태를 안 바꾼다', async () => {
+    await open()
+    await openCommentTab()
     await pickStateFromHead('관리자')
-    await waitFor(() => expect(rings()).toEqual(['n_b']))
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 관리자'))
+
+    focusGroup('n_a')
+
+    expect(switcherName()).toBe('화면 상태: 관리자')
+    expect(rings()).toEqual(['n_a'])
   })
 })
 
@@ -150,55 +158,51 @@ describe('고름 — 숨었으면 보이는 상태로', () => {
     expect(switcherName()).toBe('화면 상태: 관리자')
   })
 
-  it('묶음 자체에 포커스가 선 채 Enter · Space', async () => {
+  it('묶음 자체에 포커스가 선 채 Enter · Space — 그 사이 사람이 바꾼 상태를 다시 고른다', async () => {
     await open()
     await openCommentTab()
     focusGroup('n_b')
+    expect(switcherName()).toBe('화면 상태: 관리자')
 
-    fireEvent.keyDown(group('n_b'), { key: 'Enter' })
-    await waitFor(() => expect(switcherName()).toBe('화면 상태: 관리자'))
-
-    await pickStateFromHead('기본')
-    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
-    focusGroup('n_b')
-    fireEvent.keyDown(group('n_b'), { key: ' ' })
-    await waitFor(() => expect(switcherName()).toBe('화면 상태: 관리자'))
+    // 묶음에서 친 키만 낸다 — 포커스를 다시 주면 그것이 고름이라 Enter · Space 를 못 가른다.
+    for (const key of ['Enter', ' ']) {
+      await pickStateFromHead('기본')
+      await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
+      fireEvent.keyDown(group('n_b'), { key })
+      expect(switcherName()).toBe('화면 상태: 관리자')
+    }
   })
 })
 
-describe('포인터의 한 번 누름은 더블클릭 간격 뒤에 고른다 — 글을 고르는 몸짓은 고름이 아니다', () => {
-  /** 간격보다 넉넉히 기다린다 — 늦게 서는 고름도 이 뒤에는 섰다. */
-  const pastWait = () => act(() => new Promise((resolve) => setTimeout(resolve, PICK_WAIT_MS + 100)))
+describe('누름은 곧바로 고른다 — 두 번 누름 · 글을 고른 채여도', () => {
+  /** 더블클릭 간격(500ms)보다 넉넉히 기다린다 — 늦게 서는 고름이 있으면 이 뒤에는 섰다. */
+  const later = () => act(() => new Promise((resolve) => setTimeout(resolve, 700)))
 
-  it('한 번 누름(`detail` 1)은 곧바로가 아니라 간격 뒤에 고른다', async () => {
+  it('한 번 누름(`detail` 1)이 그 렌더에서 고르고, 곧이어 사람이 바꾼 상태를 뒤에 덮지 않는다', async () => {
     await open()
     await openCommentTab()
 
     fireEvent.click(group('n_b'), { detail: 1 })
-    expect(switcherName()).toBe('화면 상태: 기본')
-    await pastWait()
     expect(switcherName()).toBe('화면 상태: 관리자')
     expect(rings()).toEqual(['n_b'])
-  })
 
-  it('간격 안의 둘째 누름(`detail` 2)이 미룬 고름을 걷는다', async () => {
-    await open()
-    await openCommentTab()
-
-    fireEvent.click(group('n_b'), { detail: 1 })
-    fireEvent.click(group('n_b'), { detail: 2 })
-    await pastWait()
-
+    await pickStateFromHead('기본')
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
+    await later()
     expect(switcherName()).toBe('화면 상태: 기본')
   })
 
-  it('간격이 지날 때 묶음 안에 고른 글이 있으면 고르지 않는다 — 끌어 고르기', async () => {
+  it('두 번 누름(`detail` 2) · 묶음 안에 글을 고른 채 누름도 고름이다', async () => {
     await open()
     await openCommentTab()
     const body = group('n_b').querySelector('.wb-shell-comment-body')
     if (body === null) throw new Error('본문이 없습니다')
 
-    fireEvent.click(body, { detail: 1 })
+    fireEvent.click(body, { detail: 2 })
+    expect(switcherName()).toBe('화면 상태: 관리자')
+
+    await pickStateFromHead('기본')
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
     const range = document.createRange()
     range.selectNodeContents(body)
     act(() => {
@@ -207,42 +211,55 @@ describe('포인터의 한 번 누름은 더블클릭 간격 뒤에 고른다 �
       selection?.addRange(range)
     })
     expect(window.getSelection()?.isCollapsed).toBe(false)
-    await pastWait()
-
-    expect(switcherName()).toBe('화면 상태: 기본')
+    fireEvent.click(body, { detail: 1 })
+    expect(switcherName()).toBe('화면 상태: 관리자')
     act(() => window.getSelection()?.removeAllRanges())
   })
 })
 
-describe('고름이 아닌 것 — 묶음 안의 단추 · 글 상자', () => {
-  it('«수정» 단추를 누르거나 거기서 Enter · 고치는 상자에서 Enter — 상태가 그대로다', async () => {
+describe('묶음 안의 단추 · 글 상자 — 포커스가 들면 고르고, 그 단추의 누름은 다시 고르지 않는다', () => {
+  it('«수정» · «삭제» 단추 · 고치는 상자에 포커스가 들면 고른다', async () => {
     await open()
     await openCommentTab()
     const edit = within(group('n_b')).getByRole('button', { name: '수정' })
+    const remove = within(group('n_b')).getAllByRole('button', { name: '삭제' })[0]!
 
-    fireEvent.keyDown(edit, { key: 'Enter' })
-    expect(switcherName()).toBe('화면 상태: 기본')
+    act(() => edit.focus())
+    expect(switcherName()).toBe('화면 상태: 관리자')
+
+    await pickStateFromHead('기본')
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
+    act(() => remove.focus())
+    expect(switcherName()).toBe('화면 상태: 관리자')
 
     fireEvent.click(edit)
     const box = await within(group('n_b')).findByRole('textbox', { name: '코멘트 수정' })
-    expect(switcherName()).toBe('화면 상태: 기본')
+    await pickStateFromHead('기본')
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
+    act(() => box.focus())
+    expect(switcherName()).toBe('화면 상태: 관리자')
+  })
 
+  it('포커스가 든 뒤 사람이 상태를 바꾸면, 그 안 단추 · 글 상자의 누름 · Enter 는 그 상태를 안 덮는다 · 묶음 자신의 누름은 다시 고른다', async () => {
+    await open()
+    await openCommentTab()
+    const edit = within(group('n_b')).getByRole('button', { name: '수정' })
+    act(() => edit.focus())
+    expect(switcherName()).toBe('화면 상태: 관리자')
+    await pickStateFromHead('기본')
+    await waitFor(() => expect(switcherName()).toBe('화면 상태: 기본'))
+
+    // jsdom 의 `fireEvent` 는 포커스를 안 옮긴다 — 포커스가 «수정» 에 선 채 그 단추를 누른 판이다.
+    fireEvent.keyDown(edit, { key: 'Enter' })
+    fireEvent.click(edit)
+    const box = await within(group('n_b')).findByRole('textbox', { name: '코멘트 수정' })
     fireEvent.keyDown(box, { key: 'Enter' })
     fireEvent.click(box)
     expect(switcherName()).toBe('화면 상태: 기본')
 
-    // 양성 대조 — 같은 판에서 묶음 자체를 누르면 바뀐다.
+    // 양성 대조 — 같은 판에서 묶음 자체를 누르면 다시 고른다.
     fireEvent.click(group('n_b'))
-    await waitFor(() => expect(switcherName()).toBe('화면 상태: 관리자'))
-  })
-
-  it('«삭제» 단추를 누르면 상태가 그대로다', async () => {
-    await open()
-    await openCommentTab()
-
-    fireEvent.click(within(group('n_b')).getByRole('button', { name: '삭제' }))
-
-    expect(switcherName()).toBe('화면 상태: 기본')
+    expect(switcherName()).toBe('화면 상태: 관리자')
   })
 })
 
