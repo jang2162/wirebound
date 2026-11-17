@@ -850,6 +850,12 @@ function handlersFor(root: WbNode, node: WbNode, options: RenderOptions): WbHand
       // `submit 규칙은 기본 동작을 막는다`가 **`defaultPrevented`만** 본다).
       if (dom === 'onSubmit') event.preventDefault()
       fire(root, node, dom, options, (event as { nativeEvent?: object }).nativeEvent)
+      // **규칙이 걸린 노드의 누름이 링크 안이면 링크의 기본 동작을 막는다.** `Link` 의 기본 뷰는 `<a href="#…">` 라, 막지 않으면 규칙 뒤에
+      // 주소의 해시가 `#` 로 바뀐다 — 번들 뷰어는 그 `hashchange` 를 «기본 상태» 로 읽어 «화면 상태 바꾸기» 가 바꾼 상태를 곧바로
+      // 되돌린다(`packages/exporter/src/browser/boot.tsx` 의 `wireStatePicker`). 규칙이 조상(그리드 행)의 것이어도 같다 — 버블링으로
+      // 여기 닿은 누름의 대상으로 가른다. 링크 밖의 누름은 막지 않는다 — 제출 단추를 누른 판의 기본 동작이 `submit` 이다.
+      // 규칙 없는 링크는 막지 않는다(그 기본 동작은 그대로다). 실브라우저 판은 `apps/web/build-test/bundle-link-state.test.ts`.
+      if (dom === 'onClick' && insideLink(event.target)) event.preventDefault()
     }
   }
   return handlers
@@ -880,6 +886,12 @@ function fire(root: WbNode, node: WbNode, dom: keyof WbHandlers, options: Render
     onEvent?.({ ...result, nodeId: node.id, trigger })
   }
   if (native !== undefined && overlay !== undefined) GESTURE_OVERLAY.set(native, overlay)
+}
+
+/** 누른 자리가 주소 있는 링크(`a[href]`) 안인가. 캔버스 iframe 의 요소는 다른 창(realm)이라 `instanceof` 를 안 쓴다. */
+function insideLink(target: unknown): boolean {
+  const closest = (target as { closest?: (selector: string) => unknown } | null)?.closest
+  return typeof closest === 'function' && closest.call(target, 'a[href]') !== null
 }
 
 /** 네이티브 이벤트 → 그 이벤트 안에서 마지막으로 낸 겹layer(`fire`의 머리말). 이벤트가 버려지면 함께 사라진다. */
