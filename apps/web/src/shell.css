@@ -2075,6 +2075,37 @@
   color: var(--wb-shell-muted);
 }
 
+/* 캔버스를 가리키는 묶음(`panels/comment-panel.tsx` 머리말 «묶음이 캔버스를 가리킨다») — 묶음 자체가 Tab 정지점이고 누르면 고른다. */
+.wb-shell-comment-group[tabindex] {
+  cursor: pointer;
+}
+
+.wb-shell-comment-group[tabindex]:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: 2px;
+}
+
+/* 묶음 머리 단추(편집 모드) — 머리 글 그대로 보이고, 누르면 그 노드를 골라 «컴포넌트» 탭으로 간다. */
+.wb-shell-comment-group-pick {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-shell-comment-group-pick:hover {
+  color: var(--wb-shell-ink);
+  text-decoration: underline;
+}
+
+.wb-shell-comment-group-pick:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: 1px;
+}
+
 /* 목록 안의 번호. 캔버스의 마커와 같은 값을 보이지만 자리가 달라 규칙을 나눈다. */
 .wb-shell-comment-marker {
   display: inline-block;

@@ -64,6 +64,7 @@ import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useViewState } from '../shell/use-view-state'
 import { useTellCanvasPick } from '../shell/canvas-pick'
+import { useCommentPointing, type Revealed } from '../comments/comment-pointing'
 import { useAnnounceCanvasRemeasure, useDragging, usePlacementPreview, usePublishCanvasRegion } from '../drag/use-placement'
 import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview'
 import { emptyZonesFor, type EmptyZones } from './empty-zones'
@@ -219,7 +220,7 @@ export function Canvas(props: {
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
 
   const surfaceRef = useRef<HTMLDivElement | null>(null)
-  /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`다. */
+  /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`, 코멘트 링의 것이 `ringBox` 다(아래 `outlinedIds`). */
   const [boxes, setBoxes] = useState<readonly OutlineBox[]>(NO_OUTLINES)
   const [markers, setMarkers] = useState<MarkerBox[]>(NO_MARKERS)
   /** 배치 선(`./layout-guides.tsx`) — 켰고 편집 모드일 때 Flex · Grid 노드마다. */
@@ -256,10 +257,21 @@ export function Canvas(props: {
   /**
    * **고른 노드를 펼쳐 보인다**(설계 spec Q3 (가)) — 고른 노드 · 고른 구역의 부모가 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 그 화면에서만 펼친 판으로 그린다
    * (렌더러의 `reveal`). 고른 구역은 그 부모 자신이 그 구역을 가리면(접힌 검색폼의 단추 구역) 부모도 펼친다(리뷰 RV-ZE L2). 문서(`active` ·
-   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기 · 뷰 모드는 그대로다. 편집 모드에서만이다.
+   * `collapsed`)는 안 바뀐다 — 남의 화면 · 내보내기는 그대로다. 고른 노드의 펼침은 편집 모드에서만이다(뷰 모드에는 고른 표지가 없다).
    */
   const selectedZone = useEditorStore(store, (s) => s.selectedZone)
-  const revealKey = mode === 'edit' ? selectedNodeIds.join('\n') : ''
+  /**
+   * **코멘트 묶음을 고른 노드도 펼친다**(`../comments/comment-pointing.tsx` 머리말 «펼침») — 두 모드 다. 고를 때의 진짜 선택과 지금 선택이 다르면
+   * 걷는다(진짜 선택의 펼침이 이긴다 — 같은 `Tabs` 의 다른 패널을 둘이 펼치면 한쪽만 선다). 걷어야 선택이 되돌아와도 되살지 않는다. 그리기 전에
+   * 걷는다(`useLayoutEffect`) — 둘이 함께 선 판이 화면에 안 나간다.
+   */
+  const { nodeId: pointedId, point, revealed, reveal: setCommentReveal } = useCommentPointing()
+  const selectionKey = selectedNodeIds.join('\n')
+  useLayoutEffect(() => {
+    if (revealed !== null && revealed.selection !== selectionKey) setCommentReveal(null)
+  }, [revealed, selectionKey, setCommentReveal])
+  const commentReveal = revealed?.nodeId ?? null
+  const revealKey = [...(mode === 'edit' ? selectedNodeIds : NO_IDS), ...(commentReveal === null ? [] : [commentReveal])].join('\n')
   const zoneParent = mode === 'edit' ? (selectedZone?.parentId ?? null) : null
   const zoneName = mode === 'edit' ? (selectedZone?.zone ?? null) : null
   const reveal = useMemo((): RevealTarget[] | undefined => {
@@ -420,12 +432,31 @@ export function Canvas(props: {
     popups.handle(event.requests)
   }
 
-  // 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
+  // 고른 노드의 아웃라인은 편집 모드에만 있다(설계서 「설계서 화면 구조」 — 뷰 모드는 결과만 보여 준다). 선택 자체는
   // 남는다. 뷰 모드에서 선택을 지우면 모드를 오갈 때마다 고른 것이 사라진다.
   const outlinedNodeId = mode === 'edit' ? selectedNodeId : null
-  /** 외곽선을 그릴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것»). 기준 노드는 진하게 · 나머지는 옅게. */
-  const outlinedIds = mode === 'edit' ? selectedNodeIds : NO_IDS
+  const selectedOutlined = mode === 'edit' ? selectedNodeIds : NO_IDS
+  /**
+   * **코멘트가 가리킨 노드의 링**(`../comments/comment-pointing.tsx`) — 두 모드 다. 고른 것이 아니라 기준 외곽선과 같은 꼴(`.wb-shell-selection`)
+   * 하나를 따로 그린다. **이미 고른 노드를 가리키면 따로 안 그린다** — 그 노드의 외곽선(기준이면 진한 선 · 옅으면 가는 끊은 선)이 그대로 선다. 옅은
+   * 노드에 링을 그리면 캔버스에 진한 실선이 둘 서 어느 쪽이 기준 노드인지 못 가른다(설계서 「설계서 화면 구조」 «보이는 것»).
+   */
+  const ringId = pointedId !== null && !selectedOutlined.includes(pointedId) ? pointedId : null
+  /**
+   * 외곽선을 잴 노드 전부 — 고른 것마다 하나(설계서 «보이는 것») + 링. 링도 같은 측정 이펙트가 잰다 — 두 벌로 재면 하나만 자리를 따라간다.
+   * 이펙트의 의존이라 같은 값이면 같은 배열이어야 한다.
+   */
+  const outlinedIds = useMemo(() => (ringId === null ? selectedOutlined : [...selectedOutlined, ringId]), [selectedOutlined, ringId])
   const box = boxes.find((item) => item.nodeId === outlinedNodeId)?.box ?? null
+  const ringBox = ringId === null ? null : (boxes.find((item) => item.nodeId === ringId)?.box ?? null)
+  /**
+   * **링 · 고른 묶음의 노드를 캔버스 칸 안으로 굴린다**(설계서 «코멘트» 탭) — 링이 새로 설 때(그 노드로 처음 잰 때 — 숨었다 보이게 된 때도) · 묶음을
+   * 고를 때(`revealed` 가 새 값 — 머리 단추로 고른 진짜 선택도)마다 한 번, 그 노드의 외곽선이 칸의 보이는 구간에 다 안 들면 가장 가까운 쪽으로
+   * 굴린다(`bringIntoPane`). 이미 보이면 안 굴린다. 한 번 굴린 링은 그 링이 걷히거나 다른 노드로 옮기기 전에는 다시 안 굴린다 — 사람이 칸을 굴려
+   * 링을 밀어내도 끌려오지 않는다.
+   */
+  const scrolledRing = useRef<string | null>(null)
+  const scrolledPick = useRef<Revealed | null>(null)
   const [platform] = useState(() => platformOf(navigator))
   /** «사람이 캔버스에서 눌러 골랐다» — 우측 패널이 «컴포넌트» 탭으로 옮긴다(`../shell/canvas-pick.tsx`). 고름이 서지 않았으면(남이 잡음 · 뺌) 안 알린다. */
   const tellPick = useTellCanvasPick()
@@ -464,6 +495,8 @@ export function Canvas(props: {
     const surface = surfaceRef.current
     if (surface === null || frame === null || outlinedIds.length === 0) {
       setBoxes((prev) => (prev.length === 0 ? prev : NO_OUTLINES))
+      if (ringId === null) scrolledRing.current = null
+      if (revealed !== null) scrolledPick.current = revealed
       return
     }
 
@@ -475,6 +508,19 @@ export function Canvas(props: {
       if (target !== null) next.push({ nodeId, box: measureLines(target, nodeId, offset) })
     }
     setBoxes((prev) => (sameOutlines(prev, next) ? prev : next))
+    // 링이 새로 섰거나 묶음을 새로 골랐으면 그 노드를 칸 안으로 굴린다(위 `scrolledRing` 머리말). 그리기 전에 굴린다 — 칸 밖의 링이 한 번 그려지지 않게.
+    let show: string | null = null
+    if (ringId === null) scrolledRing.current = null
+    else if (scrolledRing.current !== ringId && next.some((item) => item.nodeId === ringId)) {
+      scrolledRing.current = ringId
+      show = ringId
+    }
+    if (revealed !== null && scrolledPick.current !== revealed) {
+      scrolledPick.current = revealed
+      show = revealed.nodeId
+    }
+    const shown = show === null ? undefined : next.find((item) => item.nodeId === show)
+    if (shown !== undefined) bringIntoPane(surface, shown.box, zoom)
     // `doc`·`viewportWidth`가 의존성에 있는 것은 둘이 바뀌면 노드의 자리가 바뀌기
     // 때문이다. `zoom`은 자리를 바꾸지는 않지만 아래 계산이 그 값을 쓴다.
     // **겹layer도 자리를 바꾼다** — `setVisible`이 노드를 통째로 빼고 `setProp`이 크기를
@@ -484,7 +530,7 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedIds, rendered, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [outlinedIds, ringId, revealed, rendered, reveal, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -534,7 +580,7 @@ export function Canvas(props: {
     // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
     // `rendered` 는 배치 미리보기가 끼운 사본이다 — 미리보기가 노드를 밀거나 걷히면 다시 잰다(위 `preview` 주석).
-  }, [doc, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [doc, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **배치 선의 자리를 잰다**(`./layout-guides.tsx`). 외곽선 · 마커와 같은 장치 · 같은 의존이다 — 줌 · 뷰포트 폭 · 남의 편집 · 미리보기 ·
@@ -562,7 +608,7 @@ export function Canvas(props: {
         next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
     }
     setGuides((prev) => (sameGuides(prev, next) ? prev : next))
-  }, [guidesOn, rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [guidesOn, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
 
   /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
@@ -601,6 +647,9 @@ export function Canvas(props: {
       //
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
+        // 캔버스를 누르면 코멘트의 링 · 펼침이 걷힌다(`../comments/comment-pointing.tsx` «걷히는 때») — 두 모드 다.
+        point(null)
+        setCommentReveal(null)
         // 바로 연 팝업 페이지의 ✖ — 덮개 위의 것은 층이 닫는다.
         if (mode === 'view' && isPopupClose(event.target) && (event.target as Element).closest?.('[data-wb-popup-layer]') == null) {
           const line = popupStack.popups.length === 0 && isPopupDocument(doc) ? NO_OPEN_POPUP_DIRECT : NO_OPEN_POPUP
@@ -658,6 +707,8 @@ export function Canvas(props: {
           onResize={bumpMeasure}
           // 문서 밖(iframe 의 빈 자리)을 누른 것 — 표면의 `onClick` · `onClickCapture` 가 받는 클릭과 같게 다룬다.
           onBackgroundClick={(event) => {
+            point(null)
+            setCommentReveal(null)
             if (mode === 'view') beginGesture()
             else if (!adds(event)) store.selectNode(null)
           }}
@@ -746,9 +797,25 @@ export function Canvas(props: {
           style={{ left: box.left, top: box.top, width: box.width, height: box.height, outlineWidth: 2 / zoom, outlineOffset: 1 / zoom }}
         />
       )}
+      {/* 코멘트가 가리킨 노드의 링(위 `ringId`) — 기준 외곽선 **뒤에** 그린다. `.wb-shell-selection` 의 첫 요소를 고른 외곽선으로 읽는 케이스가
+          많다. `data-wb-selected-id` 를 안 단다 — 고른 것이 아니다. */}
+      {ringId !== null && ringBox !== null && (
+        <div
+          className="wb-shell-selection"
+          data-wb-comment-pointed={ringId}
+          style={{
+            left: ringBox.left,
+            top: ringBox.top,
+            width: ringBox.width,
+            height: ringBox.height,
+            outlineWidth: 2 / zoom,
+            outlineOffset: 1 / zoom,
+          }}
+        />
+      )}
       {/* 기준 노드가 아닌 고른 노드의 외곽선 — 옅게(`.wb-shell-selection-member`). 기준 노드의 것(`data-wb-selected-id`)은 위 하나다. */}
       {boxes
-        .filter((item) => item.nodeId !== outlinedNodeId)
+        .filter((item) => item.nodeId !== outlinedNodeId && item.nodeId !== ringId)
         .map((item) => (
           <div
             key={item.nodeId}
@@ -1063,4 +1130,37 @@ const NO_IDS: readonly string[] = []
 /** 두 외곽선 목록이 같은가 — `sameBox`와 같은 까닭(값이 같으면 앞 배열을 그대로 둔다). */
 function sameOutlines(a: readonly OutlineBox[], b: readonly OutlineBox[]): boolean {
   return a.length === b.length && a.every((item, index) => item.nodeId === b[index]?.nodeId && sameBox(item.box, b[index]!.box))
+}
+
+/** 외곽선 · 링이 칸 가장자리에 붙어 잘리지 않게 더 들이는 몫(px) — 외곽선은 상자 밖으로 `outlineOffset` + `outlineWidth`(3px) 그려진다. */
+const PANE_MARGIN = 4
+
+/**
+ * 표면 좌표의 상자를 캔버스 칸(`.wb-shell-canvas` — 표면을 품은 스크롤 상자)의 보이는 구간에 들인다 — 다 들어 있으면 안 굴리고, 아니면 가장
+ * 가까운 쪽 끝에 붙인다(`scrollIntoView({ block: 'nearest', inline: 'nearest' })` 와 같은 뜻). 칸보다 크면 위 · 왼 끝을 맞춘다.
+ * `scrollIntoView` 를 안 쓰는 것은 그것이 칸 밖의 조상(셸 · 문서)까지 굴리기 때문이다. 표면은 줌만큼 커져 그려진다(`frameOffset` 과 같은 축).
+ */
+function bringIntoPane(surface: HTMLElement, box: Box, zoom: number): void {
+  const pane = surface.closest<HTMLElement>('.wb-shell-canvas')
+  if (pane === null) return
+  const base = surface.getBoundingClientRect()
+  const view = pane.getBoundingClientRect()
+  const top = view.top + pane.clientTop
+  const left = view.left + pane.clientLeft
+  const dy = nearest(base.top + box.top * zoom, box.height * zoom, top, pane.clientHeight)
+  const dx = nearest(base.left + box.left * zoom, box.width * zoom, left, pane.clientWidth)
+  if (dy !== 0) pane.scrollTop += dy
+  if (dx !== 0) pane.scrollLeft += dx
+}
+
+/**
+ * 한 축에서 상자를 구간 안에 들일 굴림 양 — 들어 있으면 0. 1px 안은 들어 있다고 본다 — 끝에 붙여 굴린 상자를 다시 재면 1px 아래의 소수점만큼 구간을
+ * 넘어, 같은 상자를 다시 고를 때마다 칸에 값이 안 바뀌는 쓰기를 한 번 더 한다(Chrome · `build-test/comment-focus.test.ts` «가장 가까운 쪽»).
+ */
+function nearest(start: number, size: number, viewStart: number, viewSize: number): number {
+  const from = start - PANE_MARGIN
+  const to = start + size + PANE_MARGIN
+  if (from >= viewStart - 1 && to <= viewStart + viewSize + 1) return 0
+  if (to - from > viewSize || from < viewStart) return from - viewStart
+  return to - (viewStart + viewSize)
 }

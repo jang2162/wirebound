@@ -131,6 +131,26 @@
  *    건 GET 을 곧바로 서버에서 읽히고 답만 붙잡았다): 게시 커밋 → 다시 받기가 `"매달린 말"`을 세움 →
  *    그 뒤 낡은 답(빈 표)이 와도 목록 그대로 · DB 1행. 붙잡힌 동안 그 방문은 «코멘트를 불러오는 중…»이다.
  *
+ * ## 묶음이 캔버스를 가리킨다 — «코멘트» 탭(`scope` `'page'`)의 문서에 있는 노드의 묶음만
+ *
+ * | 몸짓 | 하는 일 |
+ * |---|---|
+ * | 묶음에 포커스가 듦(Tab · 누름 · 묶음 안 단추 · 글 상자) · 이미 포커스가 선 묶음을 다시 누름 · 묶음 자체에 포커스가 선 채 Enter/Space(**고름**) | 캔버스가 그 노드에 링을 그리고(`comments/comment-pointing.tsx`), 그 노드가 지금 화면 상태에서 숨었으면 보이는 상태로 바꾸고(`shell/use-view-state.ts` 의 `stateShowingNode`), 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그리고(`comments/comment-pointing.tsx` 머리말 «펼침»), 캔버스 칸 밖이면 굴려 들인다 |
+ * | 머리 단추(편집 모드) | 고름 + 그 노드를 고르고 «컴포넌트» 탭으로 간다(`shell/canvas-pick.tsx` 의 `useShowComponentTab`) |
+ *
+ * **포커스가 곧 고름이다** — 곧바로 선다. 미루지 않는다: 미뤄 둔 고름은 그 사이의 다른 몸짓(구조 트리 줄 · 전환기 · 캔버스 누름 · 휠 · 페이지
+ * 옮김)이 낸 화면을 간격 뒤에 덮는다(Chrome · `build-test/comment-focus.test.ts` «둘째 몸짓»). 대가로 Tab 으로 묶음을 훑거나 본문 글을 끌어 고를
+ * 때도 화면이 바뀐다. 같은 노드를 거듭 고르면 같은 답이다 — 이미 보이면 상태를 안 바꾸고 칸도 안 굴린다(포커스가 묶음 안에서 자식 사이로 옮길
+ * 때마다 · 포커스를 준 누름의 `click` 이 뒤따를 때 다시 부른다). **토큰 링크에 든 포커스는 링만 세운다** — 링크가 데려간 노드를 고름이 가리지
+ * 않게(`tokenLink`). **진짜 선택은 머리 단추만 바꾼다** — 포커스로 고르면 새 코멘트의 «달 곳» ·
+ * 노드마다의 초안이 바뀌고 소프트 잠금이 선다. 사라진 노드 · 문서를 못 읽은 묶음(`present` 가 `'yes'` 가 아님)은 가리킬 자리가 없어 셋 다 없다.
+ *
+ * **묶음 안에서는 노드 단축키가 안 선다**(`[data-wb-own-shortcuts]` — `edit/editor-shortcuts.ts` 의 `shortcutsBlocked`) — «코멘트» 탭의 묶음 전부 ·
+ * 그 안의 «수정» · «삭제» 단추에서. 링은 묶음의 노드를 가리키는데 단축키는 고른 노드에 간다 — 막지 않으면 묶음을 Tab 으로 훑다 친 Delete · Cmd+D ·
+ * ↑↓ · Escape · Cmd+A 가 사람이 안 보는 노드를 지우고 복제하고 고름을 바꾼다(Chrome · `build-test/comment-focus.test.ts` «노드 단축키»). 되돌리기 ·
+ * 붙이기도 함께 안 선다 — 노드에 쓰는 명령이다. 묶음 안 글 상자의 키는 원래 글의 것이다(입력 표면). 고른 노드의 «컴포넌트» 탭 «코멘트» 묶음
+ * (`scope` `'node'`)에는 안 단다 — 그 묶음의 노드가 곧 고른 노드다.
+ *
  * ## 이 패널은 오류 경계 밖이다
  *
  * `apps/web/src`의 오류 경계는 캔버스의 `CanvasBoundary` 하나이고
@@ -142,9 +162,12 @@
  */
 import { useCommentIndex, useCommentTokenContext } from '../comments/comment-index'
 import { COMMENT_FLASH_MS, useCommentFocus } from '../comments/comment-focus'
+import { useCommentPointing } from '../comments/comment-pointing'
+import { useShowComponentTab } from '../shell/canvas-pick'
+import { stateShowingNode, useViewState } from '../shell/use-view-state'
 import { CommentBody } from './comment-body'
 import { useTokenPicker } from './comment-token-picker'
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { COMMENT_BODY_MAX_LENGTH, nodeAlias, refreshCommentTokenLabels, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
@@ -168,6 +191,27 @@ const slot = slotsOf(import.meta.url)
 const NO_PAGE = '페이지를 열면 코멘트가 보입니다'
 /** 코멘트가 하나도 없을 때. */
 const NO_COMMENTS = '아직 코멘트가 없습니다'
+/**
+ * 묶음 자신을 누른 것인가 — 이미 포커스가 선 묶음을 다시 누른 판의 고름(머리말 «묶음이 캔버스를 가리킨다»). 묶음 안의 단추 · 링크 · 글 상자 ·
+ * 토큰 고르개를 누른 것은 포커스가 들 때 이미 골랐고, 그 `click` 은 그것들의 일이다 — 토큰 링크가 데려간 대상을 뒤따른 고름이 덮지 않게. 묶음
+ * 요소까지만 올라가 본다(그 밖은 묶음이 아니다).
+ */
+function pickTarget(target: EventTarget, group: Element): boolean {
+  const own = target instanceof Element ? target.closest(OWN_CONTROLS) : null
+  return own === null || !group.contains(own)
+}
+
+const OWN_CONTROLS = 'button, a, input, textarea, select, label, [role="listbox"], [role="option"]'
+
+/**
+ * 포커스가 든 자리가 토큰 링크인가(`./comment-body.tsx`) — 링크에 든 포커스는 링만 세우고 고르지 않는다. 링크는 다른 노드 · 페이지로 데려가는
+ * 것이다 — 누르면 포커스가 먼저 들어 고름(화면 상태)이 서고 그 뒤에 링크가 노드를 고르는데, 데려간 노드가 그 상태에서 숨으면 고른 노드가 캔버스에
+ * 안 선다(Chrome · `build-test/comment-focus.test.ts` «토큰 링크»).
+ */
+function tokenLink(target: EventTarget): boolean {
+  return target instanceof Element && target.matches('a.wb-shell-comment-token')
+}
+
 /** 고른 노드에 코멘트가 없을 때(`scope`가 `'node'`). */
 const NO_NODE_COMMENTS = '이 노드에 단 코멘트가 없습니다'
 /** 노드를 고르지 않아 새 코멘트를 달 수 없을 때. */
@@ -683,6 +727,11 @@ export function CommentPanel(props: {
    * 아직이면 설 때까지 기다린다(`at` 으로 한 번만). 그 노드에 코멘트가 없으면(번호가 걷힘) 노드를 고른 것으로 끝난다.
    */
   const focus = useCommentFocus()
+  /** 묶음이 캔버스를 가리킨다(머리말 «묶음이 캔버스를 가리킨다»). */
+  const { point, reveal } = useCommentPointing()
+  const mode = useEditorStore(store, (s) => s.mode)
+  const viewState = useViewState(props.pageId)
+  const showComponentTab = useShowComponentTab()
   const rootRef = useRef<HTMLDivElement>(null)
   const flashed = useRef(0)
   const [flash, setFlash] = useState<{ nodeId: string; at: number } | null>(null)
@@ -1181,6 +1230,24 @@ export function CommentPanel(props: {
   const groups = scope === 'page' ? all : all.filter((group) => group.nodeId === selectedNodeId)
   // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
   const aliases = document === null ? null : aliasesOf(document)
+  /**
+   * 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로 바꾸고, 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그린다(머리말 «묶음이 캔버스를
+   * 가리킨다» · `comments/comment-pointing.tsx` 머리말 «펼침»).
+   */
+  const showNode = (nodeId: string): void => {
+    const verdict = stateShowingNode(document, nodeId, viewState.state)
+    if (verdict.change) viewState.choose(verdict.state)
+    reveal({ nodeId, selection: store.getState().selectedNodeIds.join('\n') })
+  }
+  /**
+   * 머리 단추 — 고름에 더해 그 노드를 고르고 «컴포넌트» 탭으로. 남이 잡아 고름이 안 섰으면 탭을 안 옮긴다(캔버스 누름과 같은 판정). 링은 탭이
+   * 옮기며 걷힌다(`routes/editor.tsx` 의 `RightPanel`).
+   */
+  const pickNode = (nodeId: string): void => {
+    showNode(nodeId)
+    store.selectNode(nodeId)
+    if (store.getState().selectedNodeId === nodeId) showComponentTab()
+  }
   // 다시 받기가 **보이는 목록보다 새것일 때만** 말한다(`REFRESH`의 주석).
   const refreshNotice = refreshing !== null && refreshing.at > state.at ? refreshing : null
 
@@ -1293,102 +1360,142 @@ export function CommentPanel(props: {
         <p className="wb-shell-panel-notice">{scope === 'page' ? NO_COMMENTS : NO_NODE_COMMENTS}</p>
       ) : (
         <ul className="wb-shell-comment-groups">
-          {groups.map((group) => (
-            <li
-              key={group.nodeId}
-              className="wb-shell-comment-group"
-              data-comment-node={group.nodeId}
-              {...(flash?.nodeId === group.nodeId ? { 'data-flash': '' } : {})}
-              // 고른 노드의 무리에 표시를 단다. `aria-current`는 "여럿 중 지금 것"을
-              // 뜻하는 표준 자리라 보조 기술도 그대로 읽는다.
-              {...(group.nodeId === selectedNodeId ? { 'aria-current': true as const } : {})}
-            >
-              <h3 className="wb-shell-comment-group-title">
-                <span className="wb-shell-comment-marker">{group.marker ?? '–'}</span>{' '}
-                {/* **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데
-                 *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다. */}
-                {group.present === 'no'
-                  ? `${MISSING_NODE} (${group.nodeId})`
-                  : aliases?.get(group.nodeId) !== undefined
-                    ? `${aliases.get(group.nodeId)} (${group.nodeId})`
-                    : group.nodeId}
-              </h3>
-              <ul className="wb-shell-comment-list">
-                {group.comments.map((comment) => (
-                  <li key={comment.id} className="wb-shell-comment">
-                    <p className="wb-shell-comment-author">{comment.authorName}</p>
-                    {editing === comment.id ? (
-                      <>
-                        <label className="wb-shell-comment-label" htmlFor={`wb-comment-edit-${comment.id}`}>
-                          코멘트 수정
-                        </label>
-                        <textarea
-                          id={`wb-comment-edit-${comment.id}`}
-                          className="wb-shell-comment-input"
-                          value={editDraft}
-                          rows={3}
-                          disabled={busy}
-                          ref={editInput}
-                          {...editPicker.inputProps}
-                          onChange={(event) => {
-                            setEditDraft(event.target.value)
-                            editPicker.sync(event.target.value, event.target.selectionStart ?? event.target.value.length)
-                          }}
-                        />
-                        {editPicker.list}
-                        <button
-                          type="button"
-                          className="wb-shell-comment-save"
-                          disabled={busy || editDraft.trim() === ''}
-                          onClick={() => saveEdit(comment.id)}
-                        >
-                          저장
-                        </button>
-                        <button type="button" className="wb-shell-comment-cancel" disabled={busy} onClick={() => setEditingId(null)}>
-                          취소
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <CommentBody body={comment.body} context={tokenContext} projectId={projectId} />
-                        {/* **수정은 작성자만 부를 수 있다**(남이 부르면 서버가
-                            403으로 막는다). 눌러 봐야 실패할 버튼을 두지 않는다. */}
-                        {props.canEdit && currentUser !== null && comment.authorId === currentUser.id && (
-                          <button
-                            type="button"
-                            className="wb-shell-comment-edit"
+          {groups.map((group) => {
+            // **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데 *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다.
+            const name =
+              group.present === 'no'
+                ? `${MISSING_NODE} (${group.nodeId})`
+                : aliases?.get(group.nodeId) !== undefined
+                  ? `${aliases.get(group.nodeId)} (${group.nodeId})`
+                  : group.nodeId
+            const marker = group.marker ?? '–'
+            // 캔버스를 가리킬 수 있는 묶음(머리말 «묶음이 캔버스를 가리킨다») — 묶음 자체가 Tab 정지점이고 이름은 머리의 글이다.
+            const pointable = scope === 'page' && group.present === 'yes'
+            const head = (
+              <>
+                <span className="wb-shell-comment-marker">{marker}</span> {name}
+              </>
+            )
+            return (
+              <li
+                key={group.nodeId}
+                className="wb-shell-comment-group"
+                data-comment-node={group.nodeId}
+                // 노드 단축키가 이 안에서 안 선다(머리말 «묶음 안에서는 노드 단축키가 안 선다»).
+                {...(scope === 'page' ? { 'data-wb-own-shortcuts': '' } : {})}
+                {...(pointable
+                  ? {
+                      tabIndex: 0,
+                      'aria-label': `${marker} ${name}`,
+                      onFocus: (event: FocusEvent<HTMLLIElement>) => {
+                        point(group.nodeId)
+                        if (!tokenLink(event.target)) showNode(group.nodeId)
+                      },
+                      onClick: (event: MouseEvent<HTMLLIElement>) => {
+                        if (!pickTarget(event.target, event.currentTarget)) return
+                        point(group.nodeId)
+                        showNode(group.nodeId)
+                      },
+                      onKeyDown: (event: KeyboardEvent<HTMLLIElement>) => {
+                        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+                        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+                        event.preventDefault()
+                        showNode(group.nodeId)
+                      },
+                    }
+                  : {})}
+                {...(flash?.nodeId === group.nodeId ? { 'data-flash': '' } : {})}
+                // 고른 노드의 무리에 표시를 단다. `aria-current`는 "여럿 중 지금 것"을
+                // 뜻하는 표준 자리라 보조 기술도 그대로 읽는다.
+                {...(group.nodeId === selectedNodeId ? { 'aria-current': true as const } : {})}
+              >
+                <h3 className="wb-shell-comment-group-title">
+                  {/* 머리 단추는 편집 모드에만 — 뷰 모드에는 «컴포넌트» 탭이 없다. */}
+                  {pointable && mode === 'edit' ? (
+                    <button type="button" className="wb-shell-comment-group-pick" onClick={() => pickNode(group.nodeId)}>
+                      {head}
+                    </button>
+                  ) : (
+                    head
+                  )}
+                </h3>
+                <ul className="wb-shell-comment-list">
+                  {group.comments.map((comment) => (
+                    <li key={comment.id} className="wb-shell-comment">
+                      <p className="wb-shell-comment-author">{comment.authorName}</p>
+                      {editing === comment.id ? (
+                        <>
+                          <label className="wb-shell-comment-label" htmlFor={`wb-comment-edit-${comment.id}`}>
+                            코멘트 수정
+                          </label>
+                          <textarea
+                            id={`wb-comment-edit-${comment.id}`}
+                            className="wb-shell-comment-input"
+                            value={editDraft}
+                            rows={3}
                             disabled={busy}
-                            onClick={() => {
-                              setEditingId(comment.id)
-                              setEditDraft(comment.body)
+                            ref={editInput}
+                            {...editPicker.inputProps}
+                            onChange={(event) => {
+                              setEditDraft(event.target.value)
+                              editPicker.sync(event.target.value, event.target.selectionStart ?? event.target.value.length)
                             }}
-                          >
-                            {shellIcon('rename', 14, 'wb-shell-icon-lead')}
-                            수정
-                          </button>
-                        )}
-                        {/* **삭제는 editor면 누구나 한다** — 수정과 갈린다(서버도 그렇게 가른다). viewer 에게는 없다(`canEdit`) —
-                            제 글이어도 그렇다(역할이 깎인 사람의 옛 글). */}
-                        {props.canEdit && (
-                          // 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»).
+                          />
+                          {editPicker.list}
                           <button
                             type="button"
-                            className="wb-shell-comment-delete"
-                            aria-label="삭제"
-                            title="삭제"
-                            disabled={busy}
-                            onClick={() => remove(comment.id)}
+                            className="wb-shell-comment-save"
+                            disabled={busy || editDraft.trim() === ''}
+                            onClick={() => saveEdit(comment.id)}
                           >
-                            {shellIcon('remove', 14)}
+                            저장
                           </button>
-                        )}
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
+                          <button type="button" className="wb-shell-comment-cancel" disabled={busy} onClick={() => setEditingId(null)}>
+                            취소
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <CommentBody body={comment.body} context={tokenContext} projectId={projectId} />
+                          {/* **수정은 작성자만 부를 수 있다**(남이 부르면 서버가
+                            403으로 막는다). 눌러 봐야 실패할 버튼을 두지 않는다. */}
+                          {props.canEdit && currentUser !== null && comment.authorId === currentUser.id && (
+                            <button
+                              type="button"
+                              className="wb-shell-comment-edit"
+                              disabled={busy}
+                              onClick={() => {
+                                setEditingId(comment.id)
+                                setEditDraft(comment.body)
+                              }}
+                            >
+                              {shellIcon('rename', 14, 'wb-shell-icon-lead')}
+                              수정
+                            </button>
+                          )}
+                          {/* **삭제는 editor면 누구나 한다** — 수정과 갈린다(서버도 그렇게 가른다). viewer 에게는 없다(`canEdit`) —
+                            제 글이어도 그렇다(역할이 깎인 사람의 옛 글). */}
+                          {props.canEdit && (
+                            // 아이콘만 남는 단추 — 이름 · `title` 은 아이콘을 얹기 전의 글 그대로(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»).
+                            <button
+                              type="button"
+                              className="wb-shell-comment-delete"
+                              aria-label="삭제"
+                              title="삭제"
+                              disabled={busy}
+                              onClick={() => remove(comment.id)}
+                            >
+                              {shellIcon('remove', 14)}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
