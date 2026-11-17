@@ -285,8 +285,8 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
     expect(prevented).toBe(true)
   })
 
-  it('click 규칙은 기본 동작을 막지 않는다 — 음성 대조', () => {
-    // 막으면 캔버스의 선택 클릭·링크가 함께 죽는다. `onSubmit`만 갈리는 자리다.
+  it('click 규칙은 링크 밖의 누름의 기본 동작을 막지 않는다 — 음성 대조', () => {
+    // 막으면 제출 단추를 누른 판의 `submit` 이 함께 죽는다. 링크 안인지로만 갈린다(아래 케이스).
     const doc = example(CLICK_SETS_LOADING)
     const tree = renderDocument(doc, { interaction: {} })
     let prevented = false
@@ -296,12 +296,39 @@ describe('트리거 4종이 DOM 이벤트에 붙는다', () => {
       'n_btn',
       'onClick',
     )?.({
+      target: { closest: () => null },
       preventDefault: () => {
         prevented = true
       },
     })
 
     expect(prevented).toBe(false)
+  })
+
+  it('click 규칙이 걸린 노드의 누름이 링크 안이면 링크의 기본 동작을 막는다 — 실브라우저 판은 `apps/web` 의 build-test', () => {
+    // 링크의 `#` 이동이 번들 뷰어의 `hashchange` 로 «화면 상태 바꾸기» 를 되돌린다(`handlersFor` 의 주석).
+    const doc = example(CLICK_SETS_LOADING)
+    const tree = renderDocument(doc, { interaction: {} })
+    let prevented = false
+    const asked: string[] = []
+
+    handlerOf(
+      tree,
+      'n_btn',
+      'onClick',
+    )?.({
+      target: {
+        closest: (selector: string) => {
+          asked.push(selector)
+          return {}
+        },
+      },
+      preventDefault: () => {
+        prevented = true
+      },
+    })
+
+    expect({ prevented, asked }).toEqual({ prevented: true, asked: ['a[href]'] })
   })
 
   it('한 노드에 click과 select가 함께 걸리면 한 번 눌러 둘 다 돈다', () => {
