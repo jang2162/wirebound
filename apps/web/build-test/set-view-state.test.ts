@@ -4,11 +4,15 @@
  * | 판 | 재는 것 | Focus |
  * | --- | --- | --- |
  * | 뷰 모드 — 열고 닫기 | 상태가 숨긴 상세를 [등록] 이 열고 [취소] 가 기본으로 닫는다 · 셸 전환기가 그 상태를 보인다 | 1 |
- * | 뷰 모드 — 모드를 나가면 | 편집 모드에서 고른 «상세 열림» → 뷰 모드에서 [취소] 로 기본 → 편집 모드로 오면 «상세 열림» 으로 돌아간다 | 3 |
+ * | 뷰 모드 — 모드를 나가면 | 편집 모드에서 고른 «상세 열림» → 뷰 모드에서 [취소] 로 기본 → 편집 모드로 오면 «상세 열림» 으로 돌아간다 · 주소도 | 3 |
+ * | 뷰 모드 — 나간 뒤 주소 | 기본에서 들어가 [등록] → 나가면 주소 `?state=` 가 걷히고 새로고침이 기본으로 연다 | RV-VS M1 |
  * | 뷰 모드 — 팝업 겹 | 팝업 안의 [더보기] 는 그 겹만 바꾸고 연 화면은 그대로 · 닫았다 다시 열면 기본 | 2 |
  * | 뷰 모드 — 지운 상태 | 대상 상태를 지우는 편집이 저장된다(경고) · 누르면 끊김 문장이 서고 화면은 그대로 | 4 |
  * | 번들 — 열고 닫기 | 1 과 같고 · 뷰어 고르개와 주소 해시가 따라간다 | 1 |
  * | 번들 — 팝업 겹 | 2 와 같다 | 2 |
+ *
+ * 나간 뒤 주소(`?state=`)의 축은 «나간 뒤 주소» 케이스가 갖는다 — 주소 맞춤(`shell/view-state-address.ts`)을 떼면 «모드를 나가면» 의
+ * `search` 도 함께 죽는다.
  *
  * 번들은 저장소 빌드의 산출물(api 가 `packages/*\/dist` 를 읽는다)로 그린다 — `pnpm build` 가 먼저다.
  */
@@ -83,19 +87,44 @@ describe.skipIf(!전제.ok)('화면 상태 바꾸기 — 실브라우저', () =>
         const frame = await canvasDocument(page)
         await canvasFrame(page).locator('[data-wb-id="n_cancel"]').click()
         await settle(async () => !(await present(frame, '[data-wb-id="n_detail"]')))
-        const inView = await screen(page, frame)
-        await page.getByRole('button', { name: '편집 모드', exact: true }).click()
-        await page.locator('.wb-shell-mode[aria-pressed="true"]', { hasText: '편집 모드' }).waitFor()
+        const inView = { ...(await screen(page, frame)), search: search(page) }
+        await toEdit(page)
         const edit = await canvasDocument(page)
         await settle(() => present(edit, '[data-wb-id="n_detail_text"]'))
-        const back = await screen(page, edit)
+        await settle(async () => search(page) === '?state=s_detail')
+        const back = { ...(await screen(page, edit)), search: search(page) }
         expect({ inView, back }).toEqual({
-          inView: { detail: false, switcher: '화면 상태: 기본', notices: [] },
-          back: { detail: true, switcher: '화면 상태: 상세 열림', notices: [] },
+          inView: { detail: false, switcher: '화면 상태: 기본', notices: [], search: '' },
+          back: { detail: true, switcher: '화면 상태: 상세 열림', notices: [], search: '?state=s_detail' },
         })
       } finally {
         await context.close()
       }
+    })
+
+    it('RV-VS M1 — 기본에서 들어가 [등록] 한 뒤 나가면 주소의 `?state=` 도 걷히고 · 새로고침이 기본으로 연다', async () => {
+      await withView(stack, P, async (page, frame) => {
+        await canvasFrame(page).locator('[data-wb-id="n_add"]').click()
+        await settle(() => present(frame, '[data-wb-id="n_detail_text"]'))
+        // 판 카나리아 — 뷰 모드가 주소에 상태를 실었다(나갈 때 걷을 것이 있다).
+        await settle(async () => search(page) === '?state=s_detail')
+        const inView = { ...(await screen(page, frame)), search: search(page) }
+        await toEdit(page)
+        const edit = await canvasDocument(page)
+        await settle(async () => search(page) === '')
+        const exit = { ...(await screen(page, edit)), search: search(page) }
+        await page.reload()
+        await canvasFrame(page).locator('[data-wb-id="n_add"]').waitFor()
+        const reloaded = await canvasDocument(page)
+        // 새로고침은 주소의 상태를 문서가 실린 뒤에 고른다 — 상세가 설 틈을 준다(기본이면 2s 를 기다리고 지난다).
+        await settle(() => present(reloaded, '[data-wb-id="n_detail_text"]'))
+        const reload = await screen(page, reloaded)
+        expect({ inView, exit, reload }).toEqual({
+          inView: { detail: true, switcher: '화면 상태: 상세 열림', notices: [], search: '?state=s_detail' },
+          exit: { detail: false, switcher: '화면 상태: 기본', notices: [], search: '' },
+          reload: { detail: false, switcher: '화면 상태: 기본', notices: [] },
+        })
+      })
     })
 
     it('Focus 2 — 팝업 안의 상태 바꾸기는 그 겹만 바꾸고 연 화면은 그대로 · 닫았다 다시 열면 기본', async () => {
@@ -203,6 +232,16 @@ async function settle(done: () => Promise<boolean>, ms = 2000): Promise<void> {
 
 async function present(frame: Frame, selector: string): Promise<boolean> {
   return frame.evaluate((css) => document.querySelector(css) !== null, selector)
+}
+
+/** 주소의 질의 — 화면 상태는 `?state=<id>` 다. */
+function search(page: Page): string {
+  return new URL(page.url()).search
+}
+
+async function toEdit(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '편집 모드', exact: true }).click()
+  await page.locator('.wb-shell-mode[aria-pressed="true"]', { hasText: '편집 모드' }).waitFor()
 }
 
 function switcher(page: Page) {
