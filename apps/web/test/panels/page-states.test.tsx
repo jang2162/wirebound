@@ -436,7 +436,7 @@ describe('상태 삭제 확인', () => {
       interactions: [{ on: 'click', actions: targets.map((target) => ({ type: 'setViewState' as const, target })) }],
     })
     const base = doc()
-    const children = [
+    const children: WbNode[] = [
       ...base.root.children!,
       to('n-to-admin', 's_admin'),
       // 한 노드에 둘이어도 한 곳이다.
