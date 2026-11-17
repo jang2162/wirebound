@@ -239,6 +239,44 @@ describe('한 행 떼어 내기', () => {
     expect(splitRowOps(build(hide('n-row'), undefined), 'n-row')).toEqual({ reason: TARGETED_ROW_WHY })
   })
 
+  /**
+   * **«화면 상태 바꾸기» 의 대상은 노드가 아니다**(RV-VS L5) — 상태 id 가 행 · 행 안 노드 id 와 같은 글자여도(api · MCP 는 상태 id 를 아무 글자로
+   * 짓는다) 그 행을 가리키는 것이 아니다. 붙이기 · 모듈 · id 재발급과 같은 가름이다.
+   */
+  it('바깥의 «화면 상태 바꾸기» 가 행 · 행 안 노드 id 와 같은 글자의 상태로 바꿔도 뗄 수 있다', () => {
+    const toState = (target: string): WbNode => ({
+      id: `n-to-${target}`,
+      type: 'Button',
+      props: { label: target },
+      interactions: [{ on: 'click', actions: [{ type: 'setViewState', target }] }],
+    })
+    const document: PageDocument = {
+      ...page(
+        {
+          id: 'n-grid',
+          type: 'DataGrid',
+          children: [column('n-c1', [])],
+          zones: {
+            rows: [
+              {
+                id: 'n-row',
+                type: 'GridRow',
+                props: { repeat: 4 },
+                children: [{ id: 'n-k', type: 'GridCell', children: [{ id: 'n-x', type: 'Text' }] }],
+              },
+            ],
+          },
+        },
+        [toState('n-row'), toState('n-x')],
+      ),
+      viewStates: [
+        { id: 'n-row', name: '행과 같은 글자' },
+        { id: 'n-x', name: '칸 안과 같은 글자' },
+      ],
+    }
+    expect(splitRowRefusal(document, 'n-row')).toBeNull()
+  })
+
   it('못 하는 판 — 되풀이 1 · 생략 띠 · 행이 아님', () => {
     const document = doc()
     expect(splitRowOps(document, 'n-last')).toEqual({ reason: SPLIT_ROW_WHY })
