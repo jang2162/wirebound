@@ -8,6 +8,9 @@
  *   (`shell/view-state-address.ts` 가 페이지를 열 때 읽는다).
  * - **목록에 없는 상태는 기본이다.** 고른 상태를 남이 지웠거나 아직 문서가 안 실렸으면 `state` 는 `null` 이다 — 렌더러가 목록 밖 id 를
  *   기본으로 읽는 것(`renderDocument`)과 같은 결이다. 고른 값 자체는 지우지 않는다(남의 삭제를 되돌리면 다시 선다).
+ * - **뷰 모드를 나가면 들어가기 전 고름으로 돌아간다**(`viewMode` — 정본 「상호작용」 「실행」 의 «모드가 리셋»). 뷰 모드에서는 상호작용
+ *   («화면 상태 바꾸기» — `canvas/canvas.tsx`)도 · 전환기도 같은 값을 바꾸고 모두가 그 값을 보지만, 나갈 때 들어갈 때의 고름(같은 페이지일
+ *   때만 — 그 사이 페이지를 옮겼으면 기본)으로 되돌린다. 시연이 편집 화면의 고름을 바꾸지 않는다. 되돌림도 렌더 중에 한다(위와 같은 까닭).
  * - **깔지 않은 판**(컴포넌트를 혼자 그리는 케이스)은 늘 기본이고 `choose` 는 아무것도 안 한다.
  *
  * 상태를 고른 채 편집해도 노드는 하나다 — 숨은 노드도 고르고 고칠 수 있다(구조 트리가 흐리게 그린다 · 캔버스는 안 그린다).
@@ -28,15 +31,34 @@ interface ViewStateContextValue {
 
 const ViewStateContext = createContext<ViewStateContextValue | null>(null)
 
-export function ViewStateProvider(props: { pageId: string | undefined; children: ReactNode }): ReactElement {
+export function ViewStateProvider(props: {
+  pageId: string | undefined
+  /** 지금 뷰 모드인가 — 나갈 때 들어가기 전 고름으로 되돌린다(머리말). 안 주면 늘 편집 모드다. */
+  viewMode?: boolean
+  children: ReactNode
+}): ReactElement {
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const [seenPage, setSeenPage] = useState(props.pageId)
+  const viewMode = props.viewMode === true
+  const [seenMode, setSeenMode] = useState(viewMode)
+  /** 뷰 모드에 들어가기 전 고름 — 나갈 때 되돌린다. */
+  const [beforeView, setBeforeView] = useState<Chosen | null>(null)
   // 페이지가 바뀐 렌더에서 곧바로 지운다(머리말 «페이지를 옮기면 …»).
   let current = chosen
   if (seenPage !== props.pageId) {
     setSeenPage(props.pageId)
     setChosen(null)
     current = null
+  }
+  if (seenMode !== viewMode) {
+    setSeenMode(viewMode)
+    if (viewMode) setBeforeView(current)
+    else {
+      const back = beforeView !== null && beforeView.pageId === props.pageId ? beforeView : null
+      setChosen(back)
+      setBeforeView(null)
+      current = back
+    }
   }
   const value = useMemo(() => ({ chosen: current, setChosen }), [current])
   return createElement(ViewStateContext.Provider, { value }, props.children)

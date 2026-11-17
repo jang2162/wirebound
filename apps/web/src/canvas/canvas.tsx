@@ -46,7 +46,7 @@ import {
   type NodeRenderError,
   type RevealTarget,
 } from '@wirebound/renderer'
-import { describePageTarget, type PageDocument } from '@wirebound/schema'
+import { DEFAULT_VIEW_STATE, describePageTarget, type PageDocument } from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
@@ -209,7 +209,7 @@ export function Canvas(props: {
   // 다시 그린다 — `use-editor-store.tsx`의 주석 참고.
   const doc = useOpenDocument(props.pageId)
   // **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 상태 영역은 그 상태의 가지를 그린다(없으면 기본 가지).
-  const { state: viewState } = useViewState(props.pageId)
+  const { state: viewState, choose: chooseViewState } = useViewState(props.pageId)
   const selectedNodeId = useEditorStore(store, (s) => s.selectedNodeId)
   const selectedNodeIds = useEditorStore(store, (s) => s.selectedNodeIds)
   const mode = useEditorStore(store, (s) => s.mode)
@@ -416,6 +416,11 @@ export function Canvas(props: {
               }
             })
             popups.handle(event.requests)
+            // «화면 상태 바꾸기» — 셸의 고름을 바꾼다(전환기도 그 상태를 보인다). 뷰 모드를 나가면 들어가기 전 고름으로 돌아간다
+            // (`shell/use-view-state.ts`). 팝업 겹 안의 요청은 층이 그 겹에서 처리해 여기 안 온다(`PopupLayer`).
+            for (const request of event.requests) {
+              if (request.type === 'setViewState') chooseViewState(request.target === DEFAULT_VIEW_STATE ? null : request.target)
+            }
           },
         }
       : undefined
