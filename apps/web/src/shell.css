@@ -3372,6 +3372,19 @@
   color: var(--wb-shell-muted);
 }
 
+/* 제목과 그 곁의 흐린 한 마디(`shell/workspace-layout.tsx` 의 `titleNote`). */
+.wb-shell-workspace-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wb-shell-workspace-title-note {
+  min-width: 0;
+}
+
 .wb-shell-workspace-title {
   margin: 0;
   font-size: 20px;
@@ -3459,10 +3472,9 @@
   color: var(--wb-shell-muted);
 }
 
+/* 프로젝트 수 — 제목 곁(`.wb-shell-workspace-title-note` 안 · `routes/project-list.tsx`). */
 .wb-shell-home-count {
-  margin-left: auto;
-  padding-bottom: 6px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--wb-shell-muted);
 }
 
@@ -3605,12 +3617,17 @@
   white-space: nowrap;
 }
 
+/* 슬러그 — 카드 바닥 줄 왼쪽의 작은 글(보조 단추가 오른쪽). 한 줄이고 넘치면 줄임표 — 다 보려면 `title`. */
 .wb-shell-home-slug {
+  flex: 1 1 auto;
+  align-self: center;
   min-width: 0;
+  overflow: hidden;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--wb-shell-muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* 카드 바닥의 보조 단추 줄(`routes/project-list.tsx` 의 `ProjectRow`). */

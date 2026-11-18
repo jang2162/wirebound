@@ -273,6 +273,19 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('updated')
   })
 
+  /** 수는 제목 곁 · 슬러그는 카드 바닥 줄(보조 단추 앞) — 이름 밑에는 설명만(없으면 비운다). */
+  it('프로젝트 수는 제목 곁에 서고, 슬러그는 이름 밑이 아니라 카드 바닥 줄에 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const heading = screen.getByRole('heading', { level: 1, name: '프로젝트' })
+    const card = within(content()).getByRole('link', { name: '고객 포털 열기' }).closest('li')!
+    expect({
+      note: heading.parentElement?.querySelector('.wb-shell-home-count')?.textContent ?? null,
+      slugRow: card.querySelector('.wb-shell-home-slug')?.parentElement?.className ?? null,
+      slugText: card.querySelector('.wb-shell-home-slug')?.textContent ?? null,
+    }).toEqual({ note: '3개', slugRow: 'wb-shell-home-actions', slugText: 'portal' })
+  })
+
   it('검색 결과가 없으면 «검색 결과가 없습니다» — 빈 목록의 안내와 다른 문장이다', async () => {
     renderList(async () => ROWS)
     await screen.findByText('관리자 콘솔')
@@ -280,7 +293,7 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     expect(screen.getByText('검색 결과가 없습니다')).toBeTruthy()
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
     expect(names()).toEqual([])
-    expect(content().textContent).toContain('프로젝트 3개 중 0개')
+    expect(content().querySelector('.wb-shell-home-count')?.textContent).toBe('3개 중 0개')
   })
 
   it('검색어 · 역할 · 정렬은 주소 질의에 둔다 — 고르면 주소가 바뀌고, 그 주소로 열면 그대로 선다', async () => {
