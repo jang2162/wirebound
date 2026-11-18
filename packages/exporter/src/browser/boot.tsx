@@ -12,7 +12,10 @@
  * 그리며 해시를 바꿔 쓴다(`replaceState` — 상태 전환은 이동이 아니라 뒤로 가기가 그것을 하나씩 밟지 않는다). 해시가 바뀌면(주소를 고침 ·
  * 같은 페이지의 링크) 그 상태로 다시 그린다. 목록에 없는 id 는 기본이다 — 렌더러도 기본으로 그리지만(`renderDocument`) 전환기가 그 id 를
  * 못 고르므로 여기서 먼저 기본으로 접는다. **`#state=` 아닌 해시(번호 닻 · 화면 모드)는 상태를 안 건드린다** — 같은 장의 번호 토큰을 누르면
- * 해시가 바뀌는데 그것이 고른 상태를 기본으로 되돌리면 안 된다. 빈 해시는 기본이다(뒤로 가기로 해시가 빠진 판).
+ * 해시가 바뀌는데 그것이 고른 상태를 기본으로 되돌리면 안 된다. 조각 없는 주소는 기본이다(뒤로 가기로 해시가 빠진 판). **빈 조각(`…#`)은
+ * `#state=` 아닌 해시다** — 규칙 없는 `Link`(기본 뷰가 `<a href="#">`)를 누르면 앵커의 기본 동작이 주소를 그리로 바꾸는데, 그것을 기본으로
+ * 읽으면 아무 일도 안 하는 링크가 보던 상태를 지운다. `location.hash` 는 둘 다 빈 글자라 주소 끝으로 가른다. 실브라우저 판은
+ * `apps/web/build-test/bundle-link-state.test.ts`.
  *
  * **번호 닻 해시(`#wb-marker-<nodeId>` — 코멘트 토큰의 번들 주소)로 열리거나 해시가 그리로 바뀌면 «코멘트» 탭을 고르고 그 줄로 굴린다** — 탭은
  * 라디오 + CSS 라 그 줄이 닫힌 탭 안이면 브라우저의 해시 이동이 아무것도 못 보인다. 그 노드의 줄이 없으면(코멘트가 다 지워져 번호가 걷힌 노드)
@@ -192,7 +195,8 @@ function wireStatePicker(
   }
   const onHash = (): void => {
     const hash = win.location.hash
-    if (hash !== '' && hash !== '#' && !hash.startsWith(STATE_HASH_PREFIX)) return
+    // 머리말 «빈 조각은 `#state=` 아닌 해시다».
+    if (hash === '' ? win.location.href.endsWith('#') : !hash.startsWith(STATE_HASH_PREFIX)) return
     const state = stateFromHash(hash, ids)
     select.value = state ?? DEFAULT_VIEW_STATE
     mount.setViewState(state)

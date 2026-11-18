@@ -10,9 +10,12 @@
  * | 링크 자신에 규칙 | 상세가 서고 해시 · 고르개가 그 상태다 |
  * | 링크를 품은 그리드 행에 규칙 | 같다 — 규칙은 조상의 것이고 앵커는 규칙이 없다 |
  * | «페이지 이동» 링크 | 그 장 파일로 간다(막기가 이동을 막지 않는다) |
+ * | «팝업 열기» 링크 | 상태를 고른 뒤 눌러도 팝업이 서고 상태 · 해시가 그대로다 |
  * | 규칙 없는 링크 | 앵커의 기본 동작이 그대로다(주소 끝이 `#`) |
+ * | 상태를 고른 뒤 규칙 없는 링크 | 빈 조각(`…#`)을 뷰어가 상태로 안 읽어 상세 · 고르개가 그대로다(`boot.tsx` 머리말 «빈 조각») |
+ * | 뒤로 가기로 해시 없는 주소 | 기본이다 — 빈 조각과 조각 없는 주소는 `location.hash` 가 둘 다 빈 글자라 주소 끝으로 가른 경계다 |
  *
- * 에디터 뷰 모드는 캔버스 iframe 이 해시로 상태를 안 읽어 막기 전에도 상태가 안 떨어진다 — 두 링크 판을 잠금으로 둔다.
+ * 에디터 뷰 모드는 캔버스 iframe 이 해시로 상태를 안 읽어 막기 전에도 상태가 안 떨어진다 — 세 링크 판을 잠금으로 둔다.
  *
  * 번들은 저장소 빌드의 산출물(api 가 `packages/*\/dist` 를 읽는다)로 그린다 — `pnpm build` 가 먼저다. 에디터 뷰 모드도 `dist` 를 읽는다(vite 에
  * 별칭이 없다).
@@ -116,6 +119,57 @@ describe.skipIf(!전제.ok)('링크를 눌러 화면 상태 바꾸기 — 실브
         })
       })
     })
+
+    it('«팝업 열기» 링크 — 상태를 고른 뒤 누르면 팝업이 서고 상세 · 고르개 · 해시가 그 상태다', async () => {
+      await withBundle(stack, bundle, async (page) => {
+        await page.locator('.wb-export-state-select').selectOption('s_detail')
+        await page.locator('.wb-export-canvas [data-wb-id="n_modal"]').click()
+        const popupShown = (): Promise<boolean> =>
+          page.evaluate(() => document.querySelector('[data-wb-popup-frame] [data-wb-id="n_pop"]') !== null)
+        await settle(popupShown)
+        await page.waitForTimeout(300)
+        expect({ popup: await popupShown(), screen: await bundleScreen(page) }).toEqual({
+          popup: true,
+          screen: { detail: true, select: 's_detail', hash: '#state=s_detail' },
+        })
+      })
+    })
+
+    it('규칙 없는 링크 — 상태를 고른 뒤 눌러도 상세 · 고르개가 그 상태다', async () => {
+      await withBundle(stack, bundle, async (page) => {
+        await page.locator('.wb-export-state-select').selectOption('s_detail')
+        const before = await bundleScreen(page)
+        await page.locator('.wb-export-canvas [data-wb-id="n_plain"]').click()
+        // 판 카나리아 — 앵커의 기본 동작이 돌아 주소가 빈 조각이 됐다(그 `hashchange` 가 재려는 입력이다).
+        const emptyFragment = (): Promise<boolean> => page.evaluate(() => location.href.endsWith('#'))
+        await settle(emptyFragment)
+        await page.waitForTimeout(300)
+        expect({ before, after: await bundleScreen(page), emptyFragment: await emptyFragment() }).toEqual({
+          before: { detail: true, select: 's_detail', hash: '#state=s_detail' },
+          after: { detail: true, select: 's_detail', hash: '' },
+          emptyFragment: true,
+        })
+      })
+    })
+
+    it('뒤로 가기로 상태 해시에서 해시 없는 주소에 돌아오면 기본이다', async () => {
+      await withBundle(stack, bundle, async (page) => {
+        // 상태 고르기는 주소를 바꿔 쓰기만 한다(`replaceState`) — 뒤로 갈 자리를 만들려고 해시를 옮긴다(링크 · 주소창과 같은 이동).
+        await page.evaluate(() => {
+          location.hash = 'state=s_detail'
+        })
+        await settle(async () => (await bundleScreen(page)).detail)
+        const forward = await bundleScreen(page)
+        await page.goBack({ waitUntil: 'commit' })
+        await settle(async () => !(await bundleScreen(page)).detail)
+        await page.waitForTimeout(300)
+        expect({ forward, back: await bundleScreen(page), emptyFragment: await page.evaluate(() => location.href.endsWith('#')) }).toEqual({
+          forward: { detail: true, select: 's_detail', hash: '#state=s_detail' },
+          back: { detail: false, select: 'default', hash: '' },
+          emptyFragment: false,
+        })
+      })
+    })
   })
 
   describe('에디터 뷰 모드', () => {
@@ -143,6 +197,33 @@ describe.skipIf(!전제.ok)('링크를 눌러 화면 상태 바꾸기 — 실브
         }
       })
     }
+
+    it('규칙 없는 링크 — 상태를 고른 뒤 눌러도 상세 · 셸 전환기가 그 상태다', async () => {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
+      try {
+        await page.goto(P)
+        await canvasFrame(page).locator('[data-wb-id="n_self"]').waitFor()
+        await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
+        await page.locator('.wb-shell-mode[aria-pressed="true"]', { hasText: '뷰 모드' }).waitFor()
+        await page.getByRole('button', { name: /^화면 상태:/ }).click()
+        await page.getByRole('menuitemradio', { name: '상세 열림', exact: true }).click()
+        const frame = await canvasDocument(page)
+        await settle(() => present(frame, '[data-wb-id="n_detail"]'))
+        const screen = async () => ({
+          detail: await present(frame, '[data-wb-id="n_detail"]'),
+          switcher: await page.locator('button[aria-label^="화면 상태: "]').getAttribute('aria-label'),
+        })
+        const before = await screen()
+        await canvasFrame(page).locator('[data-wb-id="n_plain"]').click()
+        await page.waitForTimeout(500)
+        expect({ before, after: await screen() }).toEqual({
+          before: { detail: true, switcher: '화면 상태: 상세 열림' },
+          after: { detail: true, switcher: '화면 상태: 상세 열림' },
+        })
+      } finally {
+        await context.close()
+      }
+    })
   })
 })
 
@@ -186,7 +267,7 @@ async function canvasDocument(page: Page): Promise<Frame> {
 
 /**
  * 메뉴 «관리자» 아래 — «목록»(상태 «상세 열림» · 상세 글(상세 열림에서만) · 규칙 든 링크 · 그리드(행에 규칙 · 칸에 규칙 없는 링크) · «페이지 이동»
- * 링크 · 규칙 없는 링크) · «다른»(글 하나).
+ * 링크 · 규칙 없는 링크 · «팝업 열기» 링크) · «다른»(글 하나) · «팝업»(글 하나).
  */
 async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string; projectId: string }> {
   const call = (method: string, path: string, body?: unknown) => stack.request(owner, method, path, body)
@@ -198,6 +279,7 @@ async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string;
   const menu = ok(await call('POST', `/projects/${project.id}/menu`, { parentId: null, title: '관리자' }), '메뉴')
   const list = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '목록', kind: 'page' }), '목록')
   const other = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '다른', kind: 'page' }), '다른')
+  const popup = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '팝업', kind: 'popup' }), '팝업')
   const grid = {
     id: 'n_grid',
     type: 'DataGrid',
@@ -214,6 +296,7 @@ async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string;
     grid,
     link('n_go', '다른으로', [{ on: 'click', actions: [{ type: 'navigate', target: 'page:관리자/다른' }] }]),
     link('n_plain', '그냥 링크'),
+    link('n_modal', '팝업으로', [{ on: 'click', actions: [{ type: 'openModal', target: 'page:관리자/팝업' }] }]),
   ]
   ok(
     await call('PATCH', `/projects/${project.id}/pages/${list.id}/ops`, {
@@ -231,6 +314,13 @@ async function fixture(stack: EditorStack, owner: Session): Promise<{ P: string;
       ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_other', type: 'Text', props: { content: '다른 장' } } }],
     }),
     'ops 다른',
+  )
+  ok(
+    await call('PATCH', `/projects/${project.id}/pages/${popup.id}/ops`, {
+      baseSeq: 0,
+      ops: [{ op: 'add', path: '/root/children/0', value: { id: 'n_pop', type: 'Text', props: { content: '팝업 글' } } }],
+    }),
+    'ops 팝업',
   )
   return { P: `/projects/${project.id}/pages/${list.id}`, projectId: project.id }
 }
