@@ -151,15 +151,19 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     return (list ?? []).map((child) => child.id)
   }
 
-  /** 서버 문서를 구조 트리 줄 차례로(`src/panels/structure-tree.tsx` 의 `rowLists` 와 같은 규칙) — 노드는 id, 구역 줄은 `zone:부모:이름`. */
-  function treeOrder(root: WbNode): string[] {
+  /**
+   * 서버 문서를 구조 트리 줄 차례로(`src/panels/structure-tree.tsx` 의 `rowLists` 와 같은 규칙) — 노드는 id, 구역 줄은 `zone:부모:이름`. 빈 구역
+   * 줄은 `open`(고른 노드 · 고른 구역의 부모)의 것만 선다(`StructureNode` 의 `showEmpty`) — 이 파일의 판은 넣거나 놓은 뒤 그 노드(구역 없음)가
+   * 골라져 있어 기본이 «없음» 이다.
+   */
+  function treeOrder(root: WbNode, open: string | null = null): string[] {
     const out: string[] = []
     const walk = (node: WbNode): void => {
       out.push(node.id)
       const lists = childLists(node)
       const zoned = lists.some((entry) => entry.pointer !== '/children')
       for (const entry of lists) {
-        if (zoned) out.push(`zone:${node.id}:${entry.zone}`)
+        if (zoned && (entry.list.length > 0 || node.id === open)) out.push(`zone:${node.id}:${entry.zone}`)
         for (const child of entry.list) walk(child)
       }
     }
@@ -473,6 +477,8 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     const P = await fixture('zone-row')
     const tab = await openTab(P)
     try {
+      // 빈 구역 줄은 그 카드를 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await selectRow(tab.page, 'n_bare')
       await zoneRow(tab.page, 'n_bare', 'footer').click()
       const current = await zoneRow(tab.page, 'n_bare', 'footer').getAttribute('aria-current')
       const heading = await tab.page.getByRole('heading', { name: 'Card · 바닥' }).count()
@@ -487,6 +493,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       // 붙여넣기 — 몸통 글을 복사하고 제목 옆 구역 줄을 고른 뒤 붙인다.
       await selectRow(tab.page, 'n_kv')
       await tab.page.keyboard.press('ControlOrMeta+c')
+      await selectRow(tab.page, 'n_bare')
       await zoneRow(tab.page, 'n_bare', 'titleSide').click()
       await tab.page.keyboard.press('ControlOrMeta+v')
       const titleSide = await poll(
@@ -495,7 +502,9 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
         (ids) => ids.length === 1,
       )
 
-      // 트리 줄 끌기 — 앞 카드의 몸통 글 줄을 이 카드의 머리 오른쪽 구역 줄에 놓는다(둘이 가까워 트리 칸을 안 민다).
+      // 트리 줄 끌기 — 앞 카드의 몸통 글 줄을 이 카드의 머리 오른쪽 구역 줄에 놓는다(둘이 가까워 트리 칸을 안 민다). 그 카드를 골라 빈 구역
+      // 줄을 세운다 — 줄 끌기는 끄는 줄을 고르지 않아 그대로 선다.
+      await selectRow(tab.page, 'n_bare')
       await zoneRow(tab.page, 'n_bare', 'headEnd').scrollIntoViewIfNeeded()
       const from = (await treeRow(tab.page, 'n_kv').boundingBox())!
       const to = (await zoneRow(tab.page, 'n_bare', 'headEnd').boundingBox())!
@@ -596,6 +605,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
     const P = await fixture('viewer', 'viewer')
     const tab = await openTab(P, 'bob')
     try {
+      await selectRow(tab.page, 'n_card')
       await zoneRow(tab.page, 'n_card', 'footer').click()
       const current = await zoneRow(tab.page, 'n_card', 'footer').getAttribute('aria-current')
       const notice = await tab.page.getByText('구역입니다. 이 화면에서는 넣을 수 없습니다.').count()
@@ -603,6 +613,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
       await selectRow(tab.page, 'n_kv')
       const handles = await handle(tab.page).count()
       await tab.page.keyboard.press('ControlOrMeta+c')
+      await selectRow(tab.page, 'n_card')
       await zoneRow(tab.page, 'n_card', 'footer').click()
       await tab.page.keyboard.press('ControlOrMeta+v')
       await tab.page.waitForTimeout(800)
@@ -631,6 +642,7 @@ describe.skipIf(!전제.ok)('구역 에디터 — 실브라우저', () => {
         (kinds) => kinds.includes('joined'),
         12000,
       )
+      await selectRow(bob.page, 'n_bare')
       await zoneRow(bob.page, 'n_bare', 'footer').click()
       await showOnly(bob.page, 'Divider')
       await bob.page.locator('[data-wb-palette-card="Divider"] .wb-shell-palette-add').click()

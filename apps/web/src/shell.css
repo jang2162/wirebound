@@ -1299,10 +1299,32 @@
   text-overflow: ellipsis;
 }
 
-/* 줄 요약(`panels/structure-tree.tsx`) — 타입 · 별칭보다 흐리게. 색을 정하지 않고 줄 글색을 옅게 낸다 — 고른 줄(채움 위의 흰 글) ·
-   꺼진 줄에서도 그 줄의 색을 따른다(결합자로 고른 줄을 따로 겨냥하지 않는다 — `test/shell-css-guard.ts`). */
+/* 줄의 타입(`.wb-shell-structure-type`) — 별칭 · 요약이 있는 줄에서만 흐리다(`panels/structure-tree.tsx` — 타입만 있는 줄은 타입이 이름이다). 사람이 지은 글(별칭 ·
+   요약)이 줄의 이름으로 먼저 읽힌다. 색을 정하지 않고 줄 글색을 옅게 낸다 — 고른 줄(채움 위의 흰 글) · 꺼진 줄에서도 그 줄의 색을
+   따른다(결합자로 고른 줄을 따로 겨냥하지 않는다 — `test/shell-css-guard.ts`). */
+.wb-shell-structure-type-muted {
+  opacity: 0.6;
+}
+
+/* 줄 요약 — 노드의 라벨 · 제목 같은 사람 글이라 진하게 둔다. */
 .wb-shell-structure-summary {
-  opacity: 0.65;
+  font-weight: 500;
+}
+
+/* 빈 구역 줄을 감춘 노드 줄 끝의 칩 «빈 구역 N»(`panels/structure-tree.tsx` 의 `showEmpty`). 줄이 `visibility: hidden` 이라(아래 줄 상자
+   주석) 스스로 켠다. 줄 단추가 남는 폭을 다 받으므로 칩은 줄지 않는다. */
+.wb-shell-structure-empty-zones {
+  visibility: visible;
+  flex: none;
+  align-self: center;
+  margin: 0 4px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--wb-shell-muted);
 }
 
 /* 줄의 별칭 — 타입과 같은 글색이다. 따로 둔 것은 조각을 가리키는 자리(넘침 측정 · 스크린숏)가 이름으로 찾게 하려는 것이다. */

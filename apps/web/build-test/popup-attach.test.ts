@@ -401,6 +401,8 @@ describe.skipIf(!전제.ok)('팝업 안의 파일첨부 · 반복 행 표 — �
       await rootRow.locator('button').first().click()
       await add('FileAttach', '파일')
       await landed('몸통 파일첨부', 'FileAttach', 1)
+      // 빈 구역 줄은 뿌리를 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await rootRow.locator('button').first().click()
       await footerRow.click()
       await add(PRESET, '반복')
       await landed('바닥 프리셋', 'DataGrid', 2)

@@ -143,12 +143,11 @@ export function structureRowName(type: string): (name: string, element: Element 
 }
 
 /**
- * 구조 트리 줄의 **타입** — 줄 단추의 첫 글자 마디(`src/panels/structure-tree.tsx` 가 타입을 먼저 쓰고 별칭 · 요약을 조각으로 잇는다).
+ * 구조 트리 줄의 **타입** — 줄 단추의 타입 조각(`.wb-shell-structure-type` — `src/panels/structure-tree.tsx` 가 타입을 먼저 쓰고 별칭 · 요약을 조각으로 잇는다).
  * 고를 수 없는 줄(`.wb-shell-structure-broken`)은 글 전부다. 줄 글 전부는 `textContent` 다.
  */
 export function structureRowType(row: Element | null | undefined): string | null {
   if (row === null || row === undefined) return null
   if (!row.classList.contains('wb-shell-structure-node')) return row.textContent
-  const first = row.firstChild
-  return first !== null && first.nodeType === 3 ? first.textContent : row.textContent
+  return row.querySelector(':scope > .wb-shell-structure-type')?.textContent ?? row.textContent
 }

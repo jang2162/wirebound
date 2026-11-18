@@ -224,6 +224,8 @@ describe.skipIf(!전제.ok)('팔레트 프리셋 · 파일첨부 — 실브라�
       await add(page, PRESET)
       await landed('뿌리 넣기', 2)
       // ③ 카드 «바닥» 구역 줄.
+      // 빈 구역 줄은 그 카드를 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await treeRow(page, 'n_card000001').locator('button').first().click()
       await zoneRow(page, 'n_card000001', 'footer').click()
       await add(page, PRESET)
       await landed('구역 줄 넣기', 3)
