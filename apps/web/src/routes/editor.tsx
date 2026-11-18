@@ -35,13 +35,13 @@ import type { PageDetail, ProjectView } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
 import { PlacementRegionsProvider } from '../drag/use-placement'
-import { CommentPanel } from '../panels/comment-panel'
+import { CommentPanel, useNodeComments } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { PageJsonNoticeList, usePageJsonNotices } from '../panels/page-json-notices'
 import { InteractionPanel } from '../panels/interaction-panel'
 import { PageInfoPanel } from '../panels/page-info'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
-import { ComponentPanel } from '../panels/component-panel'
+import { ComponentCommentsOpenProvider, ComponentPanel } from '../panels/component-panel'
 import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
@@ -1312,31 +1312,36 @@ function RightPanel(props: {
   }
 
   return (
-    <>
-      <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
-        {tabs.map((item, index) => (
-          <button
-            key={item.id}
-            ref={(element) => {
-              if (element === null) tabRefs.current.delete(item.id)
-              else tabRefs.current.set(item.id, element)
-            }}
-            type="button"
-            role="tab"
-            id={`wb-tab-${item.id}`}
-            className="wb-shell-tab"
-            aria-selected={tab === item.id}
-            aria-controls={`wb-tabpanel-${item.id}`}
-            tabIndex={tab === item.id ? 0 : -1}
-            onClick={() => setChosen(item.id)}
-            onKeyDown={(event) => moveTab(event, index)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+    <ComponentCommentsOpenProvider>
+      {/* 칸 provider 는 탭 줄까지 품는다 — «코멘트» 탭 이름의 수(`CommentTabLabel`)가 코멘트 목록 칸을 읽는다. 아래 본문 자리의 주석이 provider 의 몫이다. */}
+      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
+        <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
+          {tabs.map((item, index) => (
+            <button
+              key={item.id}
+              ref={(element) => {
+                if (element === null) tabRefs.current.delete(item.id)
+                else tabRefs.current.set(item.id, element)
+              }}
+              type="button"
+              role="tab"
+              id={`wb-tab-${item.id}`}
+              className="wb-shell-tab"
+              aria-selected={tab === item.id}
+              aria-controls={`wb-tabpanel-${item.id}`}
+              // «코멘트» 탭의 수(`CommentTabLabel`) — 수가 없으면 가리키는 요소가 없어 설명도 없다.
+              aria-describedby={item.id === 'comments' ? COMMENT_TAB_NOTE : undefined}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setChosen(item.id)}
+              onKeyDown={(event) => moveTab(event, index)}
+            >
+              {item.id === 'comments' ? <CommentTabLabel label={item.label} /> : item.label}
+            </button>
+          ))}
+        </div>
+        <CommentTabLabel label="" note />
 
-      {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
+        {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
           마운트될 때 `listComments`를 부르므로, 감춰 둔 채 살려 두면 보지도 않는 목록을
           위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
           같은 판단이고, 근거도 같다(그쪽 주석).
@@ -1353,7 +1358,6 @@ function RightPanel(props: {
 
           «페이지 정보»와 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
-      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
         <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
           {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
               복원은 탭을 안 바꾼다. 다시 세우는 것은 탭을 다녀온 것과 같은 길이다 — 친 글자 · 나가 있는 쓰기는 위
@@ -1374,6 +1378,32 @@ function RightPanel(props: {
           })()}
         </div>
       </PanelDraftsProvider>
+    </ComponentCommentsOpenProvider>
+  )
+}
+
+/**
+ * «코멘트» 탭 이름 — 하나를 고른 노드에 코멘트가 있으면 그 수를 이름 곁에 단다(목록을 읽은 뒤 · 0 이면 안 단다 — 빈 수가 눈을 끌 까닭이 없다).
+ * 수는 눈에만 보이고(`aria-hidden`) 탭의 접근 이름은 «코멘트» 그대로다 — 탭을 이름으로 찾는 자리가 수에 흔들리지 않고, 읽는 사람에게는 탭의
+ * 설명(`aria-describedby` → 감춘 글 — 감춘 글은 이름에 안 들고 설명으로는 읽힌다)으로 준다.
+ */
+const COMMENT_TAB_NOTE = 'wb-tab-comments-note'
+
+function CommentTabLabel(props: { label: string; note?: boolean }): ReactElement | null {
+  const store = useEditorStoreInstance()
+  const nodeId = useEditorStore(store, (s) => (s.selectedNodeIds.length > 1 ? null : s.selectedNodeId))
+  const { count } = useNodeComments(nodeId)
+  const shown = count !== null && count > 0
+  // 설명 글은 탭 단추 밖에 둔다(`note`) — 단추 안이면 단추의 글(`textContent`)에 섞인다.
+  if (props.note === true) return shown ? <span id={COMMENT_TAB_NOTE} hidden>{`고른 노드의 코멘트 ${count}개`}</span> : null
+  return (
+    <>
+      {props.label}
+      {shown && (
+        <span className="wb-shell-tab-badge" aria-hidden="true">
+          {count}
+        </span>
+      )}
     </>
   )
 }

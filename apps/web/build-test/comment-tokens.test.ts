@@ -97,7 +97,7 @@ describe.skipIf(!전제.ok)('코멘트 토큰 이동 — 실브라우저', () =>
                       .querySelector('.wb-shell-region[aria-label="구조 트리"] .wb-shell-structure-node[aria-current="true"]')
                       ?.closest('[data-tree-row]')
                       ?.getAttribute('data-tree-id') ?? null,
-                  tab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? null,
+                  tab: document.querySelector('[role="tab"][aria-selected="true"]')?.firstChild?.textContent?.trim() ?? null,
                   flashed: [...document.querySelectorAll('[data-comment-node][data-flash]')].map((el) =>
                     el.getAttribute('data-comment-node'),
                   ),

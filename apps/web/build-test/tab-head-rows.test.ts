@@ -88,7 +88,13 @@ describe.skipIf(!전제.ok)('우측 탭 머리 줄 — 실브라우저', () => {
     await rightTabs(page).getByRole('tab', { name, exact: true }).click()
     await poll(
       `${name} 탭`,
-      async () => ((await rightTabs(page).locator('[role="tab"][aria-selected="true"]').textContent()) ?? '').trim(),
+      // 탭 이름 글만 — «코멘트» 탭은 곁에 수 배지를 단다(`routes/editor.tsx` 의 `CommentTabLabel`).
+      async () =>
+        (
+          await rightTabs(page)
+            .locator('[role="tab"][aria-selected="true"]')
+            .evaluate((el) => el.firstChild?.textContent ?? '')
+        ).trim(),
       (v) => v === name,
     )
   }

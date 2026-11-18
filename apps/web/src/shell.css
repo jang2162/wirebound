@@ -1299,9 +1299,14 @@
   text-overflow: ellipsis;
 }
 
-/* 줄의 타입(`.wb-shell-structure-type`) — 별칭 · 요약이 있는 줄에서만 흐리다(`panels/structure-tree.tsx` — 타입만 있는 줄은 타입이 이름이다). 사람이 지은 글(별칭 ·
+/* 줄의 타입(`.wb-shell-structure-type` — 줄 글색 그대로 · 조각을 이름으로 찾게 따로 둔다) — 별칭 · 요약이 있는 줄에서만 흐리다(`-muted` ·
+   `panels/structure-tree.tsx` — 타입만 있는 줄은 타입이 이름이다). 사람이 지은 글(별칭 ·
    요약)이 줄의 이름으로 먼저 읽힌다. 색을 정하지 않고 줄 글색을 옅게 낸다 — 고른 줄(채움 위의 흰 글) · 꺼진 줄에서도 그 줄의 색을
    따른다(결합자로 고른 줄을 따로 겨냥하지 않는다 — `test/shell-css-guard.ts`). */
+.wb-shell-structure-type {
+  color: inherit;
+}
+
 .wb-shell-structure-type-muted {
   opacity: 0.6;
 }
@@ -2023,7 +2028,58 @@
   border-top: 1px solid var(--wb-shell-line);
 }
 
-/* 묶음 이름. 안의 노드 제목(`.wb-shell-panel-title` — 13px)보다 작고 옅게 둬 «무엇의 묶음인가» 로만 읽힌다. */
+/* «코멘트» 묶음의 머리 줄(`panels/component-panel.tsx`) — 이름 · 수 · 펼치기 단추. 묶음은 기본으로 접혀 이 줄만 선다. */
+.wb-shell-component-part-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.wb-shell-component-part-count {
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-component-part-toggle {
+  appearance: none;
+  margin-left: auto;
+  border: 0;
+  border-radius: 3px;
+  padding: 2px 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--wb-shell-accent);
+  cursor: pointer;
+}
+
+.wb-shell-component-part-toggle:disabled {
+  color: var(--wb-shell-muted);
+  cursor: default;
+}
+
+/* 머리 줄 안의 묶음 이름 — 아래 여백은 줄이 갖는다. */
+.wb-shell-component-part-title-inline {
+  margin: 0;
+}
+
+/* «코멘트» 탭 이름 곁의 수(`routes/editor.tsx` 의 `CommentTabLabel`). */
+.wb-shell-tab-badge {
+  display: inline-block;
+  margin-left: 4px;
+  border-radius: 999px;
+  padding: 0 5px;
+  min-width: 16px;
+  background: var(--wb-shell-comment);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+}
+
+/* 묶음 이름. 안의 노드 제목(`.wb-shell-panel-title` — 13px)보다 작고 옅게 둬 «무엇의 묶음인가» 로만 읽힌다. 머리 줄 안에서는 줄이 아래 여백을 갖는다. */
 .wb-shell-component-part-title {
   margin: 0 0 8px;
   font-size: 11px;

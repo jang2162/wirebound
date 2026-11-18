@@ -162,7 +162,11 @@ describe.skipIf(!전제.ok)('N2 정보 통지 — 실브라우저', () => {
       await field.fill('')
       await field.pressSequentially('가'.repeat(70))
       expect(await field.inputValue()).toBe('가'.repeat(60))
-      expect(await field.getAttribute('placeholder')).toBe('60자까지')
+      // 한도는 칸 밑 안내다(빈 칸의 자리표가 아니다 — 값처럼 읽혔다).
+      expect(await field.getAttribute('placeholder')).toBeNull()
+      expect(await field.evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? null)).toBe(
+        '트리 · 코멘트에 보이는 이름, 60자까지',
+      )
       await field.press('Enter')
       await poll(
         '서버의 별칭',

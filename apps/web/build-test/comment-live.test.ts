@@ -112,7 +112,8 @@ describe.skipIf(!전제.ok)('코멘트 목록 실시간 갱신 — 실브라우�
   }
 
   async function selectedTab(page: Page): Promise<string> {
-    return ((await page.locator('[role="tab"][aria-selected="true"]').textContent()) ?? '').trim()
+    // 탭 이름 글만 — «코멘트» 탭은 곁에 수 배지를 단다(`routes/editor.tsx` 의 `CommentTabLabel`).
+    return (await page.locator('[role="tab"][aria-selected="true"]').evaluate((el) => el.firstChild?.textContent ?? '')).trim()
   }
 
   async function tab(page: Page, name: string): Promise<void> {
@@ -282,6 +283,8 @@ describe.skipIf(!전제.ok)('코멘트 목록 실시간 갱신 — 실브라우�
     try {
       await tab(aliceTab.page, '컴포넌트')
       await pickRow(aliceTab.page, 'n_a')
+      // 묶음은 기본으로 접혀 있다 — 편다(`src/panels/component-panel.tsx`).
+      await panel(aliceTab.page).getByRole('button', { name: '펼치기', exact: true }).click()
       // 카나리아 — 묶음이 섰다(비어 있다).
       await panel(aliceTab.page).getByText('이 노드에 단 코멘트가 없습니다').waitFor()
       expect(await bobWalk(aliceTab, bobRest(P))).toEqual(WALK)
@@ -303,6 +306,8 @@ describe.skipIf(!전제.ok)('코멘트 목록 실시간 갱신 — 실브라우�
     try {
       await tab(aliceTab.page, '컴포넌트')
       await pickRow(aliceTab.page, 'n_a')
+      // 묶음은 기본으로 접혀 있다 — 편다(`src/panels/component-panel.tsx`).
+      await panel(aliceTab.page).getByRole('button', { name: '펼치기', exact: true }).click()
       await panel(aliceTab.page).getByText('이 노드에 단 코멘트가 없습니다').waitFor()
       const posted = await stack.request(bob, 'POST', `${P}/comments`, { nodeId: 'n_b', body: '밥이 나에 단 말' })
       expect(posted.status).toBe(201)

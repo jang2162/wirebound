@@ -937,19 +937,19 @@ describe('새 코멘트는 쓴 노드에만 달린다', () => {
 describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
   const target = (): string => document.body.querySelector('#wb-comment-target')?.textContent ?? '(없음)'
 
-  it('편집 모드 — 고른 노드의 번호 · 타입 · id 를 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
+  it('편집 모드 — 고른 노드의 번호 · 줄 이름(내부 id 없이)을 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
     await openPage(pageDoc(three({ b: 2 })), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
     // 캔버스 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 고를 때마다 «코멘트» 탭으로 돌아온다.
     const pick = (key: 'a' | 'b'): Promise<void> => pickInCommentTab(`n_${key}`)
     await pick('a')
     typeInto(await findNewBox(), '가에 대해')
-    expect(target()).toBe('달 곳: – Text (n_a)')
+    expect(target()).toBe('달 곳: – Text 가')
 
     await pick('b')
     // **한 값에서** — 상자의 초안과 달 곳이 같이 바뀐다(위 «대상의 축» 절의 «노드마다»).
     expect((await findNewBox()).value).toBe('')
-    expect(target()).toBe('달 곳: 2 Text (n_b)')
+    expect(target()).toBe('달 곳: 2 Text 나')
     expect(newBox().getAttribute('aria-describedby')).toBe('wb-comment-target')
   })
 
@@ -960,6 +960,6 @@ describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
     await findNewBox()
 
     // 페이지를 열면 루트가 골라져 있다 — 뷰 모드에서는 캔버스가 선택을 안 바꾼다(`canvas.tsx`의 «뷰 모드에서는 선택을 바꾸지 않는다»).
-    expect(target()).toBe('달 곳: – Page (n_root)')
+    expect(target()).toBe('달 곳: – Page')
   })
 })
