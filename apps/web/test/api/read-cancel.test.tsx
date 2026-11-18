@@ -19,7 +19,7 @@ const PROJECT: ProjectView = { id: PROJECT_ID, name: PROJECT_NAME, slug: 'admin'
 
 async function leaveEditor(): Promise<void> {
   fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-  await screen.findByRole('link', { name: PROJECT_NAME })
+  await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
 }
 
 describe('떠나면 조회를 요청째 끊는다', () => {

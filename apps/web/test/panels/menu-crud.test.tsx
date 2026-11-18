@@ -1272,9 +1272,9 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     await renameMenuHeld(server, '회원', false)
 
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-    await screen.findByRole('link', { name: PROJECT_NAME })
+    await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
     await server.fail(0, new ApiError(500, 'internal', SERVER_ERROR, [], true))
-    fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+    fireEvent.click(screen.getByRole('link', { name: `${PROJECT_NAME} 열기` }))
     await screen.findByText('회원관리')
 
     await waitFor(() => expect(alertText()).toBe(`이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — ${SERVER_ERROR}`))
@@ -1292,7 +1292,7 @@ describe('이름 변경 — 시간 제한 · «모름» · 떠나 있는 동안'
     await renameMenuHeld(server, '회원', false)
 
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-    fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
+    fireEvent.click(await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` }))
     await screen.findByText('회원관리')
     fireEvent.click(menuButton('회원관리'))
     expect(isOff(tool('이름 변경'))).toBe(true)
@@ -1418,7 +1418,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
     }
     const before = treeRegion()
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-    fireEvent.click(await until(() => screen.queryByRole('link', { name: PROJECT_NAME })))
+    fireEvent.click(await until(() => screen.queryByRole('link', { name: `${PROJECT_NAME} 열기` })))
     await until(() =>
       screen.queryByRole('region', { name: '메뉴·페이지 트리' }) === null ? null : within(treeRegion()).queryByText(/회원관리|밥의 메뉴/),
     )
@@ -1596,12 +1596,12 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
     const server = server2()
     await renameHeld(server, '회원', true)
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-    for (let i = 0; i < 50 && screen.queryByRole('link', { name: PROJECT_NAME }) === null; i += 1) await advance(0)
+    for (let i = 0; i < 50 && screen.queryByRole('link', { name: `${PROJECT_NAME} 열기` }) === null; i += 1) await advance(0)
     expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).toBeNull()
 
     await advance(WRITE_DEADLINE_MS)
     vi.useRealTimers()
-    fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+    fireEvent.click(screen.getByRole('link', { name: `${PROJECT_NAME} 열기` }))
     await waitFor(() => expect(menuButton('회원관리')).toBeTruthy())
     expect(alertText()).toBe(
       '이 화면을 떠나 있는 동안 이름을 바꾸지 못했습니다 — 응답이 없어 서버를 다시 읽었더니 이름이 바뀌지 않았습니다',
@@ -1628,7 +1628,7 @@ describe('이름 변경 — 판정의 말이 지금 떠 있는 트리에 닿는�
         }),
     )
     fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-    fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
+    fireEvent.click(await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` }))
     await waitFor(() => expect(screen.queryByRole('region', { name: '메뉴·페이지 트리' })).not.toBeNull())
 
     server.commit()

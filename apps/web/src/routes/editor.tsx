@@ -2148,6 +2148,9 @@ function ModeTools(): ReactElement {
  * 그 페이지에서 꺼져 더는 안 따른다 — **손으로 고른 배율을 창을 흔들었다고 빼앗지 않는다**(아래 `useZoomCommands` 머리말의 까닭). 다른 페이지를
  * 열면 다시 켜진다(`loadPage`).
  *
+ * 다시 재는 계기는 `zoomFit` · 프리셋 폭 · 칸의 크기뿐이다 — 칸(`.wb-shell-canvas`)은 셸에 늘 서 있어 페이지마다 바뀌지 않고, 이미 맞춘 채 다른
+ * 페이지를 열면 같은 칸 · 같은 프리셋이라 배율도 같다. 열린 페이지 id 를 계기로 고르지 않는다(`test/store-access.test.ts` 가 막는 우회다).
+ *
  * **상한이 1 인 까닭** — 좁은 문서(390 · 720)를 넓은 칸에 키우면 처음 여는 판이 실제보다 커 보인다. 넓은 칸에 맞춰 키우는 것은 «화면 맞춤» 단추의 몫이다.
  *
  * 칸에 세로 스크롤바가 서고 빠지는 것이 칸 폭을 흔들어 배율이 오가지 않게 칸은 스크롤바 자리를 늘 둔다(`shell.css` 의 `.wb-shell-canvas` 의
@@ -2157,7 +2160,6 @@ function useAutoFitZoom(canvasRef: RefObject<HTMLElement | null>): void {
   const store = useEditorStoreInstance()
   const fitting = useEditorStore(store, (s) => s.zoomFit)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
-  const openPageId = useEditorStore(store, (s) => s.openPageId)
   useLayoutEffect(() => {
     if (!fitting) return
     const canvas = canvasRef.current
@@ -2171,7 +2173,7 @@ function useAutoFitZoom(canvasRef: RefObject<HTMLElement | null>): void {
     const observer = new ResizeObserver(apply)
     observer.observe(canvas)
     return () => observer.disconnect()
-  }, [fitting, viewportWidth, openPageId, store, canvasRef])
+  }, [fitting, viewportWidth, store, canvasRef])
 }
 
 /** 폭 맞춤이 배율을 줄여 둔 동안(`zoomFit` 이고 1 아래)의 말 — 배율 글의 `title` · 줌 묶음의 설명 · 접힌 머리의 배율 줄. */

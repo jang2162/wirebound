@@ -100,7 +100,7 @@ async function toCommentTab(): Promise<void> {
  */
 async function leaveEditorAndReturn(): Promise<void> {
   fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-  fireEvent.click(await screen.findByRole('link', { name: PROJECT_NAME }))
+  fireEvent.click(await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` }))
   const tree = await screen.findByRole('region', { name: '메뉴·페이지 트리' })
   fireEvent.click(await within(tree).findByRole('link', { name: PAGE_TITLE }))
   await waitForNode(ROOT_ID)
@@ -109,12 +109,12 @@ async function leaveEditorAndReturn(): Promise<void> {
 /** 목록까지만 간다 — 에디터 **밖**에 머문다. */
 async function leaveEditor(): Promise<void> {
   fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-  await screen.findByRole('link', { name: PROJECT_NAME })
+  await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
 }
 
 /** 목록에서 에디터로 돌아온다. */
 async function returnFromList(): Promise<void> {
-  fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+  fireEvent.click(screen.getByRole('link', { name: `${PROJECT_NAME} 열기` }))
   const tree = await screen.findByRole('region', { name: '메뉴·페이지 트리' })
   fireEvent.click(await within(tree).findByRole('link', { name: PAGE_TITLE }))
   await waitForNode(ROOT_ID)
@@ -508,7 +508,7 @@ async function login(user: SessionUser): Promise<void> {
   fireEvent.change(screen.getByLabelText('이메일'), { target: { value: user.email } })
   fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: '아무 비밀번호' } })
   fireEvent.click(screen.getByRole('button', { name: '로그인' }))
-  await screen.findByRole('link', { name: PROJECT_NAME })
+  await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
 }
 
 /**

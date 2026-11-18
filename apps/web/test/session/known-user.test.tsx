@@ -114,8 +114,8 @@ describe('세션 — 쿠키의 사람이 다르다는 답을 받으면 다시 �
 
   /** 목록 화면이 보이는 사람 — 이름은 뼈대 사이드바의 바닥에 선다(`shell/workspace-layout.tsx`). */
   async function shownUser(): Promise<string> {
-    // 사이드바의 «프로젝트» 칸(지금 화면 — `aria-current`)과 이름이 같아 그 칸을 뺀다.
-    await screen.findByRole('link', { name: PROJECT.name, current: false })
+    // 카드의 이름 링크(접근 이름 «<이름> 열기»)를 기다린다 — 목록이 섰다는 표지다.
+    await screen.findByRole('link', { name: `${PROJECT.name} 열기` })
     return document.querySelector('.wb-shell-workspace-user-name')?.textContent ?? ''
   }
 

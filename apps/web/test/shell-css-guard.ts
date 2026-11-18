@@ -137,6 +137,7 @@ const WRAPPER_PROPERTIES = new Set([
   'min-width',
   'min-height',
   'overflow',
+  'scrollbar-gutter',
   'padding',
   'margin',
   'transform-origin',
