@@ -14,7 +14,16 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, shownDrops, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import {
+  canvasFrame,
+  editorStackPrerequisite,
+  poll,
+  shownDrops,
+  startEditorStack,
+  zoomToFull,
+  type EditorStack,
+  type Session,
+} from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -214,6 +223,8 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     const { page, close } = await open(P, { width: 900, height: 700 })
     try {
       await page.getByLabel('뷰포트 폭').selectOption('1920')
+      // 폭 맞춤으로 열린다 — 100% 에서 시작한다(`zoomToFull`).
+      await zoomToFull(page)
       // 배율은 프레임의 그려진 폭 ÷ 레이아웃 폭(`canvasState`) — 표시 글(반올림)이 아니라 값으로 견준다.
       const zoom = async () =>
         Math.round(
@@ -254,6 +265,8 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     const { page, close } = await open(P, { width: 1440, height: 900 })
     try {
       await canvasFrame(page).locator('[data-wb-id="n_text0000040"]').waitFor()
+      // 폭 맞춤으로 열린다 — «1» 판은 100% 에서 잰다.
+      await zoomToFull(page)
       const rows: Record<string, { gap: number; overY: number }> = {}
       const measure = async (label: string) => {
         const m = await poll(
@@ -358,10 +371,12 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     async function openWide(P: string) {
       const tab = await open(P, { width: 1440, height: 900 })
       await tab.page.getByLabel('뷰포트 폭').selectOption('1920')
+      // 폭 맞춤으로 열린다 — 이 판은 칸보다 넓은 문서(줌 1)를 민다.
+      await zoomToFull(tab.page)
       await poll(
         '넓은 문서',
         () => canvasState(tab.page),
-        (value) => value.settled && value.presetWidth === 1920,
+        (value) => value.settled && value.presetWidth === 1920 && Math.abs(value.zoom - 1) < 0.01,
       )
       return tab
     }

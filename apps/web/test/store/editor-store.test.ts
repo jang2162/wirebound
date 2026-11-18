@@ -318,9 +318,13 @@ describe('EditorStore', () => {
 
     // 나머지 setter도 같은 규칙을 따른다 — 초기값과 같은 값을 넣는 것은 변경이 아니다.
     store.setMode('edit')
-    store.setZoom(1)
     store.setViewportWidth(1280)
     expect(listener).toHaveBeenCalledTimes(1)
+    // 배율은 같아도 처음 고르는 것은 변경이다 — 폭 맞춤(`zoomFit`)이 꺼진다. 같은 배율을 다시 고르는 것은 변경이 아니다.
+    store.setZoom(1)
+    expect(listener).toHaveBeenCalledTimes(2)
+    store.setZoom(1)
+    expect(listener).toHaveBeenCalledTimes(2)
   })
 
   it('getState는 매번 같은 참조를 준다(변경 없으면)', () => {
@@ -374,6 +378,36 @@ describe('EditorStore', () => {
     expect(store.getState().zoom).toBe(2)
     store.setZoom(0.5)
     expect(store.getState().zoom).toBe(0.5)
+  })
+
+  /**
+   * **폭 맞춤(`zoomFit`)** — 처음과 다른 페이지를 열 때 켜지고, 켜진 동안만 `applyFitZoom` 이 배율을 싣는다. 사람이 고른 배율(`setZoom`)이 그 페이지에서
+   * 끈다 — 같은 페이지를 다시 싣는 재조회(다시 붙음)는 다시 켜지 않는다. 칸을 재어 싣는 셸 쪽은 실브라우저 `build-test/ui-zoom-fit.test.ts`.
+   */
+  it('폭 맞춤은 페이지를 열 때 켜지고 · 사람이 고른 배율이 그 페이지에서 끄며 · 다른 페이지를 열면 다시 켜진다', () => {
+    const store = new EditorStore()
+    const seen: Record<string, unknown> = { 처음: store.getState().zoomFit }
+    store.loadPage('p-1', doc('r-1'), 1)
+    store.applyFitZoom(0.66)
+    seen['열어 맞춤'] = [store.getState().zoomFit, store.getState().zoom]
+    store.setZoom(0.75)
+    store.applyFitZoom(0.4)
+    seen['고른 뒤'] = [store.getState().zoomFit, store.getState().zoom]
+    // 같은 페이지를 다시 싣는다(다시 붙음의 재조회) — 사람이 고른 배율 그대로다.
+    store.loadPage('p-1', doc('r-1'), 2)
+    store.applyFitZoom(0.4)
+    seen['다시 실음'] = [store.getState().zoomFit, store.getState().zoom]
+    store.clearPage()
+    store.loadPage('p-2', doc('r-2'), 1)
+    store.applyFitZoom(0.5)
+    seen['다른 페이지'] = [store.getState().zoomFit, store.getState().zoom]
+    expect(seen).toEqual({
+      처음: true,
+      '열어 맞춤': [true, 0.66],
+      '고른 뒤': [false, 0.75],
+      '다시 실음': [false, 0.75],
+      '다른 페이지': [true, 0.5],
+    })
   })
 
   it('setZoom은 NaN을 무시한다', () => {

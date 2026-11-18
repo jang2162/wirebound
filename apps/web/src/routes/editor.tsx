@@ -662,6 +662,7 @@ function EditorShell(props: {
    * ref는 그 연결을 타입으로 들고 있다.
    */
   const canvasRef = useRef<HTMLElement>(null)
+  useAutoFitZoom(canvasRef)
 
   /**
    * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **복원이 바꾸는 것을 떠 있는 자리가 전부**
@@ -871,6 +872,7 @@ function EditorShell(props: {
   const fold = useHeadFold()
   const zoomCommands = useZoomCommands(canvasRef)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const zoomFitted = useEditorStore(store, (s) => s.zoomFit && s.zoom < 1)
   /** 상태 전환기가 머리에 서는가 — `tight` · `folded` 면 `…` 로 접힌다(`shell/head-fold.ts`). */
   const switcherInHead = fold === 'wide' || fold === 'short'
   const viewStateChoice = useViewState(props.pageId)
@@ -881,7 +883,7 @@ function EditorShell(props: {
     ...(fold === 'folded'
       ? [
           // 줌 묶음이 머리에서 빠지면 지금 배율이 어디에도 안 보인다 — 눌리지 않는 한 줄로 알린다(항목 이름 «축소» · «확대» 는 그대로다).
-          { key: 'zoom-value', label: `배율 ${Math.round(zoom * 100)}%`, disabled: true },
+          { key: 'zoom-value', label: `배율 ${Math.round(zoom * 100)}%${zoomFitted ? ` · ${ZOOM_FITTED}` : ''}`, disabled: true },
           { key: 'zoom-out', label: '축소', icon: ICONS.zoomOut, onSelect: zoomCommands.zoomOut },
           { key: 'zoom-in', label: '확대', icon: ICONS.zoomIn, onSelect: zoomCommands.zoomIn },
           { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },
@@ -2141,20 +2143,58 @@ function ModeTools(): ReactElement {
 }
 
 /**
+ * **페이지를 열면 폭 맞춤으로 연다** — 문서(프리셋)가 캔버스 칸보다 넓으면 칸에 맞춘 배율, 좁으면 100%(`min(1, 칸 ÷ 프리셋)`). 스토어의 `zoomFit`
+ * 이 켜진 동안만 — 칸 폭(창 · 좌우 접기 · 폭 손잡이)과 프리셋이 바뀔 때마다 다시 잰다. 사람이 배율을 고르면(축소 · 확대 · 화면 맞춤 — `setZoom`)
+ * 그 페이지에서 꺼져 더는 안 따른다 — **손으로 고른 배율을 창을 흔들었다고 빼앗지 않는다**(아래 `useZoomCommands` 머리말의 까닭). 다른 페이지를
+ * 열면 다시 켜진다(`loadPage`).
+ *
+ * **상한이 1 인 까닭** — 좁은 문서(390 · 720)를 넓은 칸에 키우면 처음 여는 판이 실제보다 커 보인다. 넓은 칸에 맞춰 키우는 것은 «화면 맞춤» 단추의 몫이다.
+ *
+ * 칸에 세로 스크롤바가 서고 빠지는 것이 칸 폭을 흔들어 배율이 오가지 않게 칸은 스크롤바 자리를 늘 둔다(`shell.css` 의 `.wb-shell-canvas` 의
+ * `scrollbar-gutter`).
+ */
+function useAutoFitZoom(canvasRef: RefObject<HTMLElement | null>): void {
+  const store = useEditorStoreInstance()
+  const fitting = useEditorStore(store, (s) => s.zoomFit)
+  const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
+  const openPageId = useEditorStore(store, (s) => s.openPageId)
+  useLayoutEffect(() => {
+    if (!fitting) return
+    const canvas = canvasRef.current
+    if (canvas === null) return
+    const apply = (): void => {
+      const fit = fitZoom(canvas, store.getState().viewportWidth)
+      if (fit !== null) store.applyFitZoom(Math.min(1, fit))
+    }
+    apply()
+    if (typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(apply)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [fitting, viewportWidth, openPageId, store, canvasRef])
+}
+
+/** 폭 맞춤이 배율을 줄여 둔 동안(`zoomFit` 이고 1 아래)의 말 — 배율 글의 `title` · 줌 묶음의 설명 · 접힌 머리의 배율 줄. */
+const ZOOM_FITTED = '폭 맞춤'
+
+/**
  * 줌 명령 셋 — 머리의 줌 묶음과 접힌 머리의 `…` 항목(`shell/head-fold.ts`)이 함께 부른다. 한계값(0.05~2)은 여기 두지 않는다 — 스토어가
  * 클램프하므로 한 칸씩 밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다. 축소만 제 바닥(`ZOOM_OUT_FLOOR`)이 있다.
  */
 function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: () => void; zoomIn: () => void; fit: () => void } {
   const store = useEditorStoreInstance()
   return {
+    // **눈금(25 배수)에 붙는다** — 맞춘 배율(폭 맞춤 · 화면 맞춤 — 63% 등)에서 한 칸을 그대로 빼고 더하면 38% · 88% 처럼 눈금 밖으로 간다. 축소는
+    // 지금보다 작은 가장 큰 눈금(63% → 50%), 확대는 지금보다 큰 가장 작은 눈금(63% → 75% · 18% → 25%)이다. 눈금 위면 한 칸이다. 축소는 바닥
+    // (`ZOOM_OUT_FLOOR`)에서 멈추고 그 아래의 맞춘 배율에서는 아무것도 안 한다.
     zoomOut: () => {
       const { zoom } = store.getState()
-      store.setZoom(Math.max(zoom - ZOOM_STEP, Math.min(zoom, ZOOM_OUT_FLOOR)))
+      if (zoom <= ZOOM_OUT_FLOOR) return
+      store.setZoom(Math.max(ZOOM_OUT_FLOOR, (Math.ceil(zoom / ZOOM_STEP - 1e-9) - 1) * ZOOM_STEP))
     },
-    // 맞춤이 25% 아래에 둔 배율에서는 한 칸(+25)이 아니라 다음 25 배수(25%)로 오른다 — 18% → 43% 처럼 단계 밖의 값으로 튀지 않는다.
     zoomIn: () => {
       const { zoom } = store.getState()
-      store.setZoom(zoom < ZOOM_OUT_FLOOR ? ZOOM_OUT_FLOOR : zoom + ZOOM_STEP)
+      store.setZoom((Math.floor(zoom / ZOOM_STEP + 1e-9) + 1) * ZOOM_STEP)
     },
     /* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
        사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
@@ -2188,6 +2228,7 @@ function CanvasTools(props: {
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const fitted = useEditorStore(store, (s) => s.zoomFit && s.zoom < 1)
   const commands = useZoomCommands(props.canvasRef)
 
   return (
@@ -2210,11 +2251,18 @@ function CanvasTools(props: {
       </label>
 
       {props.fold !== 'folded' && (
-        <div className="wb-shell-zoom" role="group" aria-label="줌">
+        <div className="wb-shell-zoom" role="group" aria-label="줌" aria-description={fitted ? ZOOM_FITTED : undefined}>
           <button type="button" className="wb-shell-zoom-step" aria-label="축소" title="축소" onClick={commands.zoomOut}>
             {shellIcon('zoomOut', 16)}
           </button>
-          <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
+          {/* **폭 맞춤인 동안 배율 글이 주색이다** — 글을 더하지 않는다: 머리는 한 줄에 드는 폭으로 접힘 문턱을 정해 두어(`shell/head-fold.ts`) 글
+              한 마디가 문턱의 여유를 넘는다. 이름은 묶음의 설명 · `title` 이 «폭 맞춤» 을 싣는다. 접힌 머리의 `…` 배율 줄은 글로 말한다. */}
+          <span
+            className={'wb-shell-zoom-value' + (fitted ? ' wb-shell-zoom-value-fitted' : '')}
+            title={fitted ? `${ZOOM_FITTED} — 문서가 캔버스 칸보다 넓어 칸 폭에 맞췄습니다` : undefined}
+          >
+            {Math.round(zoom * 100)}%
+          </span>
           <button type="button" className="wb-shell-zoom-step" aria-label="확대" title="확대" onClick={commands.zoomIn}>
             {shellIcon('zoomIn', 16)}
           </button>

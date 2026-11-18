@@ -1000,6 +1000,12 @@
   color: var(--wb-shell-muted);
 }
 
+/* 폭 맞춤이 배율을 줄여 둔 동안(`routes/editor.tsx` 의 `useAutoFitZoom`) — 글을 더하지 않고 색으로 말한다(머리 폭이 접힘 문턱을 정한다). */
+.wb-shell-zoom-value-fitted {
+  font-weight: 600;
+  color: var(--wb-shell-accent);
+}
+
 /* 세션 통지(전환 · 로그아웃 실패) — 에디터 하단 바의 통지 무리에 선다(`routes/editor.tsx`의 `SessionNotices`). 셸 밖 화면은 이 클래스가
    아니라 `.wb-shell-project-alert`로 뼈대 머리 아래에 선다(`shell/workspace-layout.tsx`). 값은 `.wb-shell-edit-alert`와 같다 — 색을 주지 않는
    것도 그쪽과 같은 근거다(이 셸의 `role="alert"` 자리들이 다 색이 없고, 손대려면 그것을 함께 봐야 한다). */
@@ -1681,6 +1687,9 @@
   grid-area: canvas;
   min-width: 0;
   overflow: auto;
+  /* 세로 스크롤바 자리를 늘 둔다 — 서고 빠지며 칸 폭을 흔들면 폭 맞춤(`routes/editor.tsx` 의 `useAutoFitZoom`)이 배율을 오가게 한다. 겹쳐 그리는
+     스크롤바(macOS 기본)에서는 자리가 0 이다. */
+  scrollbar-gutter: stable;
   padding: 24px;
   background: #eef0f3;
 }
