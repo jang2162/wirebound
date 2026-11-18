@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactElement } from 'react'
 import { useLocation } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { PasswordInput } from '../account/password-input'
 import { useConfirmSession, useSignOutNotice } from '../session/session-context'
 
 /** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
@@ -115,6 +116,7 @@ export function LoginRoute(): ReactElement {
             className="wb-shell-login-input"
             id="login-email"
             type="email"
+            autoComplete="email"
             value={email}
             // 실패한 뒤에도 입력을 지우지 않는다. 다시 타이핑하게 만들면 사용자는 자기
             // 이메일이 문제였다고 오해한다.
@@ -125,13 +127,7 @@ export function LoginRoute(): ReactElement {
           <label className="wb-shell-login-label" htmlFor="login-password">
             비밀번호
           </label>
-          <input
-            className="wb-shell-login-input"
-            id="login-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <PasswordInput id="login-password" label="비밀번호" autoComplete="current-password" value={password} onChange={setPassword} />
         </p>
         {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 세션을 만들 이유가 없다. */}
         <button className="wb-shell-login-submit" type="submit" disabled={submitting}>

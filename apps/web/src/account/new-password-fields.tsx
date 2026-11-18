@@ -5,6 +5,7 @@
  * 사람이 고칠 수 있게 하려는 것이고, 판정은 서버가 다시 한다.
  */
 import type { ReactElement } from 'react'
+import { PasswordInput } from './password-input'
 
 export const PASSWORD_MIN = 8
 export const PASSWORD_MAX = 200
@@ -34,26 +35,24 @@ export function PasswordFields(props: {
         <label className="wb-shell-login-label" htmlFor={`${props.idPrefix}-password`}>
           비밀번호({PASSWORD_MIN}자 이상)
         </label>
-        <input
-          className="wb-shell-login-input"
+        <PasswordInput
           id={`${props.idPrefix}-password`}
-          type="password"
+          label="비밀번호"
           autoComplete="new-password"
           value={props.password}
-          onChange={(event) => props.onPassword(event.target.value)}
+          onChange={props.onPassword}
         />
       </p>
       <p className="wb-shell-login-field">
         <label className="wb-shell-login-label" htmlFor={`${props.idPrefix}-confirm`}>
           비밀번호 확인
         </label>
-        <input
-          className="wb-shell-login-input"
+        <PasswordInput
           id={`${props.idPrefix}-confirm`}
-          type="password"
+          label="비밀번호 확인"
           autoComplete="new-password"
           value={props.confirm}
-          onChange={(event) => props.onConfirm(event.target.value)}
+          onChange={props.onConfirm}
         />
       </p>
     </>

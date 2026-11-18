@@ -176,7 +176,7 @@ describe.skipIf(!전제.ok)('로그아웃과 보낸 편집', () => {
       const other = await context.newPage()
       await other.goto('/login')
       await other.getByLabel('이메일').fill(stack.users.bob.email)
-      await other.getByLabel('비밀번호').fill(stack.users.bob.password)
+      await other.getByLabel('비밀번호', { exact: true }).fill(stack.users.bob.password)
       await other.getByRole('button', { name: '로그인' }).click()
       await other.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })
       await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 8_000 })

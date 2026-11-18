@@ -3783,6 +3783,42 @@
   color: var(--wb-shell-ink);
 }
 
+/* 비밀번호 칸과 칸 안 오른쪽의 «보기» 토글(`account/password-input.tsx`). 칸의 오른쪽 안 여백이 토글 자리라 친 글이 토글 밑으로 안 들어간다. */
+.wb-shell-password {
+  position: relative;
+  display: block;
+}
+
+.wb-shell-password-input {
+  padding-right: 64px;
+}
+
+.wb-shell-password-toggle {
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 3px;
+  padding: 4px 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wb-shell-accent);
+  cursor: pointer;
+}
+
+.wb-shell-password-toggle:hover {
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-password-toggle:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: 1px;
+}
+
 .wb-shell-login-submit {
   appearance: none;
   margin-top: 4px;
