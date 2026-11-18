@@ -4,7 +4,8 @@
  *
  * | 케이스 | 재는 값 |
  * |---|---|
- * | 눌리는 크기 | 창 1280 · 390 에서 카드마다 «열기» 높이 ≥ 36 · 폭 ≥ 카드 안쪽 폭의 60%, 톱니 높이 ≥ 36, 추가 카드 단추 높이 ≥ 36, 뼈대 상자
+ * | 눌리는 크기 | 창 1280 · 390 에서 카드마다 카드 안 표본 점(보조 단추 밖) 모두가 «<이름> 열기» 링크에 닿는다(카드 전체가 그 링크 — 늘인 링크),
+ *   보조 단추가 그 링크 위에 선다(가운데의 맨 위 요소) · 톱니 높이 ≥ 36, 추가 카드 단추 높이 ≥ 36, 뼈대 상자
  *   (`.wb-shell-workspace`) 가로 넘침 0 · 창 오른끝을 넘는 글자 노드 0(끊을 자리 없는 긴 이름 카드를 싣는다). 추가 카드를 연 판의 폼 칸 · 단추가 카드
  *   오른끝 안이고 넘침 0 |
  * | «열기» | 누르면 주소가 `/projects/<id>` 이고 에디터가 선다 |
@@ -30,7 +31,7 @@ const LONG_NAME = 'AVeryLongProjectNameWithoutAnySpaceThatMustWrapInsideTheCard'
 
 /** 카드마다 잰 크기와 뼈대 넘침. */
 interface CardSizes {
-  cards: { name: string; openHeight: number; openWidth: number; inner: number; gearHeight: number; gearWidth: number }[]
+  cards: { name: string; openPoints: number; openMiss: number; gearHeight: number; gearWidth: number; gearOnTop: boolean }[]
   addHeight: number
   workspace: number
   texts: string[]
@@ -43,18 +44,25 @@ function measure(page: Page): Promise<CardSizes> {
     const cards = [...grid.querySelectorAll<HTMLElement>('li.wb-shell-home-card')]
       .filter((li) => li.querySelector('.wb-shell-home-name') !== null)
       .map((li) => {
-        const style = getComputedStyle(li)
-        const inner = li.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-        const open = li.querySelector('.wb-shell-home-open')!.getBoundingClientRect()
-        const gear = li.querySelector('.wb-shell-home-settings')!.getBoundingClientRect()
-        return {
-          name: li.querySelector('.wb-shell-home-name')!.textContent ?? '',
-          openHeight: open.height,
-          openWidth: open.width,
-          inner,
-          gearHeight: gear.height,
-          gearWidth: gear.width,
-        }
+        // 카드 전체가 이름 링크다(늘인 링크) — 카드 안 표본 점마다 맨 위 요소가 그 링크(의 안)인지 센다. 보조 단추 위의 점은 뺀다.
+        const link = li.querySelector('.wb-shell-home-name')!
+        li.scrollIntoView({ block: 'center' })
+        const r = li.getBoundingClientRect()
+        let openPoints = 0
+        let openMiss = 0
+        for (const fy of [0.1, 0.3, 0.5, 0.7, 0.9])
+          for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+            const hit = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy)
+            if (hit?.closest('.wb-shell-home-settings')) continue
+            openPoints += 1
+            if (hit?.closest('a') !== link) openMiss += 1
+          }
+        const gearEl = li.querySelector('.wb-shell-home-settings')!
+        const gear = gearEl.getBoundingClientRect()
+        // 보조 단추가 늘인 링크 위에 섰다 — 가운데의 맨 위 요소가 그 단추(의 안)다.
+        const gearOnTop =
+          document.elementFromPoint(gear.left + gear.width / 2, gear.top + gear.height / 2)?.closest('.wb-shell-home-settings') === gearEl
+        return { name: link.textContent ?? '', openPoints, openMiss, gearHeight: gear.height, gearWidth: gear.width, gearOnTop }
       })
     const add = grid.querySelector('.wb-shell-home-add-button')!.getBoundingClientRect()
     const box = document.querySelector('.wb-shell-workspace')!
@@ -118,7 +126,7 @@ describe.skipIf(!전제.ok)('프로젝트 목록 카드 — 실브라우저', ()
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   })
 
-  it('창 1280 · 390 — «열기» · 톱니 · 추가 카드가 눌리는 크기이고 뼈대 상자가 가로로 안 넘친다', async () => {
+  it('창 1280 · 390 — 카드 전체 · 톱니 · 추가 카드가 눌리는 크기이고 뼈대 상자가 가로로 안 넘친다', async () => {
     const measured: string[] = []
     for (const width of [1280, 390]) {
       const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width, height: 844 } })
@@ -132,11 +140,13 @@ describe.skipIf(!전제.ok)('프로젝트 목록 카드 — 실브라우저', ()
         for (const card of got.cards) {
           const label = `${card.name.slice(0, 12)}@${width}`
           measured.push(
-            `${label}: 열기 ${Math.round(card.openWidth)}×${Math.round(card.openHeight)} / 안쪽 ${Math.round(card.inner)} · 톱니 ${Math.round(card.gearWidth)}×${Math.round(card.gearHeight)}`,
+            `${label}: 열기 점 ${card.openPoints - card.openMiss}/${card.openPoints} · 톱니 ${Math.round(card.gearWidth)}×${Math.round(card.gearHeight)}`,
           )
-          expect(card.openHeight, label).toBeGreaterThanOrEqual(36)
-          expect(card.openWidth, label).toBeGreaterThanOrEqual(card.inner * 0.6)
+          // 카나리아 — 표본 점이 섰다(보조 단추가 다 덮지 않았다).
+          expect(card.openPoints, label).toBeGreaterThanOrEqual(15)
+          expect(card.openMiss, label).toBe(0)
           expect(card.gearHeight, label).toBeGreaterThanOrEqual(36)
+          expect(card.gearOnTop, label).toBe(true)
         }
         measured.push(`추가@${width}: ${Math.round(got.addHeight)} · 넘침 ${got.workspace} · 글자 ${got.counted}`)
         expect(got.addHeight, `${width}`).toBeGreaterThanOrEqual(36)

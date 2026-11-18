@@ -10,7 +10,7 @@
  * | 불러오는 중의 겨룸 | 목록 GET 을 붙잡은 채 폼을 열어 치고, 놓아 목록이 닿거나 끊어 실패한 뒤 친 글 · 포커스가 남고 이어 친 글자가 그 칸에 드는가 |
  * | 거름이 걸린 채 만들기 | 검색 · 역할 거름 아래 만든 판이 그 프로젝트로 가는가 · «뒤로» 온 목록에서 그 카드가 보이는가 |
  * | 키보드 | 위 줄 → 추가 카드 → 카드마다 정지점 차례와 접근 이름 · Enter 로 열고 만든 뒤 · Esc 로 닫은 뒤의 포커스 · 방향 제어 글자가 든 이름의 카드 |
- * | 좁은 창 · 확대 | 창 320 · 390 · 확대 200 %(창 1280 · 640) — «열기» · 톱니 · 추가 단추 크기, 연 폼이 카드 안, 뼈대 · 문서 가로 넘침, 넘친 글자 |
+ * | 좁은 창 · 확대 | 창 320 · 390 · 확대 200 %(창 1280 · 640) — 카드 안 표본 점이 모두 «열기» 링크에 닿는가(늘인 링크) · 톱니 · 추가 단추 크기, 연 폼이 카드 안, 뼈대 · 문서 가로 넘침, 넘친 글자 |
  * | 역할 | viewer · editor 카드의 «열기» 가 에디터를, 톱니가 읽기 전용 설정(저장 단추 · «위험 구역» 탭 없음)을 연다 |
  *
  * **실패 갈래의 포커스 · «취소» 두 케이스**는 리뷰 보고 M1 · L1 의 잠금이다 — 요청 중 칸을 잠그면 Chrome 이 포커스를 `body` 로 떨구므로 폼이 실패
@@ -117,10 +117,10 @@ function sizes(page: Page): Promise<{
   dpr: number
   innerWidth: number
   cards: number
-  minOpenH: number
+  openPoints: number
   minGearH: number
   minGearW: number
-  openOverInner: number
+  openMiss: number
   addH: number
   doc: number
   workspace: number
@@ -132,20 +132,29 @@ function sizes(page: Page): Promise<{
     const cards = [...g.querySelectorAll<HTMLElement>('li.wb-shell-home-card')].filter(
       (li) => li.querySelector('.wb-shell-home-name') !== null,
     )
-    let minOpenH = Infinity
+    let openPoints = Infinity
+    let openMiss = 0
     let minGearH = Infinity
     let minGearW = Infinity
-    let openOverInner = Infinity
     for (const li of cards) {
-      const style = getComputedStyle(li)
-      const inner = li.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
-      const open = li.querySelector('.wb-shell-home-open')!.getBoundingClientRect()
+      // 카드 전체가 이름 링크다(늘인 링크) — 카드 안 표본 점마다 맨 위 요소가 그 링크(의 안)인지 센다. 보조 단추 위의 점은 뺀다.
+      const link = li.querySelector('.wb-shell-home-name')!
+      li.scrollIntoView({ block: 'center' })
+      const r = li.getBoundingClientRect()
+      let points = 0
+      for (const fy of [0.1, 0.3, 0.5, 0.7, 0.9])
+        for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+          const hit = document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy)
+          if (hit?.closest('.wb-shell-home-settings')) continue
+          points += 1
+          if (hit?.closest('a') !== link) openMiss += 1
+        }
+      openPoints = Math.min(openPoints, points)
       const gear = li.querySelector('.wb-shell-home-settings')!.getBoundingClientRect()
-      minOpenH = Math.min(minOpenH, open.height)
       minGearH = Math.min(minGearH, gear.height)
       minGearW = Math.min(minGearW, gear.width)
-      openOverInner = Math.min(openOverInner, open.width / inner)
     }
+    window.scrollTo(0, 0)
     const add = g.querySelector('.wb-shell-home-add-button')?.getBoundingClientRect().height ?? -1
     const box = document.querySelector('.wb-shell-workspace')!
     const width = document.documentElement.clientWidth
@@ -166,10 +175,10 @@ function sizes(page: Page): Promise<{
       dpr: window.devicePixelRatio,
       innerWidth: window.innerWidth,
       cards: cards.length,
-      minOpenH: Math.round(minOpenH),
+      openPoints,
+      openMiss,
       minGearH: Math.round(minGearH),
       minGearW: Math.round(minGearW),
-      openOverInner: Math.round(openOverInner * 100) / 100,
       addH: Math.round(add),
       doc: document.documentElement.scrollWidth - width,
       workspace: box.scrollWidth - box.clientWidth,
@@ -445,7 +454,7 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
       seen.bidi = await bidiCard.evaluate((li) => {
         const name = li.querySelector('.wb-shell-home-name')!.getBoundingClientRect()
         const badge = li.querySelector('.wb-shell-home-role')?.getBoundingClientRect()
-        const open = li.querySelector('.wb-shell-home-open')!
+        const open = li.querySelector('.wb-shell-home-name')!
         const gear = li.querySelector('.wb-shell-home-settings')!
         const esc = (s: string | null): string =>
           (s ?? '').replace(/[\u202A-\u202E\u2066-\u2069]/g, (c) => `<U+${c.charCodeAt(0).toString(16).toUpperCase()}>`)
@@ -499,20 +508,21 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
     expect(seen.afterEsc).toBe('button:프로젝트 추가')
     expect(seen.tabToCancel).toBe('button:취소')
     expect(seen.afterCancel).toBe('button:프로젝트 추가')
-    // 위 줄 둘 → 추가 카드 → 카드마다 «이름 → <이름> 열기 → <이름> 공통코드 → <이름> 설정».
+    // 위 줄 둘 → 추가 카드 → 카드마다 «<이름> 열기(카드 전체인 이름 링크) → <이름> 공통코드 → <이름> 설정».
     const stops = seen.stops as string[]
     expect(stops.slice(0, 3)).toEqual(['select:역할', 'select:정렬', 'button:프로젝트 추가'])
-    const first = stops[3]!.slice('a:'.length)
-    const second = stops[7]!.slice('a:'.length)
+    const first = stops[3]!.slice('a:'.length).replace(/ 열기$/, '')
+    const second = stops[6]!.slice('a:'.length).replace(/ 열기$/, '')
+    const third = stops[9]!.slice('a:'.length).replace(/ 열기$/, '')
     expect(stops.slice(3)).toEqual([
-      `a:${first}`,
       `a:${first} 열기`,
       `a:${first} 공통코드`,
       `a:${first} 설정`,
-      `a:${second}`,
       `a:${second} 열기`,
       `a:${second} 공통코드`,
       `a:${second} 설정`,
+      `a:${third} 열기`,
+      `a:${third} 공통코드`,
     ])
     expect(seen.bidiByRole).toEqual({ open: 1, gear: 1 })
   })
@@ -557,10 +567,10 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
       if (where.startsWith('확대')) expect(v.dpr, where).toBeCloseTo(2, 1)
       expect(
         {
-          openH: v.minOpenH >= 36,
+          openPoints: v.openPoints >= 15,
+          openMiss: v.openMiss,
           gear: v.minGearH >= 36 && v.minGearW >= 36,
           add: v.addH >= 36,
-          open60: v.openOverInner >= 0.6,
           doc: v.doc,
           workspace: v.workspace,
           texts: v.texts,
@@ -568,10 +578,10 @@ describe.skipIf(!전제.ok)('RV-CD — 프로젝트 카드 리뷰 실브라우�
         },
         where,
       ).toEqual({
-        openH: true,
+        openPoints: true,
+        openMiss: 0,
         gear: true,
         add: true,
-        open60: true,
         doc: 0,
         workspace: 0,
         texts: [],

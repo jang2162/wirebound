@@ -10,10 +10,12 @@
  *   «ㄱ고곡고ㄱ개객객») 빠른 입력이 글자를 잃는다(Chrome · `build-test/rv-ws-workspace.test.ts` «검색 칸에 한글을 조합해 치면 …» — jsdom 의
  *   `fireEvent.change` 한 번은 이 판을 못 낸다). 앱 전체의 전이를 끄지 않는 것은 에디터의 페이지 전환까지 동기로 바뀌어서다. 역할 · 정렬은 고르는
  *   컨트롤이라 주소에서 읽은 채다 — 사람의 빠르기로는 안 잃는다(같은 파일 «역할 · 정렬 고르기» 가 잰다. 한 틱 안에 다른 둘을 고르면 앞 것을 잃는다).
- * - 카드: 이름(에디터로) · 역할 표지 · 슬러그 · 설명 · 멤버 수 · 최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · 아래 줄의 «열기» 큰 단추
- *   (에디터로) · 톱니만의 작은 단추(설정).
+ * - 카드: **카드 전체가 에디터로 가는 링크다**(이름 링크를 카드 상자만큼 늘인다 — 접근 이름 «<이름> 열기») · 역할 표지 · 슬러그 · 설명 · 멤버 수 ·
+ *   최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · 아래 줄의 작은 보조 단추(공통코드 · 설정). 보조 단추는 링크 안이 아니라 형제다 —
+ *   누를 수 있는 것 안에 누를 수 있는 것을 두지 않는다(늘인 링크 위로 올려 세운다).
  * - **격자 맨 앞은 «프로젝트 추가» 카드다**(`AddCard`) — 누르면 그 카드 자리가 만들기 폼이다. 목록을 불러오는 중 · 조회 실패 · 빈 목록 · 거른
- *   결과 0 에서도 선다 — 만드는 길이 이것 하나라, 목록을 못 받은 판에 숨으면 만들 길이 없다.
+ *   결과 0 에서도 선다 — 만드는 길이 이것 하나라, 목록을 못 받은 판에 숨으면 만들 길이 없다. 카드마다의 주색 «열기» 를 걷은 뒤로 화면의 강조된
+ *   동작은 이 카드 하나다.
  * - 빈 목록(«참여 중인 프로젝트가 없습니다»)과 거른 결과 없음(«검색 결과가 없습니다»)은 다른 문장이다 — 앞엣것은 만들라는 안내, 뒤엣것은 거름을 풀라는 안내다.
  *   둘 다 격자(추가 카드) 밑에 선다.
  *
@@ -263,8 +265,8 @@ function AddCard(props: {
 }
 
 /**
- * 목록의 카드 하나 — 이름(에디터로) · 역할 표지 · 설명 · 슬러그 · 아래 줄에 멤버 수 · 최근 수정, 그 밑에 «열기» 와 톱니 «설정». 역할 표지는 보이기만
- * 한다 — 무엇을 열지는 설정 페이지가 역할대로 정한다(`projects/project-filter.ts` 머리말).
+ * 목록의 카드 하나 — 카드 전체가 에디터로 가는 링크(이름 링크를 늘인다) · 역할 표지 · 설명 · 슬러그 · 아래 줄에 멤버 수 · 최근 수정, 그 밑에 보조
+ * 단추(공통코드 · 설정). 역할 표지는 보이기만 한다 — 무엇을 열지는 설정 페이지가 역할대로 정한다(`projects/project-filter.ts` 머리말).
  */
 function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElement {
   const { project } = props
@@ -273,9 +275,10 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
   return (
     <li className="wb-shell-home-card">
       <div className="wb-shell-home-card-head">
-        {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나
-            주소를 공유할 수 있어야 한다. 카드 전체를 링크로 만들지 않는다 — 안의 «열기» · «설정» 링크와 겹친다. */}
-        <Link className="wb-shell-home-name" to={`/projects/${project.id}`}>
+        {/* 버튼이 아니라 링크인 것은 주소가 있는 이동이기 때문이다 — 새 탭으로 열거나 주소를 공유할 수 있어야 한다. **카드 전체를 이 링크로
+            누른다** — 링크로 `<li>` 를 감싸지 않고 CSS 로 카드 상자만큼 늘인다(`.wb-shell-home-name::after`). 감싸면 안의 보조 단추(링크)가 링크
+            안의 링크가 된다. 보이는 글은 이름이고 카드마다 갈리는 이름 «<이름> 열기» 는 `aria-label` 이 싣는다. */}
+        <Link className="wb-shell-home-name" to={`/projects/${project.id}`} aria-label={`${project.name} 열기`}>
           {project.name}
         </Link>
         {badge !== '' && (
@@ -297,12 +300,6 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
         </span>
       </div>
       <div className="wb-shell-home-actions">
-        {/* 이름 링크와 같은 곳으로 간다 — 이름은 주소 복사 · 새 탭의 자리로 남고, 누르는 자리는 이 단추다. 보이는 글은 «열기» 하나이고 카드마다
-            갈리는 이름은 `aria-label` 이 싣는다(아래 «설정» 과 같은 꼴). */}
-        <Link className="wb-shell-home-open" to={`/projects/${project.id}`} aria-label={`${project.name} 열기`}>
-          {shellIcon('openProject', 16, 'wb-shell-icon-lead')}
-          열기
-        </Link>
         {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다). 톱니만 남은 단추라 이름은
             `aria-label` 과 `title` 이 같은 글로 든다(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
         {/* 공통코드 화면 — 설정과 같은 꼴의 아이콘 단추다(모든 멤버에게 — viewer 는 읽기로만 본다). */}

@@ -77,7 +77,8 @@ describe('프로젝트 목록 화면', () => {
   it('프로젝트를 누르면 그 프로젝트로 간다', async () => {
     renderList(async () => [project({ id: 'p-7', name: '고객 포털' })])
 
-    const link = await screen.findByRole('link', { name: '고객 포털' })
+    // 카드의 링크는 이름 링크 하나다 — 카드 전체가 그 링크다(`routes/project-list.tsx` 의 `ProjectRow`). 접근 이름은 «<이름> 열기».
+    const link = await screen.findByRole('link', { name: '고객 포털 열기' })
     // 양성 대조: 누르기 전에는 목록에 있다. 이것이 없으면 처음부터 프로젝트 주소에
     // 있는 상태로도 아래 단언이 통과한다.
     expect(currentPath()).toBe('/')
@@ -422,13 +423,19 @@ describe('추가 카드 · 열기 · 톱니 설정', () => {
     expect(document.activeElement).toBe(again)
   })
 
-  it('카드마다 «<이름> 열기» 는 에디터로 · «<이름> 설정» 은 글자 없는 톱니로 설정에 간다', async () => {
+  it('카드마다 «<이름> 열기» 는 이름을 보이는 늘인 링크로 에디터에 · «<이름> 설정» 은 글자 없는 톱니로 설정에 간다', async () => {
     renderList(async () => ROWS)
     await screen.findByText('관리자 콘솔')
     for (const row of ROWS) {
       const open = within(grid()).getByRole('link', { name: `${row.name} 열기` })
       expect(open.getAttribute('href')).toBe(`/projects/${row.id}`)
-      expect(open.textContent?.trim()).toBe('열기')
+      // 보이는 글은 이름이다 — 카드 상자만큼 늘인 이름 링크(`.wb-shell-home-name`)라 주색 «열기» 단추가 따로 없다.
+      expect({ text: open.textContent?.trim(), name: open.classList.contains('wb-shell-home-name') }).toEqual({
+        text: row.name,
+        name: true,
+      })
+      // 에디터로 가는 링크는 카드마다 그것 하나다.
+      expect(grid().querySelectorAll(`a[href="/projects/${row.id}"]`)).toHaveLength(1)
       const gear = within(grid()).getByRole('link', { name: `${row.name} 설정` })
       expect(gear.getAttribute('href')).toBe(`/projects/${row.id}/settings`)
       expect(gear.textContent?.trim()).toBe('')
