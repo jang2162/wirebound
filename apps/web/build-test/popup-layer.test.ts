@@ -23,7 +23,7 @@
 import { CAPTURE_CSS } from '@wirebound/theme-sdk/capture'
 import type { Frame, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, zoomToFull, type EditorStack, type Session } from './editor-stack'
 import { exportBundle, openBundlePage, type UnpackedBundle } from './layout-bundle'
 
 const 전제 = await editorStackPrerequisite()
@@ -552,6 +552,8 @@ async function withView(
   try {
     await page.goto(path)
     await canvasFrame(page).locator(`[data-wb-id="${ready}"]`).waitFor()
+    // 배율 100% 판 — 덮개 판들은 iframe(문서 1280)이 칸보다 넓은 판을 잰다. 폭 맞춤이면 문서가 칸 안에 들어 그 판이 안 선다.
+    await zoomToFull(page)
     await page.getByRole('button', { name: '뷰 모드' }).click()
     const handle = await page.$('iframe.wb-shell-canvas-iframe')
     const frame = await handle?.contentFrame()

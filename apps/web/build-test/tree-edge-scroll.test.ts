@@ -159,11 +159,13 @@ describe.skipIf(!전제.ok)('구조 트리 줄 끌기의 끝 스크롤 — 실�
       await page.locator(`${TREE} [data-tree-row][data-tree-id="n_d9"]`).scrollIntoViewIfNeeded()
       const first = await scroller(page)
       await grab(page, 'n_d9')
+      // 끝까지 밀 시간 — 끝 스크롤은 480px/s(`EDGE_SPEED`)이고 넘침은 258px(카드 줄의 «빈 구역 3» 칩 몫 42px 포함 — 칩 없이는 216)이라 538ms 다.
+      // 틱(16ms)마다 같은 양을 밀어 붐비면 늦으므로 두 배를 둔다.
       await page.mouse.move(first.x + first.width - 8, first.y + 60, { steps: 5 })
-      await page.waitForTimeout(500)
+      await page.waitForTimeout(1000)
       const right = await scroller(page)
       await page.mouse.move(first.x + 8, first.y + 60, { steps: 5 })
-      await page.waitForTimeout(500)
+      await page.waitForTimeout(1000)
       const left = await scroller(page)
       await page.keyboard.press('Escape')
       await page.mouse.up()

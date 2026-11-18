@@ -30,7 +30,7 @@ const PREVIEW_BEFORE = 580
 /** 화면 넷 — 주소 · 다 섰다는 표지 · 몸의 선택자. */
 function screens(projectId: string): [string, string, (page: Page) => Promise<void>, string][] {
   return [
-    ['프로젝트 목록', '/', (page) => page.getByRole('link', { name: '테마 판', exact: true }).waitFor(), '.wb-shell-project-list'],
+    ['프로젝트 목록', '/', (page) => page.getByRole('link', { name: '테마 판 열기', exact: true }).waitFor(), '.wb-shell-project-list'],
     ['계정 설정', '/account', (page) => page.getByText('alice@browser.test').waitFor(), '.wb-shell-settings'],
     [
       '프로젝트 설정',
@@ -187,7 +187,7 @@ describe.skipIf(!전제.ok)('작업 공간 뼈대 — 실브라우저', () => {
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
       await page.goto('/')
-      await page.getByRole('link', { name: '테마 판', exact: true }).waitFor()
+      await page.getByRole('link', { name: '테마 판 열기', exact: true }).waitFor()
       const nav = page.getByRole('navigation', { name: '작업 공간' })
       expect(await nav.isVisible()).toBe(false)
 
