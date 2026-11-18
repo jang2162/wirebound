@@ -423,7 +423,7 @@ describe('추가 카드 · 열기 · 톱니 설정', () => {
     expect(document.activeElement).toBe(again)
   })
 
-  it('카드마다 «<이름> 열기» 는 이름을 보이는 늘인 링크로 에디터에 · «<이름> 설정» 은 글자 없는 톱니로 설정에 간다', async () => {
+  it('카드마다 «<이름> 열기» 는 이름을 보이는 늘인 링크로 에디터에 · «<이름> 설정» · «<이름> 공통코드» 는 아이콘 + 글 단추로 간다', async () => {
     renderList(async () => ROWS)
     await screen.findByText('관리자 콘솔')
     for (const row of ROWS) {
@@ -438,7 +438,13 @@ describe('추가 카드 · 열기 · 톱니 설정', () => {
       expect(grid().querySelectorAll(`a[href="/projects/${row.id}"]`)).toHaveLength(1)
       const gear = within(grid()).getByRole('link', { name: `${row.name} 설정` })
       expect(gear.getAttribute('href')).toBe(`/projects/${row.id}/settings`)
-      expect(gear.textContent?.trim()).toBe('')
+      // 아이콘 + 글 — 아이콘만으로는 뜻을 못 읽는다.
+      expect(gear.textContent?.trim()).toBe('설정')
+      expect(
+        within(grid())
+          .getByRole('link', { name: `${row.name} 공통코드` })
+          .textContent?.trim(),
+      ).toBe('공통코드')
       expect(gear.getAttribute('title')).toBe(`${row.name} 설정`)
     }
   })

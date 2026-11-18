@@ -11,7 +11,7 @@
  *   `fireEvent.change` 한 번은 이 판을 못 낸다). 앱 전체의 전이를 끄지 않는 것은 에디터의 페이지 전환까지 동기로 바뀌어서다. 역할 · 정렬은 고르는
  *   컨트롤이라 주소에서 읽은 채다 — 사람의 빠르기로는 안 잃는다(같은 파일 «역할 · 정렬 고르기» 가 잰다. 한 틱 안에 다른 둘을 고르면 앞 것을 잃는다).
  * - 카드: **카드 전체가 에디터로 가는 링크다**(이름 링크를 카드 상자만큼 늘인다 — 접근 이름 «<이름> 열기») · 역할 표지 · 슬러그 · 설명 · 멤버 수 ·
- *   최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · 아래 줄의 작은 보조 단추(공통코드 · 설정). 보조 단추는 링크 안이 아니라 형제다 —
+ *   최근 수정(상대 시각 — 정확한 시각은 `<time>` 의 `title`) · 아래 줄의 작은 보조 단추(아이콘 + 글 «공통코드» · «설정»). 보조 단추는 링크 안이 아니라 형제다 —
  *   누를 수 있는 것 안에 누를 수 있는 것을 두지 않는다(늘인 링크 위로 올려 세운다).
  * - **격자 맨 앞은 «프로젝트 추가» 카드다**(`AddCard`) — 누르면 그 카드 자리가 만들기 폼이다. 목록을 불러오는 중 · 조회 실패 · 빈 목록 · 거른
  *   결과 0 에서도 선다 — 만드는 길이 이것 하나라, 목록을 못 받은 판에 숨으면 만들 길이 없다. 카드마다의 주색 «열기» 를 걷은 뒤로 화면의 강조된
@@ -300,16 +300,17 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
         </span>
       </div>
       <div className="wb-shell-home-actions">
-        {/* **설정은 모든 멤버에게 있다** — owner 가 아니면 설정 페이지가 읽기로만 보인다(지금 테마 · 토큰을 볼 수 있다). 톱니만 남은 단추라 이름은
-            `aria-label` 과 `title` 이 같은 글로 든다(`shell/icons.ts` 머리말 «이름은 아이콘이 나르지 않는다»). */}
-        {/* 공통코드 화면 — 설정과 같은 꼴의 아이콘 단추다(모든 멤버에게 — viewer 는 읽기로만 본다). */}
+        {/* **보조 단추 둘 — 아이콘 + 글.** 아이콘만으로는 «공통코드» 를 못 읽고 `title` 은 터치 기기에서 안 보인다. 보이는 글은 «공통코드» · «설정»
+            이고 카드마다 갈리는 이름(«<이름> 공통코드» · «<이름> 설정» — 보이는 글을 품는다)은 `aria-label` 과 `title` 이 든다. 둘 다 모든 멤버에게
+            있다 — owner 가 아니면 그 화면이 읽기로만 보인다. */}
         <Link
           className="wb-shell-home-settings"
           to={`/projects/${project.id}/codes`}
           aria-label={`${project.name} 공통코드`}
           title={`${project.name} 공통코드`}
         >
-          {shellIcon('codes', 16)}
+          {shellIcon('codes', 14, 'wb-shell-icon-lead')}
+          공통코드
         </Link>
         <Link
           className="wb-shell-home-settings"
@@ -317,7 +318,8 @@ function ProjectRow(props: { project: ProjectListItem; now: number }): ReactElem
           aria-label={`${project.name} 설정`}
           title={`${project.name} 설정`}
         >
-          {shellIcon('projectSettings', 16)}
+          {shellIcon('projectSettings', 14, 'wb-shell-icon-lead')}
+          설정
         </Link>
       </div>
     </li>
