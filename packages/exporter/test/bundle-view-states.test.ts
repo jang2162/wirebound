@@ -220,6 +220,22 @@ describe('런타임 — 고른 상태로 그린다', () => {
     expect(canvasText()).toContain('승인')
   })
 
+  it('빈 조각(`…#` — 규칙 없는 링크의 기본 동작)으로 바뀌어도 고른 상태가 그대로다', async () => {
+    load()
+    await run()
+    choose('s_admin')
+    await act(async () => {
+      history.replaceState(null, '', '#')
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    })
+    // `emptyFragment` 는 판 카나리아 — 주소가 조각 없는 주소(아래 케이스)가 아니라 빈 조각이다.
+    expect({ select: select().value, approve: canvasText().includes('승인'), emptyFragment: location.href.endsWith('#') }).toEqual({
+      select: 's_admin',
+      approve: true,
+      emptyFragment: true,
+    })
+  })
+
   it('상태 해시가 빠지면(뒤로 가기) 기본이다', async () => {
     history.replaceState(null, '', '#state=s_admin')
     load()
