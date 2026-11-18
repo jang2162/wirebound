@@ -5,6 +5,7 @@
  * | 케이스 | 재는 값 |
  * |---|---|
  * | «보기» 토글 | 칸에 글을 치고 토글을 실클릭하면 `activeElement` 가 칸 그대로 · 이어 친 글이 끝에 붙는다 · 토글이 칸 상자 안 오른쪽에 서고 친 글 자리(칸의 안쪽 여백 밖)와 안 겹친다 |
+ * | 가운데 카드 | 창 1280×800 에서 카드 가운데가 창 가운데(±2px) · 라벨 13px · 칸 높이 ≥ 40 · 재설정 안내가 카드 안. 창 390×320(카드가 창보다 길다)에서 카드 위끝이 창 안(가운데 맞춤이 넘쳐도 위가 안 잘린다 — `safe`) · 가로 넘침 0 |
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { editorStackPrerequisite, startEditorStack, type EditorStack } from './editor-stack'
@@ -65,5 +66,49 @@ describe.skipIf(!전제.ok)('로그인 화면 — 실브라우저', () => {
     } finally {
       await context.close()
     }
+  })
+
+  it('카드가 창 가운데에 서고 라벨 13px · 칸 높이 40 이며, 짧은 창에서도 위가 안 잘린다', async () => {
+    const seen: Record<string, unknown> = {}
+    for (const viewport of [
+      { width: 1280, height: 800 },
+      { width: 390, height: 320 },
+    ]) {
+      const context = await stack.browser.newContext({ viewport })
+      try {
+        const page = await context.newPage()
+        await page.goto(`${stack.webUrl}/login`)
+        await page.getByLabel('이메일', { exact: true }).waitFor()
+        seen[`${viewport.width}x${viewport.height}`] = await page.evaluate(() => {
+          const card = document.querySelector('.wb-shell-login-card')!.getBoundingClientRect()
+          const label = document.querySelector('.wb-shell-login-label')!
+          const input = document.getElementById('login-email')!.getBoundingClientRect()
+          const hint = document.querySelector('.wb-shell-login-hint')
+          return {
+            dx: Math.round(card.left + card.width / 2 - window.innerWidth / 2),
+            dy: Math.round(card.top + card.height / 2 - window.innerHeight / 2),
+            top: Math.round(card.top),
+            labelPx: getComputedStyle(label).fontSize,
+            inputH: Math.round(input.height),
+            hintInCard: hint !== null && hint.closest('.wb-shell-login-card') !== null,
+            overflowX: document.documentElement.scrollWidth - window.innerWidth,
+          }
+        })
+      } finally {
+        await context.close()
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log('[로그인 카드]', JSON.stringify(seen))
+    const wide = seen['1280x800'] as { dx: number; dy: number; labelPx: string; inputH: number; hintInCard: boolean; overflowX: number }
+    const short = seen['390x320'] as { top: number; overflowX: number; labelPx: string }
+    expect({
+      centered: Math.abs(wide.dx) <= 2 && Math.abs(wide.dy) <= 2,
+      labelPx: wide.labelPx,
+      tall: wide.inputH >= 40,
+      hintInCard: wide.hintInCard,
+      shortTopInView: short.top >= 0,
+      overflowX: [wide.overflowX, short.overflowX],
+    }).toEqual({ centered: true, labelPx: '13px', tall: true, hintInCard: true, shortTopInView: true, overflowX: [0, 0] })
   })
 })

@@ -181,6 +181,13 @@ describe('로그인 화면', () => {
     expect(currentPath()).toBe('/login')
   })
 
+  /** 무엇을 하는 화면인지 한 줄 · 재설정 안내 — 안내가 가리키는 길(관리자의 «재설정 링크 만들기»)은 `routes/login.tsx` 의 `RESET_HINT` 머리말. */
+  it('제목 밑에 화면 설명 한 줄 · 바닥에 재설정 안내가 선다', async () => {
+    await renderLogin(fakeSession())
+    expect(screen.getByText('화면 설계서 작업 공간에 로그인합니다')).toBeTruthy()
+    expect(screen.getByText('비밀번호를 잊었으면 관리자에게 재설정 링크를 요청하세요')).toBeTruthy()
+  })
+
   /** 자동완성 — 비밀번호 관리자 · 브라우저 자동 채움이 칸을 추측하지 않고 이 속성으로 찾는다. */
   it('이메일 칸은 autocomplete=email · 비밀번호 칸은 current-password 다', async () => {
     await renderLogin(fakeSession())

@@ -3844,21 +3844,56 @@
   color: #b42318;
 }
 
-/* ── 로그인(`routes/login.tsx`) ──────────────────────────────────────────────────────
+/* ── 로그인(`routes/login.tsx` · 초대 · 재설정 화면도 같은 꼴) ─────────────────────────────
 
-   화면에 상자가 하나뿐이라 가운데로 모은다. */
+   화면에 상자가 하나뿐이라 창 가운데에 카드로 모은다. 창을 덮는 고정 상자인 것은 `body` 의 기본 여백을 피하려는 것이다(`.wb-shell` 과 같은 까닭) —
+   카드가 창보다 길면 이 상자가 구르고, 가운데 맞춤은 넘칠 때 위가 잘리지 않게 `safe` 다. */
 .wb-shell-login {
   color-scheme: light;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 24px 16px;
+  background: var(--wb-shell-chrome);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-login-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  max-width: 320px;
-  margin: 0 auto;
-  padding: 88px 24px 24px;
-  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 14px;
-  color: var(--wb-shell-ink);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 380px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 12px;
+  padding: 32px 28px 24px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+/* 제목 밑 한 줄 — 무엇을 하는 화면인가. */
+.wb-shell-login-lead {
+  margin: -8px 0 0;
+  font-size: 13px;
+  color: var(--wb-shell-muted);
+  text-align: center;
+}
+
+/* 카드 바닥의 재설정 안내. */
+.wb-shell-login-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+  text-align: center;
 }
 
 .wb-shell-login-title {
@@ -3884,16 +3919,19 @@
 }
 
 .wb-shell-login-label {
-  font-size: 12px;
-  color: var(--wb-shell-muted);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--wb-shell-ink);
 }
 
+/* 칸 높이 40 — 손가락으로 누르기 넉넉한 높이다. */
 .wb-shell-login-input {
   box-sizing: border-box;
   width: 100%;
+  min-height: 40px;
   border: 1px solid var(--wb-shell-line);
-  border-radius: 4px;
-  padding: 6px 8px;
+  border-radius: 6px;
+  padding: 8px 12px;
   background: #fff;
   font: inherit;
   color: var(--wb-shell-ink);
@@ -3937,10 +3975,11 @@
 
 .wb-shell-login-submit {
   appearance: none;
+  min-height: 40px;
   margin-top: 4px;
   border: 1px solid var(--wb-shell-accent);
-  border-radius: 4px;
-  padding: 7px 12px;
+  border-radius: 6px;
+  padding: 8px 12px;
   background: var(--wb-shell-accent);
   font: inherit;
   font-weight: 600;
