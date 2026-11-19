@@ -2188,11 +2188,11 @@ function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: (
   return {
     // **눈금(25 배수)에 붙는다** — 맞춘 배율(폭 맞춤 · 화면 맞춤 — 63% 등)에서 한 칸을 그대로 빼고 더하면 38% · 88% 처럼 눈금 밖으로 간다. 축소는
     // 지금보다 작은 가장 큰 눈금(63% → 50%), 확대는 지금보다 큰 가장 작은 눈금(63% → 75% · 18% → 25%)이다. 눈금 위면 한 칸이다. 축소는 바닥
-    // (`ZOOM_OUT_FLOOR`)에서 멈추고 그 아래의 맞춘 배율에서는 아무것도 안 한다.
+    // (`ZOOM_OUT_FLOOR`)에서 멈춘다. 그 아래의 맞춘 배율에서는 배율을 안 바꾸되 **지금 배율을 고른 것으로 놓는다** — 누름은 «이 배율로 두라» 이고,
+    // 안 놓으면 폭 맞춤이 켜진 채 창 폭을 따라가 «누르면 그 배율로 남는다» 가 이 판에서만 거짓이 된다.
     zoomOut: () => {
       const { zoom } = store.getState()
-      if (zoom <= ZOOM_OUT_FLOOR) return
-      store.setZoom(Math.max(ZOOM_OUT_FLOOR, (Math.ceil(zoom / ZOOM_STEP - 1e-9) - 1) * ZOOM_STEP))
+      store.setZoom(zoom <= ZOOM_OUT_FLOOR ? zoom : Math.max(ZOOM_OUT_FLOOR, (Math.ceil(zoom / ZOOM_STEP - 1e-9) - 1) * ZOOM_STEP))
     },
     zoomIn: () => {
       const { zoom } = store.getState()

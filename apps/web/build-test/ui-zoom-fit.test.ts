@@ -7,6 +7,7 @@
  * | 넓은 문서 · 좁은 문서 | 창 1440 에서 1280 문서를 열면 배율 < 1 · 문서 오른끝이 칸 안(±0.5) · 배율 글이 «폭 맞춤» 표지(`wb-shell-zoom-value-fitted` · 줌 묶음 설명). 프리셋 375 로 바꾸면 100% · 표지 없음 |
  * | 손대기 전에는 따른다 | 폭 맞춤인 채 창을 1100 으로 줄이면 배율이 따라 줄고 문서 오른끝이 칸 안 |
  * | 손댄 뒤에는 그대로 | «확대» 를 누르면 다음 눈금(63% → 75%) · 그 뒤 창을 1100 으로 줄여도 배율 그대로 · 표지 없음 · 다른 페이지를 열면 다시 폭 맞춤 |
+ * | 바닥 아래의 «축소» | 창 760(접힌 머리) · 1280 문서는 25% 아래로 맞춰진다 · `…` › «축소» 는 배율을 안 바꾸고 폭 맞춤을 끈다 — `…` 배율 줄의 «폭 맞춤» 이 걷힌다 · 창 700 · 820 에도 그 배율 |
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -155,6 +156,54 @@ describe.skipIf(!전제.ok)('폭 맞춤으로 열기 — 실브라우저', () =>
         resized: true,
         resizedFitted: false,
         reopened: { fitted: true, inside: true, below: true },
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  it('25% 아래로 맞춘 판에서 «축소» 를 누르면 그 배율로 남는다 — 창을 줄이고 늘려도 그대로다', async () => {
+    const [P] = await fixture('floor')
+    const { page, close } = await open(P, 760)
+    try {
+      // 창 760 은 머리가 접혀 줌 묶음이 `…` 에 든다(`shell/head-fold.ts`) — 같은 `zoomOut` 을 부르는 입구다.
+      await page.getByRole('combobox', { name: '뷰포트 폭' }).selectOption('1280')
+      await page.waitForTimeout(300)
+      const fitted = await zoomState(page)
+      // 접힌 머리에는 배율 글이 없다 — 표지는 `…` 의 배율 줄(«배율 15% · 폭 맞춤»)이 말한다.
+      const more = page.getByRole('button', { name: '더 보기', exact: true })
+      await more.click()
+      const zoomRow = page.getByRole('menuitem', { name: /^배율 / })
+      const rowBefore = await zoomRow.textContent()
+      await page.getByRole('menuitem', { name: '축소', exact: true }).click()
+      const pressed = await zoomState(page)
+      await more.click()
+      const rowAfter = await zoomRow.textContent()
+      await page.keyboard.press('Escape')
+      await page.setViewportSize({ width: 700, height: 900 })
+      await page.waitForTimeout(300)
+      const narrower = await zoomState(page)
+      await page.setViewportSize({ width: 820, height: 900 })
+      await page.waitForTimeout(300)
+      const wider = await zoomState(page)
+      // eslint-disable-next-line no-console
+      console.log(
+        `[폭 맞춤] 바닥 아래 축소 — 맞춘 ${fitted.zoom} · 누른 뒤 ${pressed.zoom} · 창 700 ${narrower.zoom} · 창 820 ${wider.zoom}`,
+      )
+      expect({
+        floorBelow: fitted.zoom < 0.25,
+        rowBefore: rowBefore?.includes('폭 맞춤'),
+        pressed: pressed.zoom,
+        rowAfter: rowAfter?.includes('폭 맞춤'),
+        narrower: narrower.zoom,
+        wider: wider.zoom,
+      }).toEqual({
+        floorBelow: true,
+        rowBefore: true,
+        pressed: fitted.zoom,
+        rowAfter: false,
+        narrower: fitted.zoom,
+        wider: fitted.zoom,
       })
     } finally {
       await close()
