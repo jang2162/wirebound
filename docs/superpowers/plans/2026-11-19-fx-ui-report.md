@@ -128,7 +128,11 @@ jsdom `shell-css` · `shell-css-palette` · `routes/project-list` 3 파일 97 �
 `~/Library/Caches/ms-playwright/chromium_headless_shell-1234/…`» 다 — api 의 화면 캡처(`apps/api/src/services/screen-render-chromium.ts`)가 띄우는 헤드리스 셸이
 없다. 그 캐시 디렉터리는 13:04 에 바뀌어(첫 판 실행 중) 지금 `b` 하나만 들었다 — 이 워크트리 밖의 무엇이 비웠다. 이 트랙은 `apps/api` · `packages` 를 안
 건드렸다(`git diff --stat 8104fc85 HEAD -- apps/api packages` 빈 줄). 공유 캐시라 다시 깔지 않았다 — 깐 뒤 그 여섯 파일(`file-attach-narrow` ·
-`form-table-mid-width` · `form-table` · `placeholder-images` · `theme-system-review` · `tree-old-theme`)을 다시 돌려야 한다(«남은 것» 1).
+`form-table-mid-width` · `form-table` · `placeholder-images` · `theme-system-review` · `tree-old-theme`)을 다시 돌려야 한다.
+
+**다시 돈 판** — `pnpm vitest run -c vitest.browser.config.ts` 위 여섯 파일, 13:55 – 13:56(load 26.0 → 21.6). 코디네이터가 `chromium-1234` · `chromium_headless_shell-1234` 를 다시 깐 뒤 — rc 0 · 6 파일 · 37 케이스 전부 통과 · 실패 0 · 건너뜀 0(`file-attach-narrow` 5 · `form-table-mid-width` 5 · `form-table` 12 · `placeholder-images` 7 · `theme-system-review` 5 · `tree-old-theme` 3). 잠듦 없음.
+
+그래서 `test:browser` 는 둘째 판 849 + 이 여섯 파일의 37(둘째 판에서 실패 8 · 통과 29 였던 파일) — 137 파일 · 857 통과 · 실패 0 · 건너뜀 2 로 선다.
 
 이 트랙이 바꾼 · 더한 실브라우저 파일은 둘째 판에서 전부 초록이다 — `ui-zoom-fit` 4 · `ui-login` 4 · `project-cards` 5 · `comment-focus` 26 ·
 `editor-narrow-canvas` 8(«줌 하한» 포함).
@@ -138,12 +142,10 @@ jsdom `shell-css` · `shell-css-palette` · `routes/project-list` 3 파일 97 �
 
 ## 남은 것
 
-1. **PPTX 화면 그림 여덟** — Playwright 의 `chromium_headless_shell-1234` 를 다시 깐 뒤(`pnpm exec playwright install chromium-headless-shell` 류 — 코디네이터 · 사람의 몫)
-   위 여섯 파일을 `pnpm vitest run -c vitest.browser.config.ts <경로>` 로 다시 돈다.
-2. **3c**(리뷰 «남은 것» 5) — 구역 선택에서 ↓ 가 페이지 뿌리로 가는 `selectNext`. 이 트랙 몫이 아니라 안 건드렸다.
-3. **2b 곁의 커서 `[0,0]`** — 재현 안 됨(위 «3»). 리뷰 판의 재는 법을 알면 다시 잰다.
-4. **`change-kind-code` 경주**(구현 보고 «남은 것» 6) — 이 트랙과 무관 · 그대로.
-5. 정본 «설계서 화면 구조» 843줄 «묶음 머리(번호 · 이름)» 는 이름이 무엇인지 안 적는다 — 279줄(«코멘트의 노드 표시» 가 `nodeDisplayName` 줄 이름을 거친다)이 이제 참이라
+1. **3c**(리뷰 «남은 것» 5) — 구역 선택에서 ↓ 가 페이지 뿌리로 가는 `selectNext`. 이 트랙 몫이 아니라 안 건드렸다.
+2. **2b 곁의 커서 `[0,0]`** — 재현 안 됨(위 «3»). 리뷰 판의 재는 법을 알면 다시 잰다.
+3. **`change-kind-code` 경주**(구현 보고 «남은 것» 6) — 이 트랙과 무관 · 그대로.
+4. 정본 «설계서 화면 구조» 843줄 «묶음 머리(번호 · 이름)» 는 이름이 무엇인지 안 적는다 — 279줄(«코멘트의 노드 표시» 가 `nodeDisplayName` 줄 이름을 거친다)이 이제 참이라
    고치지 않았다. 적으려면 «이름은 «달 곳» 과 같은 구조 트리 줄 이름 — 사라진 노드는 «사라진 노드», 문서를 못 읽었으면 «이름을 모르는 노드»» 를 넣는다(정본을 고치는 트랙이라 전량 넷).
 
 ## 지침
