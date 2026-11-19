@@ -109,3 +109,46 @@ anywhere` 가 최소 폭에도 들어 글 조각이 줄어 접힌다(«눌리는
 | 변조 M4 — `::before` 에 옛 `position: absolute; right: 16px; bottom: 20px` 를 되살림 | `a.wb-shell-home-settings` | 새 케이스 1 실패 · 통과 0 |
 
 jsdom `shell-css` · `shell-css-palette` · `routes/project-list` 3 파일 97 통과(셸 CSS 규칙 — 결합자 없음).
+
+## 게이트
+
+정본을 안 고쳐 영역 게이트다(web 단위 전량 + `pnpm test:browser` 전량 + typecheck · lint · fmt). node `v24.21.0`(상태 파일 첫 줄). 머리 `12e797c4`.
+사슬은 스크립트 하나 · `nohup nice -n 10 caffeinate -i` · 단계마다 `rc=$?`.
+
+| 단계 | 시각 | 결과 |
+| --- | --- | --- |
+| `pnpm typecheck` | 12:42 – 12:43 | rc 0 |
+| `pnpm lint` | 12:43 | rc 0 |
+| `pnpm fmt` | 12:43 | rc 0 · 바뀐 파일 0 |
+| `pnpm vitest run --project web --maxWorkers=25%` | 12:43 – 12:51 (load 시작 27.7 · 끝 47.7) | 250 파일 · 3774 케이스 — 통과 3771 · 실패 2 · 건너뜀 1. 실패 둘은 `STACK_TRACE_ERROR`(시간 한도): `api-consumers.test.ts` «부르는 자리가 표와 같다» · `role-access.test.ts` «.role을 읽는 코드는 …». load 45.9 에서 둘만 `--testTimeout=60000` 으로 다시 돌려 9 통과 — 케이스 시간 3.9s · 3.8s(기본 한도 5s 의 4/5 — 부하). 이 트랙이 안 건드린 소스 셈 케이스다 |
+| `pnpm test:browser` 첫 판 | 12:59 – 13:29 (load 38.3 → 24.2) | 137 파일 · 859 케이스 — 통과 849 · 실패 8 · 건너뜀 2. **버린 판** — `pmset -g log` 에 13:18:27 `Clamshell Sleep` → 13:19:23 Wake 가 실행 안에 있다. 실패 여덟은 전부 내보낸 PPTX 의 화면 그림 수가 0 인 단언(`file-attach-narrow` · `form-table-mid-width` · `form-table` · `placeholder-images` · `theme-system-review` · `tree-old-theme` ×3)이다 |
+| `pnpm test:browser` 둘째 판 | 13:30 – 13:53 (load 17.4 → 29.1) | 137 파일 · 859 케이스 — 통과 849 · **실패 8** · 건너뜀 2. 잠듦 없음(`pmset -g log` 의 `Sleep` 줄은 13:18 하나뿐 — 이 판 앞). 실패는 첫 판과 같은 여덟이다 |
+
+**여덟의 까닭 — 이 트랙과 무관한 환경.** 실패 값(`theme-system-review` 의 `screenFailures`)이 «브라우저를 띄우지 못했습니다: browserType.launch: Executable doesn't exist at
+`~/Library/Caches/ms-playwright/chromium_headless_shell-1234/…`» 다 — api 의 화면 캡처(`apps/api/src/services/screen-render-chromium.ts`)가 띄우는 헤드리스 셸이
+없다. 그 캐시 디렉터리는 13:04 에 바뀌어(첫 판 실행 중) 지금 `b` 하나만 들었다 — 이 워크트리 밖의 무엇이 비웠다. 이 트랙은 `apps/api` · `packages` 를 안
+건드렸다(`git diff --stat 8104fc85 HEAD -- apps/api packages` 빈 줄). 공유 캐시라 다시 깔지 않았다 — 깐 뒤 그 여섯 파일(`file-attach-narrow` ·
+`form-table-mid-width` · `form-table` · `placeholder-images` · `theme-system-review` · `tree-old-theme`)을 다시 돌려야 한다(«남은 것» 1).
+
+이 트랙이 바꾼 · 더한 실브라우저 파일은 둘째 판에서 전부 초록이다 — `ui-zoom-fit` 4 · `ui-login` 4 · `project-cards` 5 · `comment-focus` 26 ·
+`editor-narrow-canvas` 8(«줌 하한» 포함).
+
+작업 공간: 끝의 `git ls-files -s apps | md5` 는 이 트랙의 커밋으로 바뀌었고(시작 값과 다름 — 내 커밋 다섯), 커밋 사이 `git status --short` 는 내가 쓴 파일만
+보였다. 끝에 이 워크트리 경로의 vitest · vite · chrome 프로세스 0.
+
+## 남은 것
+
+1. **PPTX 화면 그림 여덟** — Playwright 의 `chromium_headless_shell-1234` 를 다시 깐 뒤(`pnpm exec playwright install chromium-headless-shell` 류 — 코디네이터 · 사람의 몫)
+   위 여섯 파일을 `pnpm vitest run -c vitest.browser.config.ts <경로>` 로 다시 돈다.
+2. **3c**(리뷰 «남은 것» 5) — 구역 선택에서 ↓ 가 페이지 뿌리로 가는 `selectNext`. 이 트랙 몫이 아니라 안 건드렸다.
+3. **2b 곁의 커서 `[0,0]`** — 재현 안 됨(위 «3»). 리뷰 판의 재는 법을 알면 다시 잰다.
+4. **`change-kind-code` 경주**(구현 보고 «남은 것» 6) — 이 트랙과 무관 · 그대로.
+5. 정본 «설계서 화면 구조» 843줄 «묶음 머리(번호 · 이름)» 는 이름이 무엇인지 안 적는다 — 279줄(«코멘트의 노드 표시» 가 `nodeDisplayName` 줄 이름을 거친다)이 이제 참이라
+   고치지 않았다. 적으려면 «이름은 «달 곳» 과 같은 구조 트리 줄 이름 — 사라진 노드는 «사라진 노드», 문서를 못 읽었으면 «이름을 모르는 노드»» 를 넣는다(정본을 고치는 트랙이라 전량 넷).
+
+## 지침
+
+1. **`.ruler/20-verification.md` 「「통과」를 보기 전에 몇 개가 실행됐는지 확인한다 — 덧붙임」 끝에** 넣을 문장: «**실브라우저 전량의 PPTX 판이 한꺼번에 «화면 그림 0» 으로
+   죽으면 먼저 Playwright 캐시를 본다** — api 의 화면 캡처는 `~/Library/Caches/ms-playwright/chromium_headless_shell-<판>` 을 띄우고, 그 캐시는 이 기계의 모든
+   저장소가 나눠 써 다른 일이 비울 수 있다. 실패 값은 단언의 수(0)가 아니라 `screenFailures` 의 «Executable doesn't exist» 에 있다 — 그 판은 결함이 아니라 안 잰 것이다
+   (`docs/superpowers/plans/2026-11-19-fx-ui-report.md` «게이트»).»
