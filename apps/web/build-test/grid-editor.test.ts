@@ -184,6 +184,8 @@ describe.skipIf(!전제.ok)('그리드 — 에디터(실브라우저)', () => {
     }
     const headOf = async () => (await call('GET', P)).body.headSeq as number
     try {
+      // 빈 구역 줄은 그 그리드를 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await treeRow(page, 'h_g').locator('button').first().click()
       for (const zone of ['body', 'rows', 'footer']) expect(await zoneRow(page, 'h_g', zone).count(), zone).toBe(1)
       for (const nodeId of ['h_c0', 'h_c1', 'h_r1', 'h_pg', 'h_t1']) expect(await treeRow(page, nodeId).count(), nodeId).toBe(1)
       // 판 카나리아 — 셀 틀 조각 · 행은 원본 1 · 사본 3, 제 칸은 원본 1 · 사본 1 이다.

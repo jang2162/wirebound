@@ -17,7 +17,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, zoomToFull, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -893,6 +893,8 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
       try {
         await page.goto(P)
         await canvasFrame(page).locator('[data-wb-id="n_t69"]').waitFor()
+        // 배율 100% 판 — 폭 맞춤(창 1440 · 1280 문서 → 63%)이면 문서가 짧아져 «칸 밖(위)» 노드가 이미 칸 안이다.
+        await zoomToFull(page)
         if (mode === '뷰 모드') await page.getByRole('button', { name: '뷰 모드', exact: true }).click()
         await page.getByRole('tab', { name: '코멘트', exact: true }).click()
         await group(page, 'n_t69').waitFor()
@@ -1170,6 +1172,8 @@ describe.skipIf(!전제.ok)('코멘트 포커스 — 실브라우저', () => {
     try {
       await page.goto(P)
       await canvasFrame(page).locator('[data-wb-id="n_t69"]').waitFor()
+      // 배율 100% 판 — 폭 맞춤이면 문서가 짧아져 휠 한 번이 링을 칸 밖으로 못 민다.
+      await zoomToFull(page)
       await page.getByRole('tab', { name: '코멘트', exact: true }).click()
       await group(page, 'n_t35').waitFor()
       const pane = await page.locator('.wb-shell-canvas').boundingBox()

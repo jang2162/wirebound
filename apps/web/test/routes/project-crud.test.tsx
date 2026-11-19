@@ -419,8 +419,8 @@ describe('통합 — 한 화면에서 이어서', () => {
         .queryAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['프로젝트 추가'])
-    // 링크는 역할과 무관하게 줄마다 넷(이름 · 열기 · 공통코드 · 설정)이다 — 읽기는 viewer도 된다. 카드 목록 안에서 센다 — 사이드바에도 링크 목록이 있다.
-    expect(within(cards()).getAllByRole('link')).toHaveLength(12)
+    // 링크는 역할과 무관하게 줄마다 셋(카드 전체인 이름 링크 · 공통코드 · 설정)이다 — 읽기는 viewer도 된다. 카드 목록 안에서 센다 — 사이드바에도 링크 목록이 있다.
+    expect(within(cards()).getAllByRole('link')).toHaveLength(9)
   })
 
   it('조회 실패와 조작 실패가 각자 자리에 나온다', async () => {
@@ -462,10 +462,10 @@ describe('통합 — 한 화면에서 이어서', () => {
       within(main()).queryAllByRole('textbox').length +
       within(main()).queryAllByRole('link').length
 
-    // 닫힌 상태: 링크 4(이름 · 열기 · 공통코드 · 설정) + 프로젝트 추가 1 = 5. 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
+    // 닫힌 상태: 링크 3(카드 전체인 이름 · 공통코드 · 설정) + 프로젝트 추가 1 = 4. 줄의 삭제는 설정 페이지의 위험 구역으로 옮겨 갔다(`settings/danger-section.tsx`).
     // 이 케이스가 재는 것은 *"열면 늘고 닫으면 되돌아온다"*이고, 바탕 수는 이 화면의 정지점을 셀 뿐이다.
     const closed = stops()
-    expect(closed).toBe(5)
+    expect(closed).toBe(4)
 
     fireEvent.click(screen.getByRole('button', ADD))
     // 폼이 여는 단추 자리를 대신한다: 입력 3 + 만들기·취소 2 − 프로젝트 추가 1

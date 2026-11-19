@@ -145,7 +145,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
     await openCommentTab()
 
     await waitFor(() => expect(groupTitles()).toHaveLength(2))
-    expect(groupTitles()).toEqual(['1 n_c', '2 n_a'])
+    expect(groupTitles()).toEqual(['1 Text 다', '2 Text 가'])
   })
 
   it('같은 노드의 코멘트가 한 무리로 모이고 단 순서를 지킨다', async () => {
@@ -156,7 +156,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
     })
     await openCommentTab()
 
-    await waitFor(() => expect(groupTitles()).toEqual(['1 n_a']))
+    await waitFor(() => expect(groupTitles()).toEqual(['1 Text 가']))
     expect([...document.body.querySelectorAll('.wb-shell-comment-body')].map((el) => el.textContent)).toEqual(['첫째', '둘째'])
   })
 
@@ -175,9 +175,31 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
     await openCommentTab()
 
     await waitFor(() => expect(groupTitles()).toHaveLength(3))
-    expect(groupTitles()).toEqual(['1 n_a', '– n_b', '– 사라진 노드 (n_없음)'])
+    expect(groupTitles()).toEqual(['1 Text 가', '– Text 나', '– 사라진 노드'])
     // **감추지 않는다** — 감추면 사용자가 남긴 말이 소리 없이 사라진다.
     expect(screen.getByText('지워진 노드의 말')).toBeTruthy()
+  })
+
+  it('무리의 이름은 «달 곳» 과 같은 이름이다 — 머리 글도 접근 이름도 내부 id 를 말하지 않는다', async () => {
+    await openPage(pageDoc(three({ a: 1 })), {
+      apiOverrides: {
+        listComments: async () => [
+          comment({ id: 'c1', nodeId: 'n_a', body: '가의 말' }),
+          comment({ id: 'c2', nodeId: 'n_없음', body: '지워진 노드의 말' }),
+        ],
+      },
+    })
+    await openCommentTab()
+    await waitFor(() => expect(groupTitles()).toHaveLength(2))
+
+    const named = document.body.querySelector('.wb-shell-comment-group[data-comment-node="n_a"]')
+    // 무리가 Tab 정지점이고 그 접근 이름이 머리 글이다 — 화면 읽기 사용자가 듣는 이름.
+    expect(named?.getAttribute('aria-label')).toBe('1 Text 가')
+    // 같은 노드를 «달 곳» 이 부르는 이름과 같다.
+    await pickInCommentTab('n_a')
+    await waitFor(() => expect(screen.getByText(/^달 곳:/).textContent).toBe('달 곳: 1 Text 가'))
+    const all = groupTitles().join(' | ') + ' | ' + (named?.getAttribute('aria-label') ?? '')
+    expect(all).not.toMatch(/n_/)
   })
 
   it('고른 노드의 무리에 표시가 붙는다', async () => {
@@ -194,7 +216,7 @@ describe('코멘트 탭 — 번호는 문서에서 온다', () => {
 
     await waitFor(() => {
       const current = document.body.querySelector('.wb-shell-comment-group[aria-current="true"]')
-      expect(current?.querySelector('.wb-shell-comment-group-title')?.textContent).toContain('n_c')
+      expect(current?.querySelector('.wb-shell-comment-group-title')?.textContent).toContain('Text 다')
     })
   })
 })
@@ -316,7 +338,7 @@ describe('지우기와 재번호', () => {
     await waitFor(() => expect(canvasMarkers()).toEqual({ n_c: '1' }))
     expect(listComments.mock.calls.length).toBe(before)
     // 목록의 번호도 문서에서 읽으므로 함께 바뀐다.
-    await waitFor(() => expect(groupTitles()).toEqual(['1 n_c']))
+    await waitFor(() => expect(groupTitles()).toEqual(['1 Text 다']))
   })
 })
 
@@ -383,7 +405,7 @@ describe('문서를 못 읽었을 때 — "모른다"를 "없다"로 접지 않�
     ])
 
     await waitFor(() => expect(groupTitles()).toHaveLength(2))
-    expect(groupTitles()).toEqual(['– n_a', '– n_b'])
+    expect(groupTitles()).toEqual(['– 이름을 모르는 노드', '– 이름을 모르는 노드'])
     expect(screen.queryByText(/사라진 노드/)).toBeNull()
   })
 
@@ -937,19 +959,19 @@ describe('새 코멘트는 쓴 노드에만 달린다', () => {
 describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
   const target = (): string => document.body.querySelector('#wb-comment-target')?.textContent ?? '(없음)'
 
-  it('편집 모드 — 고른 노드의 번호 · 타입 · id 를 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
+  it('편집 모드 — 고른 노드의 번호 · 줄 이름(내부 id 없이)을 말하고, 다른 노드를 고르면 초안과 함께 바뀐다', async () => {
     await openPage(pageDoc(three({ b: 2 })), { apiOverrides: { listComments: async () => [] } })
     await openCommentTab()
     // 캔버스 누름은 탭을 «컴포넌트» 로 옮겨(`src/shell/canvas-pick.tsx`) 고를 때마다 «코멘트» 탭으로 돌아온다.
     const pick = (key: 'a' | 'b'): Promise<void> => pickInCommentTab(`n_${key}`)
     await pick('a')
     typeInto(await findNewBox(), '가에 대해')
-    expect(target()).toBe('달 곳: – Text (n_a)')
+    expect(target()).toBe('달 곳: – Text 가')
 
     await pick('b')
     // **한 값에서** — 상자의 초안과 달 곳이 같이 바뀐다(위 «대상의 축» 절의 «노드마다»).
     expect((await findNewBox()).value).toBe('')
-    expect(target()).toBe('달 곳: 2 Text (n_b)')
+    expect(target()).toBe('달 곳: 2 Text 나')
     expect(newBox().getAttribute('aria-describedby')).toBe('wb-comment-target')
   })
 
@@ -960,6 +982,6 @@ describe('달 곳 — 폼이 어느 노드에 다는지 말한다', () => {
     await findNewBox()
 
     // 페이지를 열면 루트가 골라져 있다 — 뷰 모드에서는 캔버스가 선택을 안 바꾼다(`canvas.tsx`의 «뷰 모드에서는 선택을 바꾸지 않는다»).
-    expect(target()).toBe('달 곳: – Page (n_root)')
+    expect(target()).toBe('달 곳: – Page')
   })
 })

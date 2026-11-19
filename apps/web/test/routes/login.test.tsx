@@ -180,4 +180,36 @@ describe('로그인 화면', () => {
     await screen.findByLabelText('이메일')
     expect(currentPath()).toBe('/login')
   })
+
+  /** 무엇을 하는 화면인지 한 줄 · 재설정 안내 — 안내가 가리키는 길(관리자의 «재설정 링크 만들기»)은 `routes/login.tsx` 의 `RESET_HINT` 머리말. */
+  it('제목 밑에 화면 설명 한 줄 · 바닥에 재설정 안내가 선다', async () => {
+    await renderLogin(fakeSession())
+    expect(screen.getByText('화면 설계서 작업 공간에 로그인합니다')).toBeTruthy()
+    expect(screen.getByText('비밀번호를 잊었으면 관리자에게 재설정 링크를 요청하세요')).toBeTruthy()
+  })
+
+  /** 자동완성 — 비밀번호 관리자 · 브라우저 자동 채움이 칸을 추측하지 않고 이 속성으로 찾는다. */
+  it('이메일 칸은 autocomplete=email · 비밀번호 칸은 current-password 다', async () => {
+    await renderLogin(fakeSession())
+    expect(emailInput().getAttribute('autocomplete')).toBe('email')
+    expect(screen.getByLabelText('비밀번호').getAttribute('autocomplete')).toBe('current-password')
+  })
+
+  /**
+   * **«보기» 토글** — 누르면 칸이 글로 보이고 이름이 «비밀번호 숨기기» 로 바뀌며, 친 값은 그대로다. 다시 누르면 가린다. 포인터의 누름은 포커스를
+   * 옮기지 않는다(`mousedown` 기본 동작을 막는다 — 칸에 남는 것 자체는 실브라우저 `build-test/ui-login.test.ts` 가 잰다).
+   */
+  it('비밀번호 «보기» 토글이 칸의 type 과 제 이름을 바꾸고 값은 그대로 둔다', async () => {
+    await renderLogin(fakeSession())
+    fillCredentials('me@example.com', 'pw-1234')
+    const field = screen.getByLabelText<HTMLInputElement>('비밀번호')
+    const show = screen.getByRole('button', { name: '비밀번호 보기' })
+    expect(field.type).toBe('password')
+    expect(fireEvent.mouseDown(show)).toBe(false)
+    fireEvent.click(show)
+    expect({ type: field.type, value: field.value }).toEqual({ type: 'text', value: 'pw-1234' })
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 숨기기' }))
+    expect(field.type).toBe('password')
+    expect(screen.getByRole('button', { name: '비밀번호 보기' })).toBe(show)
+  })
 })

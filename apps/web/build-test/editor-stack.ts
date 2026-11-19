@@ -1090,6 +1090,22 @@ export async function delayServerFrames(page: Page, kinds: readonly string[], ms
 }
 
 /**
+ * **줌 단추로 배율을 100% 로 맞춘다.** 페이지는 폭 맞춤으로 열려(`src/routes/editor.tsx` 의 `useAutoFitZoom`) 프리셋이 캔버스 칸보다 넓으면 1 아래다 —
+ * «줌 1» 에서 재는 판은 열고 이것을 부른다. 단추는 25% 눈금에 붙어(63% → 75% → 100%) 몇 번이면 닿는다. 줌 묶음이 머리에 선 창(878px 이상)에서만
+ * 쓴다 — 접힌 머리는 `…` 의 항목이다.
+ */
+export async function zoomToFull(page: Page): Promise<void> {
+  const group = page.getByRole('group', { name: '줌' })
+  for (let step = 0; step < 12; step += 1) {
+    const text = (await group.locator('.wb-shell-zoom-value').textContent()) ?? ''
+    if (text === '100%') return
+    const now = Number(text.replace('%', '')) / 100
+    await group.getByRole('button', { name: now < 1 ? '확대' : '축소', exact: true }).click()
+  }
+  throw new Error('줌 100% 에 못 닿았다')
+}
+
+/**
  * **캔버스 문서가 그려지는 iframe**(`src/canvas/canvas-iframe.tsx`). 문서의 글자 · 노드는 여기 안에 있다 — 호스트의
  * `.wb-shell-canvas-frame` 의 `innerText` · `hasText` 는 iframe 안의 글자를 담지 않는다. 선택 외곽선 · 번호 마커 · 배너는
  * 호스트 문서 그대로다.

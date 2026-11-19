@@ -32,6 +32,8 @@ import { ADMIN_NAV, MAIN_NAV, type WorkspaceNavItem } from './workspace-nav'
 export function WorkspaceLayout(props: {
   /** `<h1>` 글자. */
   title: string
+  /** 제목 곁의 흐린 한 마디(프로젝트 목록의 수 — `routes/project-list.tsx`). `<h1>` 밖이라 제목의 이름에 안 든다. */
+  titleNote?: ReactNode
   /** 제목 위 빵부스러기 — 마지막 칸(지금 화면)은 넣지 않는다, 제목이 그 자리다. */
   crumbs?: { label: string; to: string }[]
   /** 머리 오른쪽 — 화면의 주 동작(«에디터 열기» 등). */
@@ -107,7 +109,14 @@ export function WorkspaceLayout(props: {
                 ))}
               </nav>
             )}
-            <h1 className="wb-shell-workspace-title">{props.title}</h1>
+            {props.titleNote === undefined ? (
+              <h1 className="wb-shell-workspace-title">{props.title}</h1>
+            ) : (
+              <div className="wb-shell-workspace-title-row">
+                <h1 className="wb-shell-workspace-title">{props.title}</h1>
+                {props.titleNote}
+              </div>
+            )}
           </div>
           {props.actions !== undefined && <div className="wb-shell-workspace-actions">{props.actions}</div>}
         </header>

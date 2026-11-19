@@ -143,15 +143,18 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
     return undefined
   }
 
-  /** 서버 문서를 구조 트리 줄 차례로(`src/panels/structure-tree.tsx` 의 `rowLists` 와 같은 규칙). */
-  function treeOrder(root: WbNode): string[] {
+  /**
+   * 서버 문서를 구조 트리 줄 차례로(`src/panels/structure-tree.tsx` 의 `rowLists` 와 같은 규칙). 빈 구역 줄은 `open`(고른 노드 · 고른 구역의 부모)
+   * 의 것만 선다(`StructureNode` 의 `showEmpty`) — 이 파일의 판은 넣은 뒤 넣은 노드(구역 없음)가 골라져 있어 기본이 «없음» 이다.
+   */
+  function treeOrder(root: WbNode, open: string | null = null): string[] {
     const out: string[] = []
     const walk = (node: WbNode): void => {
       out.push(node.id)
       const lists = childLists(node)
       const zoned = lists.some((entry) => entry.pointer !== '/children')
       for (const entry of lists) {
-        if (zoned) out.push(`zone:${node.id}:${entry.zone}`)
+        if (zoned && (entry.list.length > 0 || node.id === open)) out.push(`zone:${node.id}:${entry.zone}`)
         for (const child of entry.list) walk(child)
       }
     }
@@ -251,6 +254,8 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
         300,
       )
       // 곧바로 — 올림이 늦는 사이 — 맵 없는 카드 바닥 구역에 구분선을 넣는다.
+      // 빈 구역 줄은 그 카드를 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await selectRow(tab.page, 'n_bare')
       await zoneRow(tab.page, 'n_bare', 'footer').click()
       await tab.page.locator('[data-wb-palette-card="Divider"] .wb-shell-palette-add').click()
       const footer = await settle(
@@ -315,6 +320,7 @@ describe.skipIf(!전제.ok)('구역 에디터 리뷰 — 실브라우저', () =>
         12000,
       )
       await showOnly(tab.page, 'Divider')
+      await selectRow(tab.page, 'n_bare')
       await zoneRow(tab.page, 'n_bare', 'footer').click()
       // 밥이 맵을 만든 넣기를 되돌린다 — 앨리스는 그 프레임을 1.8s 늦게 받는다.
       const removed = await stack.request(bob, 'PATCH', `${P}/ops`, {

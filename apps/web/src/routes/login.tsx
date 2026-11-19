@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactElement } from 'react'
 import { useLocation } from 'react-router'
 import { ApiError } from '../api/client'
 import { useApi } from '../api/context'
+import { PasswordInput } from '../account/password-input'
 import { useConfirmSession, useSignOutNotice } from '../session/session-context'
 
 /** 서버까지 가 보지 않아도 실패가 확실한 경우에만 쓰는 문장. */
@@ -12,6 +13,14 @@ const EMPTY_EMAIL = '이메일을 입력하세요'
 const EMPTY_PASSWORD = '비밀번호를 입력하세요'
 /** 서버가 이유를 주지 않은 실패(네트워크 단절 등)에 쓸 문장. */
 const UNKNOWN_FAILURE = '로그인하지 못했습니다'
+/** 무엇을 하는 화면인가 — 제목 밑 한 줄. */
+const LEAD = '화면 설계서 작업 공간에 로그인합니다'
+/**
+ * 비밀번호를 잊었을 때의 길. **그 길이 실제로 있다** — 인스턴스 관리자가 «관리자 › 사용자» 의 줄 «…» «재설정 링크 만들기» 로 링크를 짓고
+ * (`admin/users-section.tsx`), 받은 사람이 `/reset/<원문>` 에서 바꾼다(`routes/reset.tsx`). 서버 명령(`apps/api/src/db/reset-password.ts`)은
+ * 관리자가 없을 때의 길이라 이 문장이 가리키지 않는다.
+ */
+const RESET_HINT = '비밀번호를 잊었으면 관리자에게 재설정 링크를 요청하세요'
 
 /** 다른 화면이 로그인 화면으로 보내며 들려 보내는 한 줄(주소 상태) — 재설정을 마친 화면(`routes/reset.tsx`)이 쓴다. */
 export interface LoginNotice {
@@ -90,59 +99,59 @@ export function LoginRoute(): ReactElement {
     // `src/shell.css` 한 파일에 있고, `test/shell-css.test.ts`가 그 접두어를 기계로
     // 지킨다 — 프로젝트 목록·스냅샷·테마 화면이 같은 자리에서 같은 규칙을 따른다.
     <main className="wb-shell-login">
-      <h1 className="wb-shell-login-title">wirebound</h1>
-      {farewell !== null && (
-        <p className="wb-shell-login-notice" role="status">
-          {farewell}
-        </p>
-      )}
-      {notice !== null && (
-        <p className="wb-shell-login-notice" role="status">
-          {notice}
-        </p>
-      )}
-      <form
-        className="wb-shell-login-form"
-        onSubmit={(event) => {
-          void submit(event)
-        }}
-      >
-        <p className="wb-shell-login-field">
-          <label className="wb-shell-login-label" htmlFor="login-email">
-            이메일
-          </label>
-          <input
-            className="wb-shell-login-input"
-            id="login-email"
-            type="email"
-            value={email}
-            // 실패한 뒤에도 입력을 지우지 않는다. 다시 타이핑하게 만들면 사용자는 자기
-            // 이메일이 문제였다고 오해한다.
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </p>
-        <p className="wb-shell-login-field">
-          <label className="wb-shell-login-label" htmlFor="login-password">
-            비밀번호
-          </label>
-          <input
-            className="wb-shell-login-input"
-            id="login-password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </p>
-        {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 세션을 만들 이유가 없다. */}
-        <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
-          로그인
-        </button>
-      </form>
-      {error !== null && (
-        <p className="wb-shell-login-error" role="alert">
-          {error}
-        </p>
-      )}
+      {/* **화면 가운데 카드 하나** — 무엇을 하는 화면인지 한 줄(`LEAD`)과 폼 · 재설정 안내를 품는다. 초대 · 재설정 화면도 같은 꼴이다. */}
+      <div className="wb-shell-login-card">
+        <h1 className="wb-shell-login-title">wirebound</h1>
+        <p className="wb-shell-login-lead">{LEAD}</p>
+        {farewell !== null && (
+          <p className="wb-shell-login-notice" role="status">
+            {farewell}
+          </p>
+        )}
+        {notice !== null && (
+          <p className="wb-shell-login-notice" role="status">
+            {notice}
+          </p>
+        )}
+        <form
+          className="wb-shell-login-form"
+          onSubmit={(event) => {
+            void submit(event)
+          }}
+        >
+          <p className="wb-shell-login-field">
+            <label className="wb-shell-login-label" htmlFor="login-email">
+              이메일
+            </label>
+            <input
+              className="wb-shell-login-input"
+              id="login-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              // 실패한 뒤에도 입력을 지우지 않는다. 다시 타이핑하게 만들면 사용자는 자기
+              // 이메일이 문제였다고 오해한다.
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </p>
+          <p className="wb-shell-login-field">
+            <label className="wb-shell-login-label" htmlFor="login-password">
+              비밀번호
+            </label>
+            <PasswordInput id="login-password" label="비밀번호" autoComplete="current-password" value={password} onChange={setPassword} />
+          </p>
+          {/* 요청이 도는 동안 잠근다 — 두 번 눌러 두 세션을 만들 이유가 없다. */}
+          <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
+            로그인
+          </button>
+        </form>
+        {error !== null && (
+          <p className="wb-shell-login-error" role="alert">
+            {error}
+          </p>
+        )}
+        <p className="wb-shell-login-hint">{RESET_HINT}</p>
+      </div>
     </main>
   )
 }

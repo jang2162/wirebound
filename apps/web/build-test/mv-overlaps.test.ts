@@ -94,7 +94,12 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
   /** 우측 패널의 탭 줄 — 하단 판의 갈래 탭도 `role="tab"` 이라 이름으로 좁힌다. */
   const rightTabs = (page: Page) => page.getByRole('tablist', { name: '우측 패널 탭', exact: true })
   const selectedTab = async (page: Page): Promise<string> =>
-    ((await rightTabs(page).locator('[role="tab"][aria-selected="true"]').textContent()) ?? '').trim()
+    // 탭 이름 글만 — «코멘트» 탭은 곁에 수 배지를 단다(`routes/editor.tsx` 의 `CommentTabLabel`).
+    (
+      await rightTabs(page)
+        .locator('[role="tab"][aria-selected="true"]')
+        .evaluate((el) => el.firstChild?.textContent ?? '')
+    ).trim()
   const selected = (page: Page) =>
     page.evaluate(() => document.querySelector('.wb-shell-selection')?.getAttribute('data-wb-selected-id') ?? null)
 
@@ -157,6 +162,8 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
       await props.getByLabel('되풀이', { exact: true }).waitFor()
       const commentsPart = panel.getByRole('region', { name: '코멘트', exact: true })
       await commentsPart.waitFor()
+      // 묶음은 기본으로 접혀 있다 — 펴서 새 코멘트 상자를 센다(`src/panels/component-panel.tsx`).
+      await commentsPart.getByRole('button', { name: '펼치기', exact: true }).click()
       expect({
         탭: await selectedTab(page),
         고른: await selected(page),
@@ -212,8 +219,11 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
     const opened = await open(P, 1440)
     const { page } = opened
     try {
-      // 묶음이 목록을 읽었다 — 고른 뿌리에는 말이 없다는 문장이 선다.
-      await page.getByRole('region', { name: '코멘트', exact: true }).getByText('이 노드에 단 코멘트가 없습니다').waitFor()
+      // 묶음이 목록을 읽었다 — 고른 뿌리에는 말이 없다는 문장이 선다(묶음은 접혀 감춰져 있어 붙었는지만 본다 — `src/panels/component-panel.tsx`).
+      await page
+        .getByRole('region', { name: '코멘트', exact: true })
+        .getByText('이 노드에 단 코멘트가 없습니다')
+        .waitFor({ state: 'attached' })
       let held = 0
       await page.route(/\/comments(\?|$)/, async (route) => {
         if (route.request().method() !== 'GET') return route.fallback()

@@ -126,17 +126,46 @@ export function StructureTree(props: {
     fold.expand((JSON.parse(chains) as string[][]).flat())
     // `fold` 는 열쇠(페이지)가 바뀔 때만 새 함수다 — 사슬과 함께 본다.
   }, [chains, fold.expand])
-  // 끄는 포인터가 접힌 줄 위에 머물면(`drag/hover-open.ts`) 그 줄을 편다 — 이 트리 줄 끌기 · 카드 · 손잡이 셋 다 이 이벤트로 온다.
+  /**
+   * **끄는 동안 빈 구역 줄을 편 노드**(`StructureNode` 의 `showEmpty`). 끌기가 끝나면 비운다 — 뗀 이벤트를 다 나른 뒤(다음 틱)라 놓는 쪽의
+   * 다시 묻기(`drag/use-pointer-drag.ts` «놓는 답은 보인 답이다»)가 편 줄을 본다.
+   */
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(NO_REVEALED)
+  /** 이 트리에서 끄는 줄의 노드 id(아래 `drag.dragging`) — 위 이벤트가 렌더 밖에서 읽는다. */
+  const draggingRef = useRef<string | null>(null)
+  // 끄는 포인터가 접힌 줄 · 빈 구역을 감춘 줄 위에 머물면(`drag/hover-open.ts`) 그 줄을 편다 — 이 트리 줄 끌기 · 카드 · 손잡이 셋 다 이
+  // 이벤트로 온다.
   useEffect(() => {
     const tree = treeRef.current
     if (tree === null) return
     const open = (event: Event): void => {
       const id = (event.target as HTMLElement).dataset['treeId']
-      if (id !== undefined && id !== '') fold.expand([id])
+      if (id === undefined || id === '') return
+      fold.expand([id])
+      // 끄는 줄 자신의 빈 구역은 펴지 않는다 — 제 안에는 놓을 수 없고, 펴면 그 밑 줄만 밀린다.
+      if ((event.target as HTMLElement).hasAttribute('data-tree-zones-hidden') && draggingRef.current !== id)
+        setRevealed((ids) => new Set([...ids, id]))
     }
     tree.addEventListener(HOVER_OPEN_EVENT, open)
     return () => tree.removeEventListener(HOVER_OPEN_EVENT, open)
   }, [fold.expand, doc === null])
+  useEffect(() => {
+    if (revealed.size === 0) return
+    const done = (): void => {
+      setTimeout(() => setRevealed(NO_REVEALED), 0)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') done()
+    }
+    window.addEventListener('pointerup', done, true)
+    window.addEventListener('pointercancel', done, true)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('pointerup', done, true)
+      window.removeEventListener('pointercancel', done, true)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [revealed])
   /**
    * **끌어 놓기.** 포인터 밑 줄과 띠로 놓을 자리를 받고(`./structure-tree-hint.ts` — 캔버스 손잡이 · 목록 카드가 트리 위를 지날 때도 같은
    * 함수다), 놓으면 `dropTo`가 `moveNodeOps`로 낸다. 남이 잡은 자리는 판정이 스토어의 `editBlockedBy`(서버의 2차 방어와 같은 물음)로
@@ -165,6 +194,7 @@ export function StructureTree(props: {
   })
   // 끄는 사이 문서 · 잠금이 바뀌어 줄이 밀리거나 사라지면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 새 줄로 옮겨 가고, 다른 부모 ·
   // 못 놓는 자리면 걷는다. 안 부르면 표시가 옛 줄 상자에 남는다(`refresh` 는 끌기가 아니면 아무것도 안 한다).
+  draggingRef.current = drag.dragging
   const locksVersion = useLocksVersion()
   useLayoutEffect(() => {
     drag.refresh()
@@ -231,6 +261,7 @@ export function StructureTree(props: {
             saveOnly={props.editable ? null : { rootId, select: store.selectNode, saveModule: openSaveModule }}
             selectedZone={selectedZone}
             onSelectZone={store.selectZone}
+            revealed={revealed}
           />
         </ul>
         {props.editable && <DropIndicator hint={drag.hint} />}
@@ -332,6 +363,13 @@ interface SaveOnlyWiring {
 /** 빈 구역 줄의 꼬리 글. */
 export const EMPTY_ZONE_LABEL = '비어 있음'
 
+/** 빈 구역 줄을 감춘 노드 줄 끝의 칩 — «빈 구역 N». */
+export function emptyZonesChip(count: number): string {
+  return `빈 구역 ${count}`
+}
+
+const NO_REVEALED: ReadonlySet<string> = new Set()
+
 /**
  * 노드의 자식 줄 묶음 — 구역 줄을 세울지와 그 아래 노드들. **구역이 몸통 하나뿐인 노드는 구역 줄이 없다**(지금 그대로 — `Flex` · `Grid` ·
  * `Section` · `Page` · `TabPanel`). 이름 붙은 구역을 선언했거나 선언 밖 구역을 든 노드는 카탈로그 차례대로 구역마다 줄(`label`)을 세운다(빈
@@ -363,6 +401,7 @@ function ZoneRow(props: {
   label: string
   selected: ZoneRef | null
   onSelect: (parentId: string, zone: string) => void
+  onFocusChange: (focused: boolean) => void
 }): ReactElement {
   const { parentId, zone } = props
   if (parentId === null) return <span className="wb-shell-structure-zone-label">{props.label}</span>
@@ -376,6 +415,8 @@ function ZoneRow(props: {
       data-tree-zone-name={zone}
       aria-current={current ? true : undefined}
       onClick={() => props.onSelect(parentId, zone)}
+      onFocus={() => props.onFocusChange(true)}
+      onBlur={() => props.onFocusChange(false)}
     >
       {props.label}
     </button>
@@ -406,6 +447,7 @@ function StructureChildren(props: Parameters<typeof StructureNode>[0] & { nodes:
           saveOnly={props.saveOnly}
           selectedZone={props.selectedZone}
           onSelectZone={props.onSelectZone}
+          revealed={props.revealed}
         />
       ))}
     </>
@@ -442,6 +484,8 @@ function StructureNode(props: {
   /** 넣을 자리로 고른 구역(스토어의 `selectedZone`) — 그 구역 줄이 `aria-current` 다. */
   selectedZone: ZoneRef | null
   onSelectZone: (parentId: string, zone: string) => void
+  /** 끄는 동안 빈 구역 줄을 편 노드(`StructureTree` 의 `revealed`). */
+  revealed: ReadonlySet<string>
 }): ReactElement {
   const { node, row } = props
   // 묶인 노드의 요약은 표의 이름이다 — 캔버스가 그리는 글과 같은 표(`useProjectCodes`). 표를 못 읽은 동안은 prop 의 대체 글이다.
@@ -500,6 +544,26 @@ function StructureNode(props: {
   /** 펼침 단추가 서는 줄인가 — 고를 수 있고 자식 줄이 있다. id 없는 노드는 접힘을 적을 열쇠가 없어 늘 편 채다. */
   const foldable = isSelectable(node) && hasChildRows(node)
   const folded = foldable && props.fold.collapsed.has(node.id)
+  /**
+   * **빈 구역 줄은 이 노드를 볼 때만 선다** — 기준 노드로 골랐을 때 · 그 구역을 넣을 자리로 골랐을 때 · 끄는 포인터가 이 줄에 머물렀을 때
+   * (`revealed`). 그 밖에는 줄 끝 칩(«빈 구역 N»)으로 접는다 — 카드 하나에 빈 구역 줄이 셋씩 노드 사이에 끼어 트리를 덮었다. 구역 줄은 넣을
+   * 자리 · 놓을 자리라 고른 노드에서는 그대로 세운다. **끌기를 시작할 때 전부 펴지 않는다** — 겨눈 줄 위에 줄이 서면 포인터 밑 줄이 밀린다
+   * (`docs/superpowers/plans/2026-11-18-ui-report.md` «3» 의 잰 값). 접힌 줄 펴기와 같은 머무름(`drag/hover-open.ts`)으로 편다. 내용이 있는
+   * 구역의 줄은 늘 선다. id 없는 노드는 고를 수 없어 늘 편 채다.
+   */
+  const showEmpty = !isSelectable(node) || picked || props.selectedZone?.parentId === node.id || props.revealed.has(node.id)
+  const emptyHidden = showEmpty ? 0 : lists.filter((list) => list.label !== null && list.nodes.length === 0).length
+  const shownLists = showEmpty ? lists : lists.filter((list) => list.label === null || list.nodes.length > 0)
+  /**
+   * **감춘 구역 줄에 포커스가 있었으면 이 줄 단추로 옮긴다** — 구역 줄을 누른 뒤 선택이 다른 노드로 가면(단축키) 그 줄이 DOM 에서 빠지고 포커스가
+   * 문서 몸으로 떨어진다. 그 자리의 노드 줄에서 이어 간다.
+   */
+  const zoneFocused = useRef(false)
+  useLayoutEffect(() => {
+    if (showEmpty || !zoneFocused.current) return
+    zoneFocused.current = false
+    if (document.activeElement === null || document.activeElement === document.body) button.current?.focus()
+  }, [showEmpty])
 
   return (
     <li>
@@ -518,6 +582,8 @@ function StructureNode(props: {
           data-tree-id={node.id}
           // 끄는 포인터가 머물면 펴는 표지(`drag/hover-open.ts`).
           data-tree-collapsed={folded ? '' : undefined}
+          // 빈 구역 줄을 감춘 줄 — 끄는 포인터가 머물면 편다(같은 장치).
+          data-tree-zones-hidden={emptyHidden > 0 ? '' : undefined}
         >
           <button
             type="button"
@@ -548,7 +614,10 @@ function StructureNode(props: {
             {...(draggable ? row.drag.bind(node.id) : {})}
             ref={button}
           >
-            {typeLabel}
+            {/* 타입은 흐리게 · 별칭과 요약이 줄의 이름이다 — 훑을 때 사람이 지은 글이 먼저 읽힌다. 타입만 있는 줄은 타입이 이름이라 흐리지 않는다. */}
+            <span className={'wb-shell-structure-type' + (alias === null && summary === null ? '' : ' wb-shell-structure-type-muted')}>
+              {typeLabel}
+            </span>
             {/* **별칭 · 요약은 사람 글이라 방향을 격리한다(`<bdi>`)** — 괄호는 격리 밖에 둔다. 격리가 없으면 괄호가 안 닫힌 RTL 별칭의 `(` 가
                 줄의 `)` 와 짝이 되어 별칭 · `)` · RTL 요약이 한 RTL 덩이로 서고, 라벨 · 제목에 든 방향 제어 글자(봉투가 별칭에만 막는다 —
                 `packages/schema/src/alias.ts`)가 뒤의 조각까지 뒤집는다(`build-test/node-alias.test.ts` «방향을 격리한다»). */}
@@ -568,6 +637,11 @@ function StructureNode(props: {
           </button>
           {/* 펼침 단추는 줄 단추 **뒤**에 두고 CSS 가 앞에 세운다(`./tree-fold.tsx` 머리말 «DOM 에서는 줄 단추 뒤다»). */}
           <TreeToggle foldable={foldable} folded={folded} onToggle={() => props.fold.toggle(node.id)} />
+          {emptyHidden > 0 && (
+            <span className="wb-shell-structure-empty-zones" title="이 줄을 고르면 빈 구역 줄이 보입니다">
+              {emptyZonesChip(emptyHidden)}
+            </span>
+          )}
           {open && (
             <TreeRowActions
               name={rowLabel}
@@ -639,9 +713,9 @@ function StructureNode(props: {
         </div>
       )}
 
-      {lists.length > 0 && !folded && (
+      {shownLists.length > 0 && !folded && (
         <ul className="wb-shell-structure-list">
-          {lists.map((list) =>
+          {shownLists.map((list) =>
             list.label === null ? (
               <StructureChildren key={list.key} {...props} nodes={list.nodes} parentHidden={hiddenHere} />
             ) : (
@@ -655,6 +729,9 @@ function StructureNode(props: {
                   label={`${list.label}${list.nodes.length === 0 ? ` · ${EMPTY_ZONE_LABEL}` : ''}`}
                   selected={props.selectedZone}
                   onSelect={props.onSelectZone}
+                  onFocusChange={(focused) => {
+                    zoneFocused.current = focused
+                  }}
                 />
                 {list.nodes.length > 0 && (
                   <ul className="wb-shell-structure-list">

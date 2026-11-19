@@ -41,7 +41,7 @@ function screens(projectId: string): [string, string, (page: Page) => Promise<vo
     (page) => page.getByRole('region', { name: region }).waitFor(),
   ]
   return [
-    ['프로젝트 목록', '/', (page) => page.getByRole('link', { name: '테마 판', exact: true }).waitFor()],
+    ['프로젝트 목록', '/', (page) => page.getByRole('link', { name: '테마 판 열기', exact: true }).waitFor()],
     ['계정 설정', '/account', (page) => page.getByText('alice@browser.test').waitFor()],
     settings('general', '일반'),
     settings('theme', '테마'),
@@ -143,7 +143,7 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 390, height: 844 } })
     try {
       await page.goto('/')
-      await page.getByRole('link', { name: '테마 판', exact: true }).waitFor()
+      await page.getByRole('link', { name: '테마 판 열기', exact: true }).waitFor()
       const toggle = page.getByRole('button', { name: '메뉴' })
 
       await page.keyboard.press('Tab')
@@ -360,7 +360,7 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
       await page.getByRole('combobox', { name: '정렬' }).selectOption('name')
       await page.waitForURL(/q=/)
       const filtered = page.url()
-      await page.getByRole('link', { name: '고객 포털 운영', exact: true }).click()
+      await page.getByRole('link', { name: '고객 포털 운영 열기', exact: true }).click()
       await page.waitForURL(/\/projects\//)
       await page.goBack()
       await page.locator('.wb-shell-home-bar').waitFor()
@@ -487,7 +487,7 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
       await other.waitForURL('**/login**')
       await page.waitForURL('**/login**')
       await other.getByLabel('이메일').fill(stack.users.bob.email)
-      await other.getByLabel('비밀번호').fill(stack.users.bob.password)
+      await other.getByLabel('비밀번호', { exact: true }).fill(stack.users.bob.password)
       await other.getByRole('button', { name: '로그인' }).click()
       await page.waitForURL((url) => !url.pathname.startsWith('/login'))
       const name = await page.locator('.wb-shell-workspace-user-name').textContent()
@@ -728,7 +728,7 @@ describe.skipIf(!전제.ok)('RV-WS — 뼈대 · 목록 · 설정 탭 실브라�
         await other.request.post('/api/auth/logout')
         await other.goto('/login')
         await other.getByLabel('이메일').fill(stack.users.bob.email)
-        await other.getByLabel('비밀번호').fill(stack.users.bob.password)
+        await other.getByLabel('비밀번호', { exact: true }).fill(stack.users.bob.password)
         await other.getByRole('button', { name: '로그인' }).click()
         const notice = page.locator('.wb-shell-workspace-main [role="status"]', { hasText: SWITCHED_LEAD })
         await notice.waitFor()

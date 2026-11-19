@@ -82,26 +82,26 @@ describe('상호작용 탭', () => {
 })
 
 describe('코멘트 탭', () => {
-  it('«달 곳» 이 `타입 (별칭)` 을 말한다 — 별칭이 없으면 지금 그대로', async () => {
+  it('«달 곳» 이 `타입 (별칭) 요약` 을 말한다 — 내부 id 없이', async () => {
     await openPage(doc(), { apiOverrides: { listComments: async () => [] } })
     const target = (): string => document.body.querySelector('#wb-comment-target')?.textContent ?? '(없음)'
     // 캔버스에서 고르면 탭이 «컴포넌트» 로 옮긴다(`src/shell/canvas-pick.tsx`) — 고를 때마다 «코멘트» 탭을 다시 연다.
     pick('n_save')
     await openTab('코멘트')
-    await waitFor(() => expect(target()).toBe('달 곳: 1 Button (머리 저장) (n_save)'))
+    await waitFor(() => expect(target()).toBe('달 곳: 1 Button (머리 저장) 저장'))
     pick('n_plain')
     await openTab('코멘트')
-    await waitFor(() => expect(target()).toBe('달 곳: – Text (n_plain)'))
+    await waitFor(() => expect(target()).toBe('달 곳: – Text 안내'))
   })
 
-  it('무리 머리가 별칭과 id 를 말한다 — 별칭이 없으면 id 만', async () => {
+  it('무리 머리가 구조 트리 줄과 같은 `타입 (별칭) 요약` 을 말한다 — id 는 안 말한다', async () => {
     await openPage(doc(), { apiOverrides: { listComments: async () => COMMENTS } })
     await openTab('코멘트')
     await waitFor(() => expect(document.body.querySelectorAll('.wb-shell-comment-group-title')).toHaveLength(2))
     const titles = [...document.body.querySelectorAll('.wb-shell-comment-group-title')].map((element) =>
       element.textContent?.replace(/\s+/g, ' ').trim(),
     )
-    expect(titles).toEqual(['2 회원 목록 (n_list)', '– n_plain'])
+    expect(titles).toEqual(['2 DataGrid (회원 목록)', '– Text 안내'])
   })
 })
 

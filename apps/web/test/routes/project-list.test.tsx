@@ -77,7 +77,8 @@ describe('프로젝트 목록 화면', () => {
   it('프로젝트를 누르면 그 프로젝트로 간다', async () => {
     renderList(async () => [project({ id: 'p-7', name: '고객 포털' })])
 
-    const link = await screen.findByRole('link', { name: '고객 포털' })
+    // 카드의 링크는 이름 링크 하나다 — 카드 전체가 그 링크다(`routes/project-list.tsx` 의 `ProjectRow`). 접근 이름은 «<이름> 열기».
+    const link = await screen.findByRole('link', { name: '고객 포털 열기' })
     // 양성 대조: 누르기 전에는 목록에 있다. 이것이 없으면 처음부터 프로젝트 주소에
     // 있는 상태로도 아래 단언이 통과한다.
     expect(currentPath()).toBe('/')
@@ -272,6 +273,19 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     expect((screen.getByLabelText('정렬') as HTMLSelectElement).value).toBe('updated')
   })
 
+  /** 수는 제목 곁 · 슬러그는 카드 바닥 줄(보조 단추 앞) — 이름 밑에는 설명만(없으면 비운다). */
+  it('프로젝트 수는 제목 곁에 서고, 슬러그는 이름 밑이 아니라 카드 바닥 줄에 선다', async () => {
+    renderList(async () => ROWS)
+    await screen.findByText('관리자 콘솔')
+    const heading = screen.getByRole('heading', { level: 1, name: '프로젝트' })
+    const card = within(content()).getByRole('link', { name: '고객 포털 열기' }).closest('li')!
+    expect({
+      note: heading.parentElement?.querySelector('.wb-shell-home-count')?.textContent ?? null,
+      slugRow: card.querySelector('.wb-shell-home-slug')?.parentElement?.className ?? null,
+      slugText: card.querySelector('.wb-shell-home-slug')?.textContent ?? null,
+    }).toEqual({ note: '3개', slugRow: 'wb-shell-home-actions', slugText: 'portal' })
+  })
+
   it('검색 결과가 없으면 «검색 결과가 없습니다» — 빈 목록의 안내와 다른 문장이다', async () => {
     renderList(async () => ROWS)
     await screen.findByText('관리자 콘솔')
@@ -279,7 +293,7 @@ describe('카드 격자 · 검색 · 거름 · 정렬', () => {
     expect(screen.getByText('검색 결과가 없습니다')).toBeTruthy()
     expect(screen.queryByText(EMPTY_NOTICE)).toBeNull()
     expect(names()).toEqual([])
-    expect(content().textContent).toContain('프로젝트 3개 중 0개')
+    expect(content().querySelector('.wb-shell-home-count')?.textContent).toBe('3개 중 0개')
   })
 
   it('검색어 · 역할 · 정렬은 주소 질의에 둔다 — 고르면 주소가 바뀌고, 그 주소로 열면 그대로 선다', async () => {
@@ -422,16 +436,28 @@ describe('추가 카드 · 열기 · 톱니 설정', () => {
     expect(document.activeElement).toBe(again)
   })
 
-  it('카드마다 «<이름> 열기» 는 에디터로 · «<이름> 설정» 은 글자 없는 톱니로 설정에 간다', async () => {
+  it('카드마다 «<이름> 열기» 는 이름을 보이는 늘인 링크로 에디터에 · «<이름> 설정» · «<이름> 공통코드» 는 아이콘 + 글 단추로 간다', async () => {
     renderList(async () => ROWS)
     await screen.findByText('관리자 콘솔')
     for (const row of ROWS) {
       const open = within(grid()).getByRole('link', { name: `${row.name} 열기` })
       expect(open.getAttribute('href')).toBe(`/projects/${row.id}`)
-      expect(open.textContent?.trim()).toBe('열기')
+      // 보이는 글은 이름이다 — 카드 상자만큼 늘인 이름 링크(`.wb-shell-home-name`)라 주색 «열기» 단추가 따로 없다.
+      expect({ text: open.textContent?.trim(), name: open.classList.contains('wb-shell-home-name') }).toEqual({
+        text: row.name,
+        name: true,
+      })
+      // 에디터로 가는 링크는 카드마다 그것 하나다.
+      expect(grid().querySelectorAll(`a[href="/projects/${row.id}"]`)).toHaveLength(1)
       const gear = within(grid()).getByRole('link', { name: `${row.name} 설정` })
       expect(gear.getAttribute('href')).toBe(`/projects/${row.id}/settings`)
-      expect(gear.textContent?.trim()).toBe('')
+      // 아이콘 + 글 — 아이콘만으로는 뜻을 못 읽는다.
+      expect(gear.textContent?.trim()).toBe('설정')
+      expect(
+        within(grid())
+          .getByRole('link', { name: `${row.name} 공통코드` })
+          .textContent?.trim(),
+      ).toBe('공통코드')
       expect(gear.getAttribute('title')).toBe(`${row.name} 설정`)
     }
   })

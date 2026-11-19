@@ -8,7 +8,8 @@
  * 트리 둘을 다 알아야 한다.
  *
  * **포인터가 멈춰도 연다** — `onOver` 는 움직일 때만 불리므로 타이머로 잰다. 다른 줄로 옮기거나 줄 밖으로 나가면 다시 잰다. 끌기가 끝나면
- * (뗌 · 취소 · Escape) 걷는다 — 놓은 뒤에 줄이 혼자 펴지지 않게. 접히지 않은 줄(`data-tree-collapsed` 가 없음)은 재지 않는다. 끌기 장치
+ * (뗌 · 취소 · Escape) 걷는다 — 놓은 뒤에 줄이 혼자 펴지지 않게. 접힌 줄(`data-tree-collapsed`)과 빈 구역 줄을 감춘 구조 트리 줄
+ * (`data-tree-zones-hidden` — `panels/structure-tree.tsx` 의 `showEmpty`)만 잰다. 끌기 장치
  * (`drag/use-pointer-drag.ts`)는 안 바꾼다 — 끝을 그 장치가 듣는 것과 같은 창 이벤트로 듣는다.
  */
 
@@ -59,7 +60,7 @@ export function hoverRow(row: HTMLElement | null): void {
   if (releasing) return
   if (row !== null && pending?.row === row) return
   stop()
-  if (row === null || !row.hasAttribute('data-tree-collapsed')) return
+  if (row === null || !(row.hasAttribute('data-tree-collapsed') || row.hasAttribute('data-tree-zones-hidden'))) return
   const timer = setTimeout(() => {
     pending = null
     if (row.isConnected) row.dispatchEvent(new CustomEvent(HOVER_OPEN_EVENT, { bubbles: true }))

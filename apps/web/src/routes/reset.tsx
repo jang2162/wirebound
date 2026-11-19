@@ -68,45 +68,48 @@ export function ResetRoute(): ReactElement {
 
   return (
     <main className="wb-shell-login">
-      <h1 className="wb-shell-login-title">wirebound</h1>
-      {link.kind === 'checking' && (
-        <p className="wb-shell-login-notice" role="status">
-          재설정 링크를 확인하는 중…
-        </p>
-      )}
-      {link.kind === 'unusable' && (
-        <p className="wb-shell-login-error" role="alert">
-          {link.message}
-        </p>
-      )}
-      {link.kind === 'failed' && (
-        <p className="wb-shell-login-error" role="alert">
-          {CHECK_FAILED}
-        </p>
-      )}
-      {link.kind === 'usable' && (
-        <>
-          <p className="wb-shell-login-notice">
-            {isolate(link.name)}({isolate(link.email)})의 새 비밀번호를 정합니다
+      {/* 로그인 화면과 같은 꼴의 가운데 카드(`routes/login.tsx`). */}
+      <div className="wb-shell-login-card">
+        <h1 className="wb-shell-login-title">wirebound</h1>
+        {link.kind === 'checking' && (
+          <p className="wb-shell-login-notice" role="status">
+            재설정 링크를 확인하는 중…
           </p>
-          <form
-            className="wb-shell-login-form"
-            onSubmit={(event) => {
-              void submit(event)
-            }}
-          >
-            <PasswordFields idPrefix="reset" password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} />
-            <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
-              비밀번호 바꾸기
-            </button>
-          </form>
-          {error !== null && (
-            <p className="wb-shell-login-error" role="alert">
-              {error}
+        )}
+        {link.kind === 'unusable' && (
+          <p className="wb-shell-login-error" role="alert">
+            {link.message}
+          </p>
+        )}
+        {link.kind === 'failed' && (
+          <p className="wb-shell-login-error" role="alert">
+            {CHECK_FAILED}
+          </p>
+        )}
+        {link.kind === 'usable' && (
+          <>
+            <p className="wb-shell-login-notice">
+              {isolate(link.name)}({isolate(link.email)})의 새 비밀번호를 정합니다
             </p>
-          )}
-        </>
-      )}
+            <form
+              className="wb-shell-login-form"
+              onSubmit={(event) => {
+                void submit(event)
+              }}
+            >
+              <PasswordFields idPrefix="reset" password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} />
+              <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
+                비밀번호 바꾸기
+              </button>
+            </form>
+            {error !== null && (
+              <p className="wb-shell-login-error" role="alert">
+                {error}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </main>
   )
 }

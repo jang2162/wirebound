@@ -38,7 +38,7 @@ export function nodeTypeLabel(node: WbNode): string {
 }
 
 /**
- * 화면에 그릴 `타입 (별칭)` — 별칭이 없으면 타입. 노드를 가리키는 자리(코멘트의 «달 곳» · 캔버스 손잡이)가 쓴다. 읽지 못한 노드에는
+ * 화면에 그릴 `타입 (별칭)` — 별칭이 없으면 타입. 노드를 가리키는 자리(캔버스 손잡이)가 쓴다. 읽지 못한 노드에는
  * `BROKEN_TYPE_LABEL`이 간다(`nodeTypeLabel`과 같다).
  */
 export function nodeHeadingLabel(node: WbNode): string {

@@ -135,6 +135,8 @@ describe.skipIf(!전제.ok)('조합 입력 — 실브라우저', () => {
       await poll('팔레트 넣기가 서버에 닿는다', count, (n) => n === 1)
 
       // ② 구역 줄 «조건»(검색폼의 몸통)을 고르고 «넣기».
+      // 빈 구역 줄은 그 폼을 고르면 선다(`StructureNode` 의 `showEmpty`).
+      await treeRow(page, 'n_sf00000001').locator('button').first().click()
       await zoneRow(page, 'n_sf00000001', 'body').click()
       await page.waitForTimeout(600) // 같은 카드의 둘째 누름으로 안 읽히게 더블클릭 간격을 넘긴다(`DOUBLE_CLICK_MS`).
       await add.click()

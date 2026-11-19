@@ -25,7 +25,7 @@
  */
 import type { CDPSession, Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
+import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, zoomToFull, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
 if (!전제.ok) {
@@ -489,6 +489,8 @@ describe.skipIf(!전제.ok)('E1 리뷰 대응 — 실브라우저', () => {
     const { P } = await fixture(stack, alice, 'l5', many)
     const { page, close } = await open(P, { width: 1280, height: 700 })
     try {
+      // 아래 `visible` 은 iframe 안 상자를 배율 없이 옮긴다 — 100% 에서 잰다(페이지는 폭 맞춤으로 열린다).
+      await zoomToFull(page)
       /** 그 노드가 칸(캔버스 · 트리의 굴리는 조상) 안에 다 보이는가. */
       const visible = (id: string) =>
         page.evaluate((nodeId) => {

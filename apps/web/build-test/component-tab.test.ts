@@ -10,6 +10,10 @@
  * | 남이 단 말 | 다른 사람이 단 말이 다시 연 두 자리 중 한쪽에 안 선다 |
  * | 초안 | 탭 왕복 · 모드 왕복에 «컴포넌트» 탭의 초안이 사라지거나 «코멘트» 탭이 그 노드의 초안을 안 본다 |
  * | 노드를 바꿔 고름 | 묶음이 새 노드의 코멘트로 안 바뀐다 · 앞 노드의 초안이 새 노드의 상자에 남아 새 노드에 달린다 |
+ * | 접힘 | «코멘트» 묶음이 처음부터 펴져 있다 · 머리 줄 · «코멘트» 탭 이름에 그 노드의 수가 없다 · 탭의 접근 이름이 수로 바뀐다 · 편 상태가 노드를 바꾸면 접힌다 |
+ * | 초안이 펴 둔다 | 그 노드에 쓰던 초안이 있는데 묶음이 접혀 상자가 안 보인다 · 접기 단추가 켜져 있다 |
+ *
+ * 묶음은 기본으로 접혀 있어(`src/panels/component-panel.tsx`) 묶음을 재는 판은 먼저 편다(`expandComments`).
  *
  * 남이 단 말이 다시 열지 않아도 서는 것(`comments-changed` 신호)은 `comment-live.test.ts` 가 잰다 — 여기서는 다시 연 두 자리에 서는 것만 본다.
  */
@@ -82,7 +86,8 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
   }
 
   async function selectedTab(page: Page): Promise<string> {
-    return ((await page.locator('[role="tab"][aria-selected="true"]').textContent()) ?? '').trim()
+    // 탭 이름 글만 — «코멘트» 탭은 곁에 수 배지를 단다(`routes/editor.tsx` 의 `CommentTabLabel`).
+    return (await page.locator('[role="tab"][aria-selected="true"]').evaluate((el) => el.firstChild?.textContent ?? '')).trim()
   }
 
   async function selectedId(page: Page): Promise<string | null> {
@@ -129,6 +134,21 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
       `${name} 탭`,
       () => selectedTab(page),
       (v) => v === name,
+    )
+  }
+
+  /** «컴포넌트» 탭의 «코멘트» 묶음 머리의 펼침 단추 — 묶음은 기본으로 접혀 있다(`src/panels/component-panel.tsx`). */
+  function commentsToggle(page: Page) {
+    return page.locator('[role="tabpanel"] .wb-shell-component-part-toggle')
+  }
+
+  /** 접혀 있으면 «코멘트» 묶음을 편다 — 편 상태는 셸 동안 남는다. */
+  async function expandComments(page: Page): Promise<void> {
+    if ((await commentsToggle(page).getAttribute('aria-expanded')) === 'false') await commentsToggle(page).click()
+    await poll(
+      '묶음이 펴졌다',
+      () => commentsToggle(page).getAttribute('aria-expanded'),
+      (v) => v === 'true',
     )
   }
 
@@ -203,6 +223,7 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
     const { page, close } = await open(P)
     try {
       await clickCanvasNode(page, 'n_a')
+      await expandComments(page)
       expect(await post(page, P, '컴포넌트에서 단 말')).toEqual([{ nodeId: 'n_a', body: '컴포넌트에서 단 말' }])
       await poll(
         '컴포넌트 탭 목록에 선다',
@@ -247,6 +268,7 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
     const { page, close } = await open(P)
     try {
       await clickCanvasNode(page, 'n_a')
+      await expandComments(page)
       // 카나리아 — 판이 섰다(묶음이 비어 있다).
       await page.locator('[role="tabpanel"]').getByText('이 노드에 단 코멘트가 없습니다').waitFor()
       const posted = await stack.request(bob, 'POST', `${P}/comments`, { nodeId: 'n_a', body: '밥이 단 말' })
@@ -274,6 +296,7 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
     const { page, close } = await open(P)
     try {
       await clickCanvasNode(page, 'n_a')
+      await expandComments(page)
       await draftBox(page).fill('쓰던 말')
       const seen: Record<string, string> = {}
       await tab(page, '코멘트')
@@ -311,6 +334,7 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
     const { page, close } = await open(P)
     try {
       await clickCanvasNode(page, 'n_a')
+      await expandComments(page)
       const seen: Record<string, unknown> = {}
       seen['n_a 목록'] = await poll(
         'n_a 묶음',
@@ -341,6 +365,77 @@ describe.skipIf(!전제.ok)('컴포넌트 탭 — 실브라우저', () => {
         'n_b 달기 꺼짐': true,
         'n_a 로 돌아온 상자': '가에 쓰던 말',
       })
+    } finally {
+      await close()
+    }
+  })
+
+  /**
+   * **묶음은 기본으로 접혀 있다** — 머리 줄의 수 «N개» 와 «코멘트» 탭 이름의 수가 서고, 본문(목록 · 새 코멘트 상자)은 감춰져 있다. 편 상태는 다른
+   * 노드를 골라도 남는다.
+   */
+  it('«코멘트» 묶음은 기본으로 접혀 수만 말하고 «코멘트» 탭 이름에 그 노드의 수가 선다 · 편 상태는 노드를 바꿔도 남는다', async () => {
+    const P = await seed('ct-fold')
+    expect((await call('POST', `${P}/comments`, { nodeId: 'n_a', body: '가에 달린 말' })).status).toBe(201)
+    const { page, close } = await open(P)
+    try {
+      await clickCanvasNode(page, 'n_a')
+      const count = page.locator('[role="tabpanel"] .wb-shell-component-part-count')
+      await poll(
+        '머리 줄의 수',
+        () => count.textContent(),
+        (v) => v === '1개',
+      )
+      const badge = page.locator('#wb-tab-comments .wb-shell-tab-badge')
+      const folded = {
+        expanded: await commentsToggle(page).getAttribute('aria-expanded'),
+        boxVisible: await draftBox(page).isVisible(),
+        badge: await badge.textContent(),
+        tabName: await page.getByRole('tab', { name: '코멘트', exact: true }).count(),
+      }
+      await expandComments(page)
+      const boxAfterExpand = await draftBox(page).isVisible()
+      await clickCanvasNode(page, 'n_b')
+      await poll(
+        'n_b 의 수',
+        () => count.textContent(),
+        (v) => v === '0개',
+      )
+      const onB = {
+        expanded: await commentsToggle(page).getAttribute('aria-expanded'),
+        badge: await badge.count(),
+      }
+      expect({ folded, boxAfterExpand, onB }).toEqual({
+        folded: { expanded: 'false', boxVisible: false, badge: '1', tabName: 1 },
+        boxAfterExpand: true,
+        onB: { expanded: 'true', badge: 0 },
+      })
+    } finally {
+      await close()
+    }
+  })
+
+  /** **쓰던 글이 있으면 접힌 묶음도 펴 둔다** — «코멘트» 탭에서 그 노드에 쓰다 «컴포넌트» 탭으로 오면 그 상자가 보이고 접기 단추는 꺼져 있다. */
+  it('접힌 채여도 그 노드에 쓰던 초안이 있으면 묶음이 펴져 있고 접기 단추가 꺼진다', async () => {
+    const P = await seed('ct-draft-open')
+    const { page, close } = await open(P)
+    try {
+      await tab(page, '코멘트')
+      await treeRow(page, 'n_a').click()
+      await poll(
+        'n_a 를 고른다',
+        () => selectedId(page),
+        (v) => v === 'n_a',
+      )
+      await draftBox(page).fill('코멘트 탭에서 쓰던 말')
+      await tab(page, '컴포넌트')
+      const seen = {
+        expanded: await commentsToggle(page).getAttribute('aria-expanded'),
+        disabled: await commentsToggle(page).isDisabled(),
+        box: await draftBox(page).inputValue(),
+        boxVisible: await draftBox(page).isVisible(),
+      }
+      expect(seen).toEqual({ expanded: 'true', disabled: true, box: '코멘트 탭에서 쓰던 말', boxVisible: true })
     } finally {
       await close()
     }

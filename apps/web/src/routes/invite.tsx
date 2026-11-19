@@ -70,68 +70,71 @@ export function InviteRoute(): ReactElement {
 
   return (
     <main className="wb-shell-login">
-      <h1 className="wb-shell-login-title">wirebound</h1>
-      {link.kind === 'checking' && (
-        <p className="wb-shell-login-notice" role="status">
-          초대 링크를 확인하는 중…
-        </p>
-      )}
-      {link.kind === 'unusable' && (
-        <p className="wb-shell-login-error" role="alert">
-          {link.message}
-        </p>
-      )}
-      {link.kind === 'failed' && (
-        <p className="wb-shell-login-error" role="alert">
-          {CHECK_FAILED}
-        </p>
-      )}
-      {link.kind === 'usable' && (
-        <>
-          <p className="wb-shell-login-notice">초대받은 계정을 만듭니다</p>
-          <form
-            className="wb-shell-login-form"
-            onSubmit={(event) => {
-              void submit(event)
-            }}
-          >
-            <p className="wb-shell-login-field">
-              <label className="wb-shell-login-label" htmlFor="invite-email">
-                이메일
-              </label>
-              <input
-                className="wb-shell-login-input"
-                id="invite-email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </p>
-            <p className="wb-shell-login-field">
-              <label className="wb-shell-login-label" htmlFor="invite-name">
-                이름
-              </label>
-              <input
-                className="wb-shell-login-input"
-                id="invite-name"
-                autoComplete="name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </p>
-            <PasswordFields idPrefix="invite" password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} />
-            <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
-              가입
-            </button>
-          </form>
-          {error !== null && (
-            <p className="wb-shell-login-error" role="alert">
-              {error}
-            </p>
-          )}
-        </>
-      )}
+      {/* 로그인 화면과 같은 꼴의 가운데 카드(`routes/login.tsx`). */}
+      <div className="wb-shell-login-card">
+        <h1 className="wb-shell-login-title">wirebound</h1>
+        {link.kind === 'checking' && (
+          <p className="wb-shell-login-notice" role="status">
+            초대 링크를 확인하는 중…
+          </p>
+        )}
+        {link.kind === 'unusable' && (
+          <p className="wb-shell-login-error" role="alert">
+            {link.message}
+          </p>
+        )}
+        {link.kind === 'failed' && (
+          <p className="wb-shell-login-error" role="alert">
+            {CHECK_FAILED}
+          </p>
+        )}
+        {link.kind === 'usable' && (
+          <>
+            <p className="wb-shell-login-notice">초대받은 계정을 만듭니다</p>
+            <form
+              className="wb-shell-login-form"
+              onSubmit={(event) => {
+                void submit(event)
+              }}
+            >
+              <p className="wb-shell-login-field">
+                <label className="wb-shell-login-label" htmlFor="invite-email">
+                  이메일
+                </label>
+                <input
+                  className="wb-shell-login-input"
+                  id="invite-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </p>
+              <p className="wb-shell-login-field">
+                <label className="wb-shell-login-label" htmlFor="invite-name">
+                  이름
+                </label>
+                <input
+                  className="wb-shell-login-input"
+                  id="invite-name"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </p>
+              <PasswordFields idPrefix="invite" password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} />
+              <button className="wb-shell-login-submit" type="submit" disabled={submitting}>
+                가입
+              </button>
+            </form>
+            {error !== null && (
+              <p className="wb-shell-login-error" role="alert">
+                {error}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </main>
   )
 }

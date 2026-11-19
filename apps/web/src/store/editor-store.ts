@@ -232,6 +232,12 @@ export interface EditorState {
   /** 0.05 ~ 2.0 */
   zoom: number
   /**
+   * **배율이 폭 맞춤을 따르는 중인가.** 페이지를 열면 켜지고(`loadPage` 가 다른 페이지를 실을 때 · 셸이 설 때), 사람이 배율을 고르면(축소 · 확대 ·
+   * 화면 맞춤 — `setZoom`) 그 페이지에서 꺼진다. 켜진 동안 셸이 칸 폭 · 프리셋이 바뀔 때마다 `min(1, 칸 ÷ 프리셋)` 을 싣는다(`applyFitZoom` —
+   * `routes/editor.tsx` 의 `useAutoFitZoom`). **사람이 고른 배율을 빼앗지 않는다** — 꺼진 뒤에는 창 · 칸 크기가 바뀌어도 배율 그대로다.
+   */
+  zoomFit: boolean
+  /**
    * 보내지 않았거나 응답을 기다리는 편집. **`[0]`이 전송 중인 것이다**.
    * 큐를 옮기는 규칙은 `edit-queue.ts`에 순수 함수로 있다.
    */
@@ -372,6 +378,7 @@ function initialState(): EditorState {
     mode: 'edit',
     viewportWidth: 1280,
     zoom: 1,
+    zoomFit: true,
     pending: [],
     undoStack: [],
     redoStack: [],
@@ -970,7 +977,9 @@ export class EditorStore {
     const { pending, undoStack, redoStack } = this.#state
     this.#noteAbandoned(pending, this.#state.openPageId !== pageId)
     this.#queueEpoch += 1
-    if (this.#state.openPageId !== pageId || this.#state.document === null) this.#pageOpenEpoch += 1
+    /** 다른 페이지를 여는가 — 같은 페이지를 다시 싣는 재조회(다시 붙음 · 복원)는 아니다. 배율의 폭 맞춤(`zoomFit`)이 이것으로 다시 켜진다. */
+    const opening = this.#state.openPageId !== pageId || this.#state.document === null
+    if (opening) this.#pageOpenEpoch += 1
     // 새로고침으로 채운 항목의 되짚기 재료도 그 판의 것이다 — 스택과 함께 버린다(받은 `inverse`를 쥐고 있다).
     this.#restoredHistory = null
     // **선택은 지우지 않고 다시 정한다** — 무엇으로 정하는지는 `#selectionFor`가 갖는다.
@@ -992,6 +1001,7 @@ export class EditorStore {
     if (this.#abandonedPages.includes(pageId)) this.#abandonedReopened.add(pageId)
     this.#apply({
       ...(loss === undefined ? {} : { editFailure: loss }),
+      ...(opening ? { zoomFit: true } : {}),
       openPageId: pageId,
       document,
       // **바탕도 서버 문서다.** 여기를 지나온 순간 낙관적 편집은 하나도 안 얹혀 있다 —
@@ -3202,9 +3212,16 @@ export class EditorStore {
     this.#apply({ viewportWidth: width })
   }
 
+  /** **사람이 고른 배율** — 축소 · 확대 · 화면 맞춤이 부른다. 폭 맞춤(`zoomFit`)을 그 페이지에서 끈다. */
   readonly setZoom = (zoom: number): void => {
     // NaN은 `Math.min`·`Math.max`를 그대로 통과하므로 클램프만으로는 막히지 않는다.
     if (Number.isNaN(zoom)) return
+    this.#apply({ zoom: Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM), zoomFit: false })
+  }
+
+  /** **폭 맞춤의 배율** — 셸이 잰 값을 싣는다. 폭 맞춤이 꺼졌으면(사람이 골랐다) 아무것도 안 한다. 클램프는 `setZoom` 과 같다. */
+  readonly applyFitZoom = (zoom: number): void => {
+    if (!this.#state.zoomFit || Number.isNaN(zoom)) return
     this.#apply({ zoom: Math.min(Math.max(zoom, MIN_ZOOM), MAX_ZOOM) })
   }
 

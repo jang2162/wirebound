@@ -92,7 +92,7 @@
  * 조작이다. 그 조작은 **초안을 옮기지 않고 칸을 바꾼다** — 옆 노드를 보고 돌아오면 쓰던 글이
  * 그대로다. **고른 노드의 무리에 붙는 표시만으로는 대상이 바뀐 것이 안 보인다** — 새 대상에
  * 코멘트가 이미 있을 때만 표시가 옮겨 가고, 없으면 표시가 사라질 뿐 새 대상을 가리키지 않는다.
- * 그래서 상자의 글이 그 노드의 것으로 바뀌고, 폼이 «달 곳: 번호 타입 (id)»를 말한다(`targetOf` —
+ * 그래서 상자의 글이 그 노드의 것으로 바뀌고, 폼이 «달 곳: 번호 타입 (별칭) 요약»을 말한다(`targetOf` —
  * 뷰 모드에는 아웃라인이 없어 폼 말고는 대상이 안 보인다).
  *
  * **페이지가 바뀌면 노드마다의 초안도 한 칸째 버린다** — 노드 id 는 그 페이지 안에서만 뜻이
@@ -168,7 +168,7 @@ import { stateShowingNode, useViewState } from '../shell/use-view-state'
 import { CommentBody } from './comment-body'
 import { useTokenPicker } from './comment-token-picker'
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
-import { COMMENT_BODY_MAX_LENGTH, nodeAlias, refreshCommentTokenLabels, type PageDocument } from '@wirebound/schema'
+import { COMMENT_BODY_MAX_LENGTH, nodeRowLabel, refreshCommentTokenLabels, type CodeIndex, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
@@ -177,7 +177,7 @@ import type { WriteConclusion, WriteNote } from './write-ledger'
 import type { Comment, CommentCreated } from '../api/types'
 import { walkSafely } from '../edit/safe-walk'
 import { shellIcon } from '../shell/icons'
-import { nodeHeadingLabel } from './node-shape'
+import { useProjectCodes } from '../codes/project-codes'
 import { useRealtimeSetup } from '../realtime/context'
 import { useSessionUser } from '../session/session-context'
 import { useEditorStore, useEditorStoreInstance, useOpenPage } from '../store/use-editor-store'
@@ -236,6 +236,8 @@ const REREAD_BATCH_MS = 200
 const WRITE_FAILED = '코멘트를 저장하지 못했습니다'
 /** 문서에 없는 노드에 붙은 코멘트의 무리 이름. */
 const MISSING_NODE = '사라진 노드'
+/** 문서를 못 읽은 무리의 이름 — 그 노드가 있는지도 무엇인지도 모른다. **"사라진 노드"라고 단언하지 않는다**(`Group.present`). */
+const UNKNOWN_NODE = '이름을 모르는 노드'
 /** 문서를 못 읽어 번호를 붙일 수 없을 때. **"사라진 노드"라고 단언하지 않는다**(`Group.present`). */
 const NO_DOCUMENT = '문서를 읽지 못해 번호를 보일 수 없습니다'
 /** 서버는 번호를 바꿨는데 내 문서에 얹지 못했을 때(`MARKERS_DIVERGED`). */
@@ -582,14 +584,14 @@ function markersOf(document: PageDocument): Map<string, number | null> {
   return markers
 }
 
-/** 문서에서 노드 id → 별칭 표. 별칭이 없는 노드는 표에 없다. `markersOf`와 같은 이유로 `walkSafely`다. */
-function aliasesOf(document: PageDocument): Map<string, string> {
-  const aliases = new Map<string, string>()
-  for (const visit of walkSafely(document.root)) {
-    const alias = nodeAlias(visit.node)
-    if (alias !== null) aliases.set(visit.node.id, alias)
-  }
-  return aliases
+/**
+ * 문서에서 노드 id → 무리 이름 표. 이름은 «달 곳» 과 같은 구조 트리 줄 이름이다(`targetOf` 머리말 «이름은 화면이 이미 쓰는 둘이다») — 한 노드를
+ * 두 이름으로 부르지 않고, 내부 id 를 말하지 않는다. `markersOf`와 같은 이유로 `walkSafely`다.
+ */
+function rowLabelsOf(document: PageDocument, codes: CodeIndex | undefined): Map<string, string> {
+  const labels = new Map<string, string>()
+  for (const visit of walkSafely(document.root)) labels.set(visit.node.id, nodeRowLabel(visit.node, codes))
+  return labels
 }
 
 /**
@@ -597,6 +599,22 @@ function aliasesOf(document: PageDocument): Map<string, string> {
  *
  * 묶음 안의 순서는 서버가 준 그대로다 — `created_at` 오름차순이라 먼저 한 말이 먼저다.
  */
+/**
+ * **그 노드의 코멘트 수와 쓰던 글** — «컴포넌트» 탭의 «코멘트» 묶음 머리와 «코멘트» 탭 이름의 수가 읽는다(`./component-panel.tsx` ·
+ * `routes/editor.tsx` 의 `CommentTabLabel`). 이 탭의 칸(`LIST` · `DRAFTS` · `EDITING_ID`)을 그대로 읽어 목록 · 초안이 한 벌이다. 목록을 아직
+ * 못 읽었으면 수는 `null` 이다(모르는 수를 0 으로 말하지 않는다). **쓰던 글** 은 그 노드의 새 코멘트 초안이 비지 않았거나 그 노드의 코멘트를 고치는
+ * 중인가다 — 묶음이 접혀 있어도 그때는 펴 둔다(초안을 숨기지 않는다).
+ */
+export function useNodeComments(nodeId: string | null): { count: number | null; writing: boolean } {
+  const [state] = usePanelSlot(LIST)
+  const [drafts] = usePanelSlot(DRAFTS)
+  const [editingId] = usePanelSlot(EDITING_ID)
+  if (nodeId === null) return { count: null, writing: false }
+  const listed = state.status === 'ready' ? state.comments.filter((comment) => comment.nodeId === nodeId) : null
+  const editingHere = editingId !== null && listed !== null && listed.some((comment) => comment.id === editingId)
+  return { count: listed === null ? null : listed.length, writing: (drafts.get(nodeId) ?? '') !== '' || editingHere }
+}
+
 export function groupComments(comments: readonly Comment[], document: PageDocument | null): Group[] {
   // **문서가 없으면 `null`을 그대로 들고 간다** — 빈 표로 접으면 모든 노드가 "없다"가 된다(머리말 «무리가 셋이고»).
   const markers = document === null ? null : markersOf(document)
@@ -644,20 +662,21 @@ function rank(group: Group): number {
  * **값은 초안의 열쇠와 같은 하나다** — 고른 노드(`selectedNodeId`). 상자가 보이는 초안(`DRAFTS`의 키)도, 달 곳(`submit`)도
  * 그것이다(머리말 «새 코멘트 초안은 노드마다 …»). 다른 자리(아웃라인 · 호버)에서 읽으면 말하는 대상과 달리는 대상이 갈린다.
  *
- * **이름은 화면이 이미 쓰는 둘이다** — 번호와 id 는 아래 목록의 무리 머리가(`groupComments` — 번호가 없으면 `–`),
- * 타입과 별칭은 속성 패널 제목이 쓰는 것이다(`nodeHeadingLabel` — `타입 (별칭)`). 새 이름 체계를 짓지 않는다. 문서를 못 읽었거나 그 노드가 문서에
- * 없으면 id 만 말한다 — 모르는 번호·타입을 지어내지 않는다(`Group.present`의 `'unknown'`과 같은 결).
+ * **이름은 화면이 이미 쓰는 둘이다** — 번호는 아래 목록의 무리 머리가(`groupComments` — 번호가 없으면 `–`), `타입 (별칭) 요약` 은 구조 트리 줄이
+ * 쓰는 것이다(`nodeRowLabel`). 새 이름 체계를 짓지 않는다. **내부 id 는 말하지 않는다** — 사람이 읽을 이름이 아니고, 같은 타입 둘은 요약(라벨 ·
+ * 제목 · 글)과 번호가 가른다(별칭도 요약도 번호도 없는 같은 타입 둘은 글로 못 가른다 — 편집 모드는 캔버스 외곽선이 가른다). 문서를 못 읽었거나
+ * 그 노드가 문서에 없으면 «사라진 노드» 다 — 모르는 번호·타입을 지어내지 않는다(`Group.present`의 `'unknown'`과 같은 결).
  */
-function targetOf(document: PageDocument | null, nodeId: string): string {
+function targetOf(document: PageDocument | null, nodeId: string, codes: CodeIndex | undefined): string {
   if (document !== null) {
     for (const visit of walkSafely(document.root)) {
       if (visit.node.id !== nodeId) continue
       const marker = visit.node.marker
       const numbered = typeof marker === 'number' && Number.isInteger(marker) ? String(marker) : '–'
-      return `${TARGET}: ${numbered} ${nodeHeadingLabel(visit.node)} (${nodeId})`
+      return `${TARGET}: ${numbered} ${nodeRowLabel(visit.node, codes)}`
     }
   }
-  return `${TARGET}: ${nodeId}`
+  return `${TARGET}: ${MISSING_NODE}`
 }
 
 export function CommentPanel(props: {
@@ -754,6 +773,8 @@ export function CommentPanel(props: {
   // 상자가 보이는 것은 **고른 노드의 초안**이다 — 새 코멘트가 달릴 자리와 같은 값을 본다.
   const draft = selectedNodeId === null ? '' : (drafts.get(selectedNodeId) ?? '')
   const tokenIndex = useCommentIndex().index
+  // «달 곳» 의 요약이 묶인 노드를 표의 이름으로 부른다 — 구조 트리 줄과 같은 표(`useProjectCodes`).
+  const codes = useProjectCodes().index
   /**
    * 저장 직전에 토큰의 라벨을 지금 이름으로 다시 적는다(`refreshCommentTokenLabels`) — 라벨은 대체 글이라 마지막으로 산 이름이 남아야 한다.
    * 다시 적어 길이 한도를 넘으면 친 그대로 보낸다(대체 글이 조금 낡을 뿐이다).
@@ -1228,8 +1249,8 @@ export function CommentPanel(props: {
   const all = groupComments(state.comments, document)
   // `'node'`면 고른 노드의 무리 하나(여럿을 골랐으면 없음 — 달 곳과 같은 값 `selectedNodeId`).
   const groups = scope === 'page' ? all : all.filter((group) => group.nodeId === selectedNodeId)
-  // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
-  const aliases = document === null ? null : aliasesOf(document)
+  // 무리 머리의 이름 — 문서를 못 읽었으면 `null`(머리가 «이름을 모르는 노드» 를 말한다).
+  const labels = document === null ? null : rowLabelsOf(document, codes)
   /**
    * 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로 바꾸고, 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그린다(머리말 «묶음이 캔버스를
    * 가리킨다» · `comments/comment-pointing.tsx` 머리말 «펼침»).
@@ -1272,7 +1293,7 @@ export function CommentPanel(props: {
           {/* **어느 노드에 다는가** — 두 모드 다(`targetOf`). 상자의 이름(«새 코멘트»)은 그대로 두고 설명으로 잇는다. */}
           {selectedNodeId !== null && (
             <p id="wb-comment-target" className="wb-shell-comment-target">
-              {targetOf(document, selectedNodeId)}
+              {targetOf(document, selectedNodeId, codes)}
             </p>
           )}
           <textarea
@@ -1363,11 +1384,7 @@ export function CommentPanel(props: {
           {groups.map((group) => {
             // **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데 *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다.
             const name =
-              group.present === 'no'
-                ? `${MISSING_NODE} (${group.nodeId})`
-                : aliases?.get(group.nodeId) !== undefined
-                  ? `${aliases.get(group.nodeId)} (${group.nodeId})`
-                  : group.nodeId
+              group.present === 'yes' ? (labels?.get(group.nodeId) ?? MISSING_NODE) : group.present === 'no' ? MISSING_NODE : UNKNOWN_NODE
             const marker = group.marker ?? '–'
             // 캔버스를 가리킬 수 있는 묶음(머리말 «묶음이 캔버스를 가리킨다») — 묶음 자체가 Tab 정지점이고 이름은 머리의 글이다.
             const pointable = scope === 'page' && group.present === 'yes'

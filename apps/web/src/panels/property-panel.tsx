@@ -541,7 +541,7 @@ export function PropertyPanel(props: {
               id={controlId(ALIAS_FIELD.prop)}
               // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
               maxLength={NODE_ALIAS_MAX}
-              placeholder={`${NODE_ALIAS_MAX}자까지`}
+              describedBy={`${controlId(ALIAS_FIELD.prop)}-note`}
               disabled={blocked}
               onCommit={(value) => {
                 if (blocked || doc === null) return
@@ -554,6 +554,10 @@ export function PropertyPanel(props: {
                 )
               }
             />
+            {/* 한도는 칸 밖 안내다 — 빈 칸의 자리표(`placeholder`)로 두면 값처럼 읽혔다. */}
+            <p className="wb-shell-prop-note" id={`${controlId(ALIAS_FIELD.prop)}-note`}>
+              {aliasNote()}
+            </p>
           </dd>
         </div>
       </dl>
@@ -645,6 +649,11 @@ function clearableProp(def: ComponentDef, prop: string): boolean {
   if (schema === undefined) return false
   const parsed = schema.safeParse(undefined)
   return parsed.success && parsed.data === undefined
+}
+
+/** 별칭 칸 밑의 안내 — 무엇에 쓰이는 이름이고 몇 자까지인가. */
+export function aliasNote(): string {
+  return `트리 · 코멘트에 보이는 이름, ${NODE_ALIAS_MAX}자까지`
 }
 
 /** 칸 밑의 안내 한 줄(카탈로그 `EditorField.hint`) — 몫 칸의 «쌍 수» 안내와 같은 꼴이다. 없으면 안 그린다. */

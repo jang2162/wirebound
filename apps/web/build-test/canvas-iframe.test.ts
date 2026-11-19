@@ -238,13 +238,15 @@ async function settle<T>(read: () => Promise<T>, done: (value: T) => boolean, ti
   return value
 }
 
-/** 줌 단추로 배율을 맞춘다(한 칸 25%). 문서가 그려진 뒤에 누른다. */
+/** 줌 단추로 배율을 맞춘다(25% 눈금). 문서가 그려진 뒤에 누른다 — 페이지는 폭 맞춤으로 열려 처음 배율이 1 아래일 수 있다. */
 async function setZoom(page: Page, zoom: number): Promise<void> {
   await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
   const value = page.locator('.wb-shell-zoom-value')
   const want = `${Math.round(zoom * 100)}%`
-  for (let i = 0; i < 8 && (await value.textContent()) !== want; i += 1) {
-    await page.getByRole('button', { name: '축소' }).click()
+  for (let i = 0; i < 12; i += 1) {
+    const text = (await value.textContent()) ?? ''
+    if (text === want) break
+    await page.getByRole('button', { name: Number(text.replace('%', '')) < zoom * 100 ? '확대' : '축소', exact: true }).click()
   }
   expect(await value.textContent()).toBe(want)
 }

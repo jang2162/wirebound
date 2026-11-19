@@ -178,7 +178,10 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
     expect(seen).toEqual({ 1440: { visible: 1, frame: '375px' }, 900: { visible: 0, frame: '375px' } })
   })
 
-  /** 접힌 창(700) — `…` 의 첫 항목 셋이 줌이고, 누르면 배율이 바뀐다(배율은 캔버스 프레임의 `scale`). 같은 자리를 다시 누를 때는 더블클릭 간격을 넘긴다. */
+  /**
+   * 접힌 창(700) — `…` 의 첫 항목 셋이 줌이고, 누르면 배율이 바뀐다(배율은 캔버스 프레임의 `scale`). 같은 자리를 다시 누를 때는 더블클릭 간격을 넘긴다.
+   * 페이지는 폭 맞춤으로 열려 배율 줄이 «배율 N% · 폭 맞춤» 이고, «화면 맞춤» 은 같은 칸이라 처음 배율로 돌아온다.
+   */
   it('창 700 — 줌은 셸 `…` 의 첫 항목 셋(앞에 눌리지 않는 배율 한 줄)이고 누르면 배율이 바뀐다', async () => {
     const P = await fixture('head-folded')
     const { page, close } = await open(P, { width: 700, height: 700 })
@@ -188,8 +191,13 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
       await menu.click()
       const items = (await page.getByRole('menuitem').allTextContents()).slice(0, 4)
       const before = await scale()
+      // 창 700 의 칸은 1280 문서보다 좁다 — 페이지는 폭 맞춤(25% 아래)으로 열리고 배율 줄이 그것을 말한다. 확대는 눈금 25% · 50%, 축소는 한 칸 아래.
       await page.getByRole('menuitem', { name: '확대', exact: true }).click()
       const afterIn = await scale()
+      await page.waitForTimeout(600)
+      await menu.click()
+      await page.getByRole('menuitem', { name: '확대', exact: true }).click()
+      const afterIn2 = await scale()
       await page.waitForTimeout(600)
       await menu.click()
       await page.getByRole('menuitem', { name: '축소', exact: true }).click()
@@ -198,12 +206,21 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
       await menu.click()
       await page.getByRole('menuitem', { name: '화면 맞춤', exact: true }).click()
       const afterFit = await scale()
-      expect({ items, before, afterIn, afterOut, fitChanged: afterFit !== afterOut }).toEqual({
-        items: ['배율 100%', '축소', '확대', '화면 맞춤'],
-        before: 'scale(1)',
-        afterIn: 'scale(1.25)',
-        afterOut: 'scale(1)',
-        fitChanged: true,
+      const fitted = Number(/scale\(([\d.]+)\)/.exec(before)?.[1] ?? NaN)
+      expect({
+        items: [/^배율 \d+% · 폭 맞춤$/.test(items[0] ?? ''), ...items.slice(1)],
+        fittedBelowQuarter: fitted < 0.25,
+        afterIn,
+        afterIn2,
+        afterOut,
+        fitBack: afterFit === before,
+      }).toEqual({
+        items: [true, '축소', '확대', '화면 맞춤'],
+        fittedBelowQuarter: true,
+        afterIn: 'scale(0.25)',
+        afterIn2: 'scale(0.5)',
+        afterOut: 'scale(0.25)',
+        fitBack: true,
       })
     } finally {
       await close()

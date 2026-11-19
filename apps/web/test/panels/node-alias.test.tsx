@@ -362,7 +362,11 @@ describe('구조 트리 줄에서 고치기', () => {
     fireEvent.click(rowButton('n-card'))
     // 입력창의 `maxLength` 는 UTF-16 상한(`2 ×`)일 뿐이다 — 60 코드 포인트는 `clampPoints` 가 자른다(`test/panels/text-clamp.test.ts` · 실브라우저 `build-test/n19-notices.test.ts`).
     expect(aliasField().maxLength).toBe(120)
-    expect(aliasField().placeholder).toBe('60자까지')
+    // 한도는 칸 밑 안내(`aria-describedby`)다 — 빈 칸의 자리표로 두면 값처럼 읽혔다.
+    expect(aliasField().placeholder).toBe('')
+    expect(document.getElementById(aliasField().getAttribute('aria-describedby') ?? '')?.textContent).toBe(
+      '트리 · 코멘트에 보이는 이름, 60자까지',
+    )
   })
 
   it('입력이 연 뒤 남이 그 노드를 잡으면 Enter 가 안 보낸다', async () => {

@@ -214,7 +214,12 @@ describe.skipIf(!전제.ok)('캔버스에서 그리드 행 고르기 — 실브�
 
   const rightTabs = (page: Page) => page.getByRole('tablist', { name: '우측 패널 탭', exact: true })
   const selectedTab = async (page: Page): Promise<string> =>
-    ((await rightTabs(page).locator('[role="tab"][aria-selected="true"]').textContent()) ?? '').trim()
+    // 탭 이름 글만 — «코멘트» 탭은 곁에 수 배지를 단다(`routes/editor.tsx` 의 `CommentTabLabel`).
+    (
+      await rightTabs(page)
+        .locator('[role="tab"][aria-selected="true"]')
+        .evaluate((el) => el.firstChild?.textContent ?? '')
+    ).trim()
 
   it('흐름 — 되풀이 3 행의 둘째 줄 셀 틀 사본 노드를 누르면 그 행이 골라지고, «행 내용» «커스텀» 이 그 행의 칸을 짓는다', async () => {
     const P = await seed('gp-flow', GRID)

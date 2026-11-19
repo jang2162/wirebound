@@ -167,12 +167,12 @@ async function toPage(title: string, rootId: string): Promise<void> {
 /** 프로젝트 목록으로 나간다. */
 async function toList(): Promise<void> {
   fireEvent.click(screen.getByRole('link', { name: '프로젝트 목록' }))
-  await screen.findByRole('link', { name: PROJECT_NAME })
+  await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
 }
 
 /** 목록에서 그 프로젝트(페이지 없는 에디터) → 그 페이지. 사용자가 하는 길이다. */
 async function fromList(title: string = PAGE_TITLE, rootId: string = ROOT_ID): Promise<void> {
-  fireEvent.click(screen.getByRole('link', { name: PROJECT_NAME }))
+  fireEvent.click(screen.getByRole('link', { name: `${PROJECT_NAME} 열기` }))
   const region = await screen.findByRole('region', { name: '메뉴·페이지 트리' })
   fireEvent.click(await within(region).findByRole('link', { name: title }))
   await waitForNode(rootId)
@@ -187,7 +187,7 @@ async function login(user: SessionUser): Promise<void> {
   fireEvent.change(screen.getByLabelText('이메일'), { target: { value: user.email } })
   fireEvent.change(screen.getByLabelText('비밀번호'), { target: { value: '아무 비밀번호' } })
   fireEvent.click(screen.getByRole('button', { name: '로그인' }))
-  await screen.findByRole('link', { name: PROJECT_NAME })
+  await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
 }
 
 /** 서버가 세션을 지운다 → 목록으로 가려던 조회가 401 → 로그인 화면(`SignedOut`). 로그아웃 단추가 아니다. */
@@ -901,7 +901,7 @@ describe('다른 사람 — 앞 사람의 초안을 읽지 않고, 들어오는 
     current.session.reads.length = 0
 
     await hub.fromOtherTab({ kind: 'signed-in', user: BOB })
-    await screen.findByRole('link', { name: PROJECT_NAME })
+    await screen.findByRole('link', { name: `${PROJECT_NAME} 열기` })
     // 소식을 들은 순간 앨리스의 칸이 없다 — 앨리스의 화면이 내려가며 한 번 더 커밋돼도 다시 서지 않는다.
     expect(current.session.draftKeys()).toEqual([])
     await fromList()

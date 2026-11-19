@@ -64,6 +64,19 @@ describe('초대 링크 가입 화면', () => {
     expect(screen.queryByLabelText('이메일')).toBeNull()
   })
 
+  /** 새 비밀번호 두 칸에도 «보기» 가 선다 — 칸마다 따로이고 이름으로 갈린다(`account/password-input.tsx`). */
+  it('새 비밀번호 두 칸에 «보기» 토글이 칸마다 따로 선다', async () => {
+    await open(client())
+    await screen.findByLabelText('이메일')
+    const first = screen.getByLabelText<HTMLInputElement>('비밀번호(8자 이상)')
+    const second = screen.getByLabelText<HTMLInputElement>('비밀번호 확인')
+    expect([first.autocomplete, second.autocomplete]).toEqual(['new-password', 'new-password'])
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 확인 보기' }))
+    expect([first.type, second.type]).toEqual(['password', 'text'])
+    fireEvent.click(screen.getByRole('button', { name: '비밀번호 보기' }))
+    expect([first.type, second.type]).toEqual(['text', 'text'])
+  })
+
   it('확인이 다르면 보내지 않고 말한다', async () => {
     const signupWithInvite = vi.fn<ApiClient['signupWithInvite']>(async () => USER)
     await open(client({ signupWithInvite }))

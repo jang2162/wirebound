@@ -35,13 +35,13 @@ import type { PageDetail, ProjectView } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
 import { PlacementRegionsProvider } from '../drag/use-placement'
-import { CommentPanel } from '../panels/comment-panel'
+import { CommentPanel, useNodeComments } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
 import { PageJsonNoticeList, usePageJsonNotices } from '../panels/page-json-notices'
 import { InteractionPanel } from '../panels/interaction-panel'
 import { PageInfoPanel } from '../panels/page-info'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
-import { ComponentPanel } from '../panels/component-panel'
+import { ComponentCommentsOpenProvider, ComponentPanel } from '../panels/component-panel'
 import { AliasEditProvider } from '../panels/alias-edit'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
@@ -662,6 +662,7 @@ function EditorShell(props: {
    * ref는 그 연결을 타입으로 들고 있다.
    */
   const canvasRef = useRef<HTMLElement>(null)
+  useAutoFitZoom(canvasRef)
 
   /**
    * **내가 스냅샷을 복원했다는 신호.** 값에는 뜻이 없고 오를 때마다 **복원이 바꾸는 것을 떠 있는 자리가 전부**
@@ -871,6 +872,7 @@ function EditorShell(props: {
   const fold = useHeadFold()
   const zoomCommands = useZoomCommands(canvasRef)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const zoomFitted = useEditorStore(store, (s) => s.zoomFit && s.zoom < 1)
   /** 상태 전환기가 머리에 서는가 — `tight` · `folded` 면 `…` 로 접힌다(`shell/head-fold.ts`). */
   const switcherInHead = fold === 'wide' || fold === 'short'
   const viewStateChoice = useViewState(props.pageId)
@@ -881,7 +883,7 @@ function EditorShell(props: {
     ...(fold === 'folded'
       ? [
           // 줌 묶음이 머리에서 빠지면 지금 배율이 어디에도 안 보인다 — 눌리지 않는 한 줄로 알린다(항목 이름 «축소» · «확대» 는 그대로다).
-          { key: 'zoom-value', label: `배율 ${Math.round(zoom * 100)}%`, disabled: true },
+          { key: 'zoom-value', label: `배율 ${Math.round(zoom * 100)}%${zoomFitted ? ` · ${ZOOM_FITTED}` : ''}`, disabled: true },
           { key: 'zoom-out', label: '축소', icon: ICONS.zoomOut, onSelect: zoomCommands.zoomOut },
           { key: 'zoom-in', label: '확대', icon: ICONS.zoomIn, onSelect: zoomCommands.zoomIn },
           { key: 'zoom-fit', label: '화면 맞춤', icon: ICONS.fitWidth, onSelect: zoomCommands.fit },
@@ -1312,31 +1314,36 @@ function RightPanel(props: {
   }
 
   return (
-    <>
-      <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
-        {tabs.map((item, index) => (
-          <button
-            key={item.id}
-            ref={(element) => {
-              if (element === null) tabRefs.current.delete(item.id)
-              else tabRefs.current.set(item.id, element)
-            }}
-            type="button"
-            role="tab"
-            id={`wb-tab-${item.id}`}
-            className="wb-shell-tab"
-            aria-selected={tab === item.id}
-            aria-controls={`wb-tabpanel-${item.id}`}
-            tabIndex={tab === item.id ? 0 : -1}
-            onClick={() => setChosen(item.id)}
-            onKeyDown={(event) => moveTab(event, index)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+    <ComponentCommentsOpenProvider>
+      {/* 칸 provider 는 탭 줄까지 품는다 — «코멘트» 탭 이름의 수(`CommentTabLabel`)가 코멘트 목록 칸을 읽는다. 아래 본문 자리의 주석이 provider 의 몫이다. */}
+      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
+        <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
+          {tabs.map((item, index) => (
+            <button
+              key={item.id}
+              ref={(element) => {
+                if (element === null) tabRefs.current.delete(item.id)
+                else tabRefs.current.set(item.id, element)
+              }}
+              type="button"
+              role="tab"
+              id={`wb-tab-${item.id}`}
+              className="wb-shell-tab"
+              aria-selected={tab === item.id}
+              aria-controls={`wb-tabpanel-${item.id}`}
+              // «코멘트» 탭의 수(`CommentTabLabel`) — 수가 없으면 가리키는 요소가 없어 설명도 없다.
+              aria-describedby={item.id === 'comments' ? COMMENT_TAB_NOTE : undefined}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setChosen(item.id)}
+              onKeyDown={(event) => moveTab(event, index)}
+            >
+              {item.id === 'comments' ? <CommentTabLabel label={item.label} /> : item.label}
+            </button>
+          ))}
+        </div>
+        <CommentTabLabel label="" note />
 
-      {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
+        {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
           마운트될 때 `listComments`를 부르므로, 감춰 둔 채 살려 두면 보지도 않는 목록을
           위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
           같은 판단이고, 근거도 같다(그쪽 주석).
@@ -1353,7 +1360,6 @@ function RightPanel(props: {
 
           «페이지 정보»와 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
-      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
         <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
           {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
               복원은 탭을 안 바꾼다. 다시 세우는 것은 탭을 다녀온 것과 같은 길이다 — 친 글자 · 나가 있는 쓰기는 위
@@ -1374,6 +1380,32 @@ function RightPanel(props: {
           })()}
         </div>
       </PanelDraftsProvider>
+    </ComponentCommentsOpenProvider>
+  )
+}
+
+/**
+ * «코멘트» 탭 이름 — 하나를 고른 노드에 코멘트가 있으면 그 수를 이름 곁에 단다(목록을 읽은 뒤 · 0 이면 안 단다 — 빈 수가 눈을 끌 까닭이 없다).
+ * 수는 눈에만 보이고(`aria-hidden`) 탭의 접근 이름은 «코멘트» 그대로다 — 탭을 이름으로 찾는 자리가 수에 흔들리지 않고, 읽는 사람에게는 탭의
+ * 설명(`aria-describedby` → 감춘 글 — 감춘 글은 이름에 안 들고 설명으로는 읽힌다)으로 준다.
+ */
+const COMMENT_TAB_NOTE = 'wb-tab-comments-note'
+
+function CommentTabLabel(props: { label: string; note?: boolean }): ReactElement | null {
+  const store = useEditorStoreInstance()
+  const nodeId = useEditorStore(store, (s) => (s.selectedNodeIds.length > 1 ? null : s.selectedNodeId))
+  const { count } = useNodeComments(nodeId)
+  const shown = count !== null && count > 0
+  // 설명 글은 탭 단추 밖에 둔다(`note`) — 단추 안이면 단추의 글(`textContent`)에 섞인다.
+  if (props.note === true) return shown ? <span id={COMMENT_TAB_NOTE} hidden>{`고른 노드의 코멘트 ${count}개`}</span> : null
+  return (
+    <>
+      {props.label}
+      {shown && (
+        <span className="wb-shell-tab-badge" aria-hidden="true">
+          {count}
+        </span>
+      )}
     </>
   )
 }
@@ -2111,20 +2143,60 @@ function ModeTools(): ReactElement {
 }
 
 /**
+ * **페이지를 열면 폭 맞춤으로 연다** — 문서(프리셋)가 캔버스 칸보다 넓으면 칸에 맞춘 배율, 좁으면 100%(`min(1, 칸 ÷ 프리셋)`). 스토어의 `zoomFit`
+ * 이 켜진 동안만 — 칸 폭(창 · 좌우 접기 · 폭 손잡이)과 프리셋이 바뀔 때마다 다시 잰다. 사람이 배율을 고르면(축소 · 확대 · 화면 맞춤 — `setZoom`)
+ * 그 페이지에서 꺼져 더는 안 따른다 — **손으로 고른 배율을 창을 흔들었다고 빼앗지 않는다**(아래 `useZoomCommands` 머리말의 까닭). 다른 페이지를
+ * 열면 다시 켜진다(`loadPage`).
+ *
+ * 다시 재는 계기는 `zoomFit` · 프리셋 폭 · 칸의 크기뿐이다 — 칸(`.wb-shell-canvas`)은 셸에 늘 서 있어 페이지마다 바뀌지 않고, 이미 맞춘 채 다른
+ * 페이지를 열면 같은 칸 · 같은 프리셋이라 배율도 같다. 열린 페이지 id 를 계기로 고르지 않는다(`test/store-access.test.ts` 가 막는 우회다).
+ *
+ * **상한이 1 인 까닭** — 좁은 문서(390 · 720)를 넓은 칸에 키우면 처음 여는 판이 실제보다 커 보인다. 넓은 칸에 맞춰 키우는 것은 «화면 맞춤» 단추의 몫이다.
+ *
+ * 칸에 세로 스크롤바가 서고 빠지는 것이 칸 폭을 흔들어 배율이 오가지 않게 칸은 스크롤바 자리를 늘 둔다(`shell.css` 의 `.wb-shell-canvas` 의
+ * `scrollbar-gutter`).
+ */
+function useAutoFitZoom(canvasRef: RefObject<HTMLElement | null>): void {
+  const store = useEditorStoreInstance()
+  const fitting = useEditorStore(store, (s) => s.zoomFit)
+  const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
+  useLayoutEffect(() => {
+    if (!fitting) return
+    const canvas = canvasRef.current
+    if (canvas === null) return
+    const apply = (): void => {
+      const fit = fitZoom(canvas, store.getState().viewportWidth)
+      if (fit !== null) store.applyFitZoom(Math.min(1, fit))
+    }
+    apply()
+    if (typeof ResizeObserver !== 'function') return
+    const observer = new ResizeObserver(apply)
+    observer.observe(canvas)
+    return () => observer.disconnect()
+  }, [fitting, viewportWidth, store, canvasRef])
+}
+
+/** 폭 맞춤이 배율을 줄여 둔 동안(`zoomFit` 이고 1 아래)의 말 — 배율 글의 `title` · 줌 묶음의 설명 · 접힌 머리의 배율 줄. */
+const ZOOM_FITTED = '폭 맞춤'
+
+/**
  * 줌 명령 셋 — 머리의 줌 묶음과 접힌 머리의 `…` 항목(`shell/head-fold.ts`)이 함께 부른다. 한계값(0.05~2)은 여기 두지 않는다 — 스토어가
  * 클램프하므로 한 칸씩 밀기만 하면 되고, 한계가 바뀌어도 고칠 곳이 하나로 남는다. 축소만 제 바닥(`ZOOM_OUT_FLOOR`)이 있다.
  */
 function useZoomCommands(canvasRef: RefObject<HTMLElement | null>): { zoomOut: () => void; zoomIn: () => void; fit: () => void } {
   const store = useEditorStoreInstance()
   return {
+    // **눈금(25 배수)에 붙는다** — 맞춘 배율(폭 맞춤 · 화면 맞춤 — 63% 등)에서 한 칸을 그대로 빼고 더하면 38% · 88% 처럼 눈금 밖으로 간다. 축소는
+    // 지금보다 작은 가장 큰 눈금(63% → 50%), 확대는 지금보다 큰 가장 작은 눈금(63% → 75% · 18% → 25%)이다. 눈금 위면 한 칸이다. 축소는 바닥
+    // (`ZOOM_OUT_FLOOR`)에서 멈춘다. 그 아래의 맞춘 배율에서는 배율을 안 바꾸되 **지금 배율을 고른 것으로 놓는다** — 누름은 «이 배율로 두라» 이고,
+    // 안 놓으면 폭 맞춤이 켜진 채 창 폭을 따라가 «누르면 그 배율로 남는다» 가 이 판에서만 거짓이 된다.
     zoomOut: () => {
       const { zoom } = store.getState()
-      store.setZoom(Math.max(zoom - ZOOM_STEP, Math.min(zoom, ZOOM_OUT_FLOOR)))
+      store.setZoom(zoom <= ZOOM_OUT_FLOOR ? zoom : Math.max(ZOOM_OUT_FLOOR, (Math.ceil(zoom / ZOOM_STEP - 1e-9) - 1) * ZOOM_STEP))
     },
-    // 맞춤이 25% 아래에 둔 배율에서는 한 칸(+25)이 아니라 다음 25 배수(25%)로 오른다 — 18% → 43% 처럼 단계 밖의 값으로 튀지 않는다.
     zoomIn: () => {
       const { zoom } = store.getState()
-      store.setZoom(zoom < ZOOM_OUT_FLOOR ? ZOOM_OUT_FLOOR : zoom + ZOOM_STEP)
+      store.setZoom((Math.floor(zoom / ZOOM_STEP + 1e-9) + 1) * ZOOM_STEP)
     },
     /* **누른 순간의 1회 계산이다** — 창 크기를 따라다니지 않는다. 따라다니게 하면
        사용자가 손으로 맞춘 배율을 창을 조금만 흔들어도 빼앗기고, 그것을 막으려면
@@ -2158,6 +2230,7 @@ function CanvasTools(props: {
   const store = useEditorStoreInstance()
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
   const zoom = useEditorStore(store, (s) => s.zoom)
+  const fitted = useEditorStore(store, (s) => s.zoomFit && s.zoom < 1)
   const commands = useZoomCommands(props.canvasRef)
 
   return (
@@ -2180,11 +2253,18 @@ function CanvasTools(props: {
       </label>
 
       {props.fold !== 'folded' && (
-        <div className="wb-shell-zoom" role="group" aria-label="줌">
+        <div className="wb-shell-zoom" role="group" aria-label="줌" aria-description={fitted ? ZOOM_FITTED : undefined}>
           <button type="button" className="wb-shell-zoom-step" aria-label="축소" title="축소" onClick={commands.zoomOut}>
             {shellIcon('zoomOut', 16)}
           </button>
-          <span className="wb-shell-zoom-value">{Math.round(zoom * 100)}%</span>
+          {/* **폭 맞춤인 동안 배율 글이 주색이다** — 글을 더하지 않는다: 머리는 한 줄에 드는 폭으로 접힘 문턱을 정해 두어(`shell/head-fold.ts`) 글
+              한 마디가 문턱의 여유를 넘는다. 이름은 묶음의 설명 · `title` 이 «폭 맞춤» 을 싣는다. 접힌 머리의 `…` 배율 줄은 글로 말한다. */}
+          <span
+            className={'wb-shell-zoom-value' + (fitted ? ' wb-shell-zoom-value-fitted' : '')}
+            title={fitted ? `${ZOOM_FITTED} — 문서가 캔버스 칸보다 넓어 칸 폭에 맞췄습니다` : undefined}
+          >
+            {Math.round(zoom * 100)}%
+          </span>
           <button type="button" className="wb-shell-zoom-step" aria-label="확대" title="확대" onClick={commands.zoomIn}>
             {shellIcon('zoomIn', 16)}
           </button>

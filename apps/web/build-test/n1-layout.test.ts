@@ -374,7 +374,8 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
       const readValue = async () => {
         await page.waitForTimeout(600)
         await page.getByRole('button', { name: '더 보기', exact: true }).click()
-        const item = page.getByRole('menuitem', { name: /^배율 \d+%$/ })
+        // 폭 맞춤인 동안은 «배율 N% · 폭 맞춤» 이다(페이지는 폭 맞춤으로 열린다 — `src/routes/editor.tsx` 의 `useAutoFitZoom`).
+        const item = page.getByRole('menuitem', { name: /^배율 \d+%/ })
         await item.waitFor()
         return {
           text: (await item.textContent())!.trim(),
@@ -382,10 +383,16 @@ describe.skipIf(!전제.ok)('N1 레이아웃 — 실브라우저', () => {
         }
       }
       const first = await readValue()
-      await page.getByRole('menuitem', { name: '축소', exact: true }).click()
+      await page.getByRole('menuitem', { name: '확대', exact: true }).click()
       const second = await readValue()
       await page.keyboard.press('Escape')
-      expect({ first, second: second.text }).toEqual({ first: { text: '배율 100%', disabled: true }, second: '배율 75%' })
+      // 창 700 의 칸은 1280 문서보다 좁아 폭 맞춤(25% 아래) — 확대는 다음 눈금 25% 이고 사람이 고른 배율이라 «폭 맞춤» 이 빠진다.
+      const fitted = /^배율 (\d+)% · 폭 맞춤$/.exec(first.text)
+      expect({ fitted: fitted !== null && Number(fitted[1]) < 25, disabled: first.disabled, second: second.text }).toEqual({
+        fitted: true,
+        disabled: true,
+        second: '배율 25%',
+      })
     } finally {
       await close()
     }

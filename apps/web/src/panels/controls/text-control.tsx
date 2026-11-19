@@ -29,7 +29,7 @@ export interface TextControlProps {
   /**
    * 칸이 받는 글자 수의 상한 — **코드 포인트**로 센다(서버의 한도와 같은 단위 — 이모지 하나가 한 글자). 입력창의 `maxLength` 는 UTF-16 단위라 이모지를 둘로 세어
    * 한도의 절반에서 멈춘다(L-241) — 그래서 `onChange` 가 코드 포인트로 막고(`clampPoints`) 입력창의 `maxLength` 는 어느 글도 그보다 안 길 상한(`2 ×`)으로 둔다.
-   * 주면 빈 칸의 자리표로 그 한도를 말한다(`placeholder`) — 안 주면 끝없이 받는다.
+   * 한도를 말하는 것은 부르는 쪽이다(별칭 칸은 칸 밑 안내 — `../property-panel.tsx`). 안 주면 끝없이 받는다.
    */
   maxLength?: number
   /**
@@ -38,6 +38,8 @@ export interface TextControlProps {
    */
   maxUnits?: number
   placeholder?: string
+  /** 칸을 설명하는 요소의 id(`aria-describedby`) — 칸 밑 안내 한 줄. */
+  describedBy?: string
   /**
    * 고른 노드들의 값이 갈린다(속성 패널의 일괄 편집 — `../property-panel.tsx`의 `BulkProperties`). 빈 칸에 «여러 값» 자리표를 보이고,
    * 아무것도 안 치고 떠나면 커밋하지 않는다(빈 초안이 원본과 같다).
@@ -185,6 +187,7 @@ export function TextControl(props: TextControlProps): ReactElement {
       : props.placeholder === undefined
         ? {}
         : { placeholder: props.placeholder, title: props.placeholder }),
+    ...(props.describedBy === undefined ? {} : { 'aria-describedby': props.describedBy }),
     ...(props.maxLength !== undefined
       ? { maxLength: props.maxLength * 2 }
       : props.maxUnits !== undefined

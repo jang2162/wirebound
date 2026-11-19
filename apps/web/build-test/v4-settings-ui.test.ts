@@ -61,7 +61,7 @@ describe.skipIf(!전제.ok)('V4 — 셸 밖 화면 · 빈 캔버스의 배치', 
 
   it('창 1440 · 900 · 700 에서 다섯 화면이 가로 스크롤 없이 선다', async () => {
     const screens: [string, string, (page: Page) => Promise<void>][] = [
-      ['홈', '/', (page) => page.getByRole('link', { name: '테마 판', exact: true }).waitFor()],
+      ['홈', '/', (page) => page.getByRole('link', { name: '테마 판 열기', exact: true }).waitFor()],
       ['계정', '/account', (page) => page.getByText('alice@browser.test').waitFor()],
       ['설정', `/projects/${projectId}/settings`, (page) => page.getByRole('region', { name: '일반' }).waitFor()],
       ['설정 «테마»', `/projects/${projectId}/settings?section=theme`, (page) => page.locator('iframe.wb-shell-canvas-iframe').waitFor()],
