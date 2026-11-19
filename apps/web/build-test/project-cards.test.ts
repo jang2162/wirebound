@@ -8,6 +8,8 @@
  *   보조 단추가 그 링크 위에 선다(가운데의 맨 위 요소) · 톱니 높이 ≥ 36, 추가 카드 단추 높이 ≥ 36, 뼈대 상자
  *   (`.wb-shell-workspace`) 가로 넘침 0 · 창 오른끝을 넘는 글자 노드 0(끊을 자리 없는 긴 이름 카드를 싣는다). 추가 카드를 연 판의 폼 칸 · 단추가 카드
  *   오른끝 안이고 넘침 0 |
+ * | 호버 화살표 | 창 1280 · 390 에서 카드 안에 포인터를 두면 이름 링크의 «→»(`::before`)가 서고(`opacity` 1) · 그 가운데의 `elementFromPoint` 가 이름 링크다
+ *   (보조 단추에 안 덮인다) · 화살표가 카드 상자 안 |
  * | «열기» | 누르면 주소가 `/projects/<id>` 이고 에디터가 선다 |
  * | 추가 카드로 만들기 | 추가 카드를 눌러 그 자리에 선 폼으로 만들면 그 프로젝트로 가고, 목록으로 돌아오면 그 카드가 추가 카드 바로 뒤에 선다 |
  * | 0 개 · 조회 실패 | 프로젝트가 없는 bob 이 빈 안내 옆 추가 카드로 만든다 · 목록 조회를 끊은 판(`page.route` 로 `GET /api/projects` 를 전부 abort)에서 알림과 함께
@@ -170,6 +172,64 @@ describe.skipIf(!전제.ok)('프로젝트 목록 카드 — 실브라우저', ()
     }
     // eslint-disable-next-line no-console
     console.log(`[카드 크기] ${measured.join(' | ')}`)
+  })
+
+  it('호버하면 «→» 가 보이는 자리에 선다 — 가운데의 맨 위 요소가 이름 링크다', async () => {
+    const measured: string[] = []
+    for (const width of [1280, 390]) {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width, height: 844 } })
+      try {
+        await page.goto('/')
+        for (const name of ['고객 포털', 'Report']) {
+          const link = page.getByRole('link', { name: `${name} 열기`, exact: true })
+          await link.waitFor()
+          await link.scrollIntoViewIfNeeded()
+          // 카드의 왼쪽 가운데 — 늘인 링크 위다(이름 글자 밖).
+          const card = (await page.locator('li.wb-shell-home-card', { has: link }).boundingBox())!
+          await page.mouse.move(card.x + 8, card.y + card.height / 2)
+          const got = await link.evaluate((el) => {
+            const arrow = getComputedStyle(el, '::before')
+            const w = parseFloat(arrow.width)
+            const h = parseFloat(arrow.height)
+            // 화살표의 상자 — 놓인 꼴(카드에 붙인 절대 자리 · 링크 안의 흐름)마다 셈이 다르다.
+            const li = el.closest('li')!
+            const c = li.getBoundingClientRect()
+            const box =
+              arrow.position === 'absolute'
+                ? {
+                    right: c.right - li.clientLeft - parseFloat(arrow.right),
+                    bottom: c.bottom - li.clientTop - parseFloat(arrow.bottom),
+                  }
+                : { right: el.getBoundingClientRect().right, bottom: el.getBoundingClientRect().top + h }
+            const x = box.right - w / 2
+            const y = box.bottom - h / 2
+            const top = document.elementFromPoint(x, y)
+            return {
+              opacity: arrow.opacity,
+              sized: w > 0 && h > 0,
+              inCard: box.right - w >= c.left && box.right <= c.right && box.bottom - h >= c.top && box.bottom <= c.bottom,
+              onLink: top === el,
+              topIs: top === null ? null : `${top.tagName.toLowerCase()}.${top.className}`,
+              at: [Math.round(x), Math.round(y)],
+            }
+          })
+          measured.push(`${name}@${width}: ${got.at.join(',')} → ${got.topIs}`)
+          expect(
+            { opacity: got.opacity, sized: got.sized, inCard: got.inCard, onLink: got.onLink },
+            `${name}@${width} ${got.topIs}`,
+          ).toEqual({
+            opacity: '1',
+            sized: true,
+            inCard: true,
+            onLink: true,
+          })
+        }
+      } finally {
+        await context.close()
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[카드 화살표] ${measured.join(' | ')}`)
   })
 
   it('«열기» 를 누르면 그 프로젝트의 에디터로 간다', async () => {
