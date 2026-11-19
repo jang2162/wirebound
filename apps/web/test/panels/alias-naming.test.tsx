@@ -94,14 +94,14 @@ describe('코멘트 탭', () => {
     await waitFor(() => expect(target()).toBe('달 곳: – Text 안내'))
   })
 
-  it('무리 머리가 별칭과 id 를 말한다 — 별칭이 없으면 id 만', async () => {
+  it('무리 머리가 구조 트리 줄과 같은 `타입 (별칭) 요약` 을 말한다 — id 는 안 말한다', async () => {
     await openPage(doc(), { apiOverrides: { listComments: async () => COMMENTS } })
     await openTab('코멘트')
     await waitFor(() => expect(document.body.querySelectorAll('.wb-shell-comment-group-title')).toHaveLength(2))
     const titles = [...document.body.querySelectorAll('.wb-shell-comment-group-title')].map((element) =>
       element.textContent?.replace(/\s+/g, ' ').trim(),
     )
-    expect(titles).toEqual(['2 회원 목록 (n_list)', '– n_plain'])
+    expect(titles).toEqual(['2 DataGrid (회원 목록)', '– Text 안내'])
   })
 })
 

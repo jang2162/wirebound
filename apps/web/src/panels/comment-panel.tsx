@@ -92,7 +92,7 @@
  * 조작이다. 그 조작은 **초안을 옮기지 않고 칸을 바꾼다** — 옆 노드를 보고 돌아오면 쓰던 글이
  * 그대로다. **고른 노드의 무리에 붙는 표시만으로는 대상이 바뀐 것이 안 보인다** — 새 대상에
  * 코멘트가 이미 있을 때만 표시가 옮겨 가고, 없으면 표시가 사라질 뿐 새 대상을 가리키지 않는다.
- * 그래서 상자의 글이 그 노드의 것으로 바뀌고, 폼이 «달 곳: 번호 타입 (id)»를 말한다(`targetOf` —
+ * 그래서 상자의 글이 그 노드의 것으로 바뀌고, 폼이 «달 곳: 번호 타입 (별칭) 요약»을 말한다(`targetOf` —
  * 뷰 모드에는 아웃라인이 없어 폼 말고는 대상이 안 보인다).
  *
  * **페이지가 바뀌면 노드마다의 초안도 한 칸째 버린다** — 노드 id 는 그 페이지 안에서만 뜻이
@@ -168,14 +168,7 @@ import { stateShowingNode, useViewState } from '../shell/use-view-state'
 import { CommentBody } from './comment-body'
 import { useTokenPicker } from './comment-token-picker'
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
-import {
-  COMMENT_BODY_MAX_LENGTH,
-  nodeAlias,
-  nodeRowLabel,
-  refreshCommentTokenLabels,
-  type CodeIndex,
-  type PageDocument,
-} from '@wirebound/schema'
+import { COMMENT_BODY_MAX_LENGTH, nodeRowLabel, refreshCommentTokenLabels, type CodeIndex, type PageDocument } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { refusedBeforeCommit, SignedOut, toFailure, type Failure } from '../api/failure'
 import { ApiError, type ApiClient } from '../api/client'
@@ -243,6 +236,8 @@ const REREAD_BATCH_MS = 200
 const WRITE_FAILED = '코멘트를 저장하지 못했습니다'
 /** 문서에 없는 노드에 붙은 코멘트의 무리 이름. */
 const MISSING_NODE = '사라진 노드'
+/** 문서를 못 읽은 무리의 이름 — 그 노드가 있는지도 무엇인지도 모른다. **"사라진 노드"라고 단언하지 않는다**(`Group.present`). */
+const UNKNOWN_NODE = '이름을 모르는 노드'
 /** 문서를 못 읽어 번호를 붙일 수 없을 때. **"사라진 노드"라고 단언하지 않는다**(`Group.present`). */
 const NO_DOCUMENT = '문서를 읽지 못해 번호를 보일 수 없습니다'
 /** 서버는 번호를 바꿨는데 내 문서에 얹지 못했을 때(`MARKERS_DIVERGED`). */
@@ -589,14 +584,14 @@ function markersOf(document: PageDocument): Map<string, number | null> {
   return markers
 }
 
-/** 문서에서 노드 id → 별칭 표. 별칭이 없는 노드는 표에 없다. `markersOf`와 같은 이유로 `walkSafely`다. */
-function aliasesOf(document: PageDocument): Map<string, string> {
-  const aliases = new Map<string, string>()
-  for (const visit of walkSafely(document.root)) {
-    const alias = nodeAlias(visit.node)
-    if (alias !== null) aliases.set(visit.node.id, alias)
-  }
-  return aliases
+/**
+ * 문서에서 노드 id → 무리 이름 표. 이름은 «달 곳» 과 같은 구조 트리 줄 이름이다(`targetOf` 머리말 «이름은 화면이 이미 쓰는 둘이다») — 한 노드를
+ * 두 이름으로 부르지 않고, 내부 id 를 말하지 않는다. `markersOf`와 같은 이유로 `walkSafely`다.
+ */
+function rowLabelsOf(document: PageDocument, codes: CodeIndex | undefined): Map<string, string> {
+  const labels = new Map<string, string>()
+  for (const visit of walkSafely(document.root)) labels.set(visit.node.id, nodeRowLabel(visit.node, codes))
+  return labels
 }
 
 /**
@@ -1254,8 +1249,8 @@ export function CommentPanel(props: {
   const all = groupComments(state.comments, document)
   // `'node'`면 고른 노드의 무리 하나(여럿을 골랐으면 없음 — 달 곳과 같은 값 `selectedNodeId`).
   const groups = scope === 'page' ? all : all.filter((group) => group.nodeId === selectedNodeId)
-  // 무리 머리의 별칭 — 문서를 못 읽었으면 `null`(머리가 id 만 말한다).
-  const aliases = document === null ? null : aliasesOf(document)
+  // 무리 머리의 이름 — 문서를 못 읽었으면 `null`(머리가 «이름을 모르는 노드» 를 말한다).
+  const labels = document === null ? null : rowLabelsOf(document, codes)
   /**
    * 묶음을 고름 — 그 노드가 숨었으면 보이는 상태로 바꾸고, 지금 탭이 아닌 패널 · 접힌 검색폼 안이면 펼쳐 그린다(머리말 «묶음이 캔버스를
    * 가리킨다» · `comments/comment-pointing.tsx` 머리말 «펼침»).
@@ -1389,11 +1384,7 @@ export function CommentPanel(props: {
           {groups.map((group) => {
             // **`'unknown'`을 `'no'`와 갈라 말한다**. 문서를 못 읽었을 뿐인데 *"사라진 노드"*라고 적으면 화면이 거짓을 단언한다.
             const name =
-              group.present === 'no'
-                ? `${MISSING_NODE} (${group.nodeId})`
-                : aliases?.get(group.nodeId) !== undefined
-                  ? `${aliases.get(group.nodeId)} (${group.nodeId})`
-                  : group.nodeId
+              group.present === 'yes' ? (labels?.get(group.nodeId) ?? MISSING_NODE) : group.present === 'no' ? MISSING_NODE : UNKNOWN_NODE
             const marker = group.marker ?? '–'
             // 캔버스를 가리킬 수 있는 묶음(머리말 «묶음이 캔버스를 가리킨다») — 묶음 자체가 Tab 정지점이고 이름은 머리의 글이다.
             const pointable = scope === 'page' && group.present === 'yes'

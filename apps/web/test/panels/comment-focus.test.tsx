@@ -330,7 +330,7 @@ describe('머리 단추 — 편집 모드에서 고르고 «컴포넌트» 탭�
   it('누르면 그 노드를 고르고 «컴포넌트» 탭으로 가며, 숨었으면 보이는 상태로 바꾼다', async () => {
     await open()
     await openCommentTab()
-    const pick = within(group('n_b')).getByRole('button', { name: '2 n_b' })
+    const pick = within(group('n_b')).getByRole('button', { name: '2 Text 관리' })
     act(() => pick.focus())
 
     fireEvent.click(pick)
@@ -348,7 +348,7 @@ describe('머리 단추 — 편집 모드에서 고르고 «컴포넌트» 탭�
     act(() => shellStore().setLocks([{ pageId: PAGE_ID, nodeId: 'n_b', userId: 'u-bora', userName: '보라' }]))
     const before = shellStore().getState().selectedNodeIds
 
-    fireEvent.click(within(group('n_b')).getByRole('button', { name: '2 n_b' }))
+    fireEvent.click(within(group('n_b')).getByRole('button', { name: '2 Text 관리' }))
 
     expect(shellStore().getState().selectedNodeIds).toEqual(before)
     expect(tabSelected('코멘트')).toBe('true')
