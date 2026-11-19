@@ -59,3 +59,30 @@
 
 곁: jsdom `apps/web/test/routes/editor-shell.test.tsx` «축소는 25% 에서 멈추고 …» 의 머리말 «축소가 아무것도 안 하고» 를 «배율을 안 바꾸고(폭 맞춤만 끈다)» 로
 고쳤다(단언은 배율만 본다 — 그대로 초록). 실브라우저 `editor-narrow-canvas` «줌 하한» 도 배율만 본다 — 실브라우저 전량에서 잰다.
+
+## 3. 2b — 보인 채 제출이 실패하면 보인 채 남음
+
+**바꾼 것.** `apps/web/src/account/password-input.tsx` — 칸이 든 폼(`input.form`)의 `submit` 을 직접 들어 `flushSync` 로 다시 가린다. 세 화면(로그인 · 가입 ·
+재설정)이 같은 `PasswordInput` 을 쓰므로(`routes/login.tsx` · `account/new-password-fields.tsx` — 초대 · 재설정) 한 자리에서 셋이 닫힌다. 폼의 리스너는 React 의
+`onSubmit`(뿌리에서 받음)보다 먼저 돌아, 제출을 받는 쪽이 `type` password 인 칸을 본다.
+
+**결정.** 리뷰가 든 둘 가운데 «칸의 `form` 에 `submit` 리스너» 를 골랐다 — «부모가 `reset` 키를 넘김» 은 세 화면의 제출 함수를 다 고쳐야 하고 새 화면이 빠뜨릴 수 있다.
+
+**케이스** `apps/web/build-test/ui-login.test.ts`(실브라우저):
+
+- «보인 채 로그인이 실패하면 칸이 다시 가려진다 — 오류 뒤 `type` password»: 이메일 · «abcdXef» → «비밀번호 보기» → Enter → `alert` 뒤 `type` · 토글 이름 · 값.
+- «보인 채 가입이 실패하면 두 칸이 다 다시 가려진다(초대 화면)»: `makeAdmin` 뒤 `POST /admin/invites` · `/invite/<token>` · 두 칸에 치고 둘 다 보기 → 이메일 빈 채
+  Enter(화면이 «이메일을 입력하세요» 로 거절 — 제출은 제출이다) → 두 칸 `type`.
+
+| 판 | 로그인 실패 뒤 `type` · 토글 | 초대 실패 뒤 두 칸 | 결과 |
+| --- | --- | --- | --- |
+| 고치기 전 | text · «비밀번호 숨기기» | text · text | 두 케이스 빨강(값 단언) |
+| 고친 뒤 | password · «비밀번호 보기» · 값 `abcdXef` 그대로 | password · password | 파일 4 통과 |
+| 변조 M3 — `form.addEventListener('submit', hide)` 를 뗌 | text · «비밀번호 숨기기» | text · text | 두 케이스 실패 · 통과 0 — `toEqual` 의 `type` 값 |
+
+M3 는 두 케이스를 함께 죽인다 — 둘은 같은 장치의 다른 입구(로그인 칸 · 새 비밀번호 두 칸)라 혼자 죽는 변조가 따로 없다. 두 화면이 같은 부품을 쓰는지를 재는
+몫이라 남겼다. jsdom `apps/web/test/routes` 265 통과(로그인 · 초대 · 재설정 화면의 칸 구조 · 이름 · `type` — 고친 뒤).
+
+**곁의 관찰 — 실패 뒤 커서 `[0,0]`.** 재현되지 않았다: 같은 걸음(`fill` → 토글 → Enter)으로 누르기 전 `[7,7]` · 실패 뒤 `[7,7]`(고치기 전 · 고친 뒤 둘 다 —
+고친 판은 `type` 이 text → password 로 바뀌어도 고른 자리가 그대로다). 재현이 안 되어 main 과 견주지 않았고 고친 것도 없다. 리뷰 판이 무엇을 달리했는지(재는
+때 · 포커스)는 리뷰 보고의 탐침 원문에 커서를 읽은 줄이 없어 못 가른다.
