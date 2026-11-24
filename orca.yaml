@@ -2,7 +2,7 @@
 setupAgentStartupPolicy: wait-for-setup
 scripts:
   # 런타임 → 의존성 → 패키지 빌드(tsx 로 도는 api 가 packages/*/dist 를 본다) 순서다. `pnpm install` 의 prepare 가
-  # 훅 설치와 `ruler apply`(AGENTS.md 생성)를 한다. `apps/api/.env` 는 복사하지 않는다 — 워크트리마다 포트 · 쿠키 이름이
+  # 훅 설치와 `guideline apply`(AGENTS.md 생성)를 한다. `apps/api/.env` 는 복사하지 않는다 — 워크트리마다 포트 · 쿠키 이름이
   # 달라야 하고(최상위 값을 그대로 쓰면 테스트가 최상위 DB 를 가리켜 멈춘다), 그 절차는 README 「워크트리를 여럿 띄울 때」.
   # 마지막 줄은 codegraph 인덱스다 — 이 워크트리 몫이라 여기서 만들고, 실패해도 셋업은 멈추지 않는다(인덱스 없이 grep 으로 일한다).
   setup: |

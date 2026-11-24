@@ -1,0 +1,15 @@
+# 에이전트 지침의 소스는 .ruler/ 다. AGENTS.md · .mcp.json · .claude/skills/ 는 생성물이다(pnpm exec guideline apply — ruler apply 를 단독으로 돌리지 않는다).
+default_agents = ["claude"]
+
+[mcp]
+enabled = true
+merge_strategy = "merge"
+
+[gitignore]
+enabled = true
+
+[backup]
+enabled = false
+
+[agents.claude]
+output_path = "AGENTS.md"

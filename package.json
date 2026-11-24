@@ -21,10 +21,11 @@
     "fmt": "oxfmt && oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
-    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install && ruler apply; fi"
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then lefthook install && guideline apply; fi"
   },
   "devDependencies": {
     "@intellectronica/ruler": "0.3.44",
+    "guideline-manage": "^0.25.0",
     "jsdom": "^25.0.0",
     "lefthook": "2.2.1",
     "oxfmt": "0.72.0",

@@ -42,7 +42,7 @@ node -v && pnpm -v && docker -v
 cp apps/api/.env.example apps/api/.env
 
 # 2. 런타임을 맞추고(mise — Node · pnpm 판은 mise.toml) 워크스페이스를 설치한다. mise 가 없으면 첫 줄을 건너뛴다
-#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(AGENTS.md — `ruler apply`)을 만든다
+#    설치가 Git 훅(lefthook)을 걸고 에이전트 지침(AGENTS.md — `guideline apply`)을 만든다
 mise trust && mise install
 pnpm install
 
@@ -1279,7 +1279,7 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 |---|---|
 | **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
 | **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
-| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `AGENTS.md` 는 `pnpm exec ruler apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.ruler/guideline.md`) |
+| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `AGENTS.md` 는 `pnpm exec guideline apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.guideline/`, 이 프로젝트 바꿈은 `.guideline/overrides/`). 설정은 `.ruler/ruler.project.toml` |
 | **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 
