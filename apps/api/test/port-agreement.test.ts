@@ -255,7 +255,7 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
     (JSON.parse(readFileSync(new URL('package.json', REPO_ROOT), 'utf8')) as { scripts: Record<string, string> }).scripts.db ?? ''
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
   const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
-  // 지침의 소스다. `CLAUDE.md` 는 `ruler apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
+  // 지침의 소스다. `AGENTS.md` 는 `guideline apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
   const CLAUDE = readFileSync(new URL('.ruler/10-worktree.md', REPO_ROOT), 'utf8')
 
   it('자가 진짜 파일을 읽는다 — 빈 문자열이면 아래가 통째로 헛돈다', () => {
