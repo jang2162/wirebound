@@ -144,6 +144,16 @@ describe.skipIf(!있다)('레이아웃 틀을 단 장의 PPTX 그림', () => {
     expect(shot!.width).toBeGreaterThan(0)
     expect(countColor(shot!.bytes, SCRIM_RGB)).toBe(0)
   }, 60_000)
+
+  /**
+   * 테마가 층 밖에서 `!important` 와 더 구체적인 셀렉터로 막을 다시 깔아도 찍는 판이 이긴다 — 찍는 판의 규칙이 층(`@layer wb-capture`) 안의 `!important`
+   * 라서다(층 안 중요 선언이 층 밖 중요 선언을 이긴다 · `packages/theme-sdk/src/capture.ts` 머리말). 층을 뗀 변조(규칙이 층 밖 `!important` 가 되어 더 구체적인 테마 셀렉터에 진다)에 죽는다.
+   */
+  it('테마가 층 밖 !important 로 막을 다시 깔아도 찍는 판은 막이 없다', async () => {
+    const loud = `html body [data-wb-layout="popup"][data-wb-layout] { background: rgb(${SCRIM_RGB.join(', ')}) !important; padding: 40px !important; }`
+    const [shot] = await draw(bundled('팝업', popup(), inlineTheme({ id: 'loud', themeCss: `${LAYOUT_CSS}\n${loud}` })))
+    expect(countColor(shot!.bytes, SCRIM_RGB)).toBe(0)
+  }, 60_000)
 })
 
 describe.skipIf(!있다)('팝업 장의 번들 화면', () => {
