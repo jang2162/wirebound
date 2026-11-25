@@ -10,8 +10,11 @@
  *   이 화면은 셸 밖이라 룸에 안 든다 — 남의 쓰기는 다시 받기 · 새로고침에 보인다.
  * - 꼴은 관리자 칸과 같다 — 목록 | 상세(`.wb-shell-admin-layout` — 창이 900px 아래면 목록이 위로) · 표(`.wb-shell-admin-table` — 좁으면 카드).
  *   사람 글(이름 · 페이지 제목)은 `isolate` 로 가둔다.
+ * - **그룹 찾기는 목록만 거른다**(이름 · 키의 부분 일치 · 대소문자 무시). 친 글은 컴포넌트 상태다 — 주소에 싣지 않는다(주소의 `?group=` 은 고른
+ *   그룹이고 찾기 글과 섞이지 않는다 · 주소를 값으로 읽는 칸은 한글 조합이 걸음마다 굳는다 — 정본 «프로젝트 목록» 의 검색 칸). 고른 그룹이
+ *   걸러져 목록에 없어도 오른쪽은 그대로다 — 찾기는 고르기가 아니다.
  */
-import { useCallback, useId, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { CODE_NAME_MAX, CODE_VALUE_MAX, type CodeGroup, type CodeItem, type UsageHit } from '@wirebound/schema'
 import { useApi } from '../api/context'
@@ -29,6 +32,7 @@ const USAGE_FAILURE = '사용처를 불러오지 못했습니다'
 export const NO_GROUPS = '만든 공통코드 그룹이 없습니다'
 export const NO_ITEMS = '이 그룹에 항목이 없습니다'
 export const NO_USAGE = '이 코드를 쓰는 노드가 없습니다'
+export const NO_MATCH = '맞는 그룹이 없습니다'
 /** 지우기 확인 상자가 보이는 사용처 수. */
 export const DELETE_PREVIEW = 5
 export const BREAKS_REFERENCES = '참조가 끊깁니다 — 그 노드는 묶을 때의 글과 끊김 표지로 남습니다.'
@@ -55,6 +59,12 @@ type NameTarget =
   | { kind: 'rename-group'; group: CodeGroup }
   | { kind: 'rename-item'; group: CodeGroup; item: CodeItem }
 
+/** 찾기 글이 그 그룹에 맞나 — 이름 · 키의 부분 일치(대소문자 무시). 빈 글(공백만)은 다 맞다. */
+export function groupMatches(group: CodeGroup, find: string): boolean {
+  const needle = find.trim().toLocaleLowerCase()
+  return needle === '' || group.name.toLocaleLowerCase().includes(needle) || group.key.toLocaleLowerCase().includes(needle)
+}
+
 /** 사용처 줄 — 페이지면 에디터로 가는 주소, 레이아웃 · 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
 export function usageHref(projectId: string, hit: UsageHit, nodeId: string): string | null {
   return hit.kind === 'page' ? `/projects/${projectId}/pages/${hit.id}?node=${encodeURIComponent(nodeId)}` : null
@@ -68,6 +78,8 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
   const [failure, setFailure] = useState<Failure | null>(null)
   const [naming, setNaming] = useState<NameTarget | null>(null)
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null)
+  const [find, setFind] = useState('')
+  const listRef = useRef<HTMLUListElement>(null)
 
   const { list, stale, reload } = useAdminList<Table>(
     useCallback(async () => {
@@ -82,6 +94,19 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
   const selected = groups.find((group) => group.key === params.get('group')) ?? groups[0]
   const itemValue = params.get('item')
   const selectedItem = selected?.items.find((item) => item.value === itemValue)
+  const shownGroups = groups.filter((group) => groupMatches(group, find))
+  const selectedKey = selected?.key
+
+  // 고른 그룹이 목록 칸 밖(목록이 따로 구른다)이면 그 칸만 굴려 들인다 — 창은 안 굴린다(`scrollIntoView` 는 창까지 굴린다).
+  useEffect(() => {
+    const scroller = listRef.current
+    const pick = scroller?.querySelector('[aria-current="true"]')
+    if (scroller === null || scroller === undefined || !(pick instanceof HTMLElement)) return
+    const box = scroller.getBoundingClientRect()
+    const at = pick.getBoundingClientRect()
+    if (at.top < box.top) scroller.scrollTop -= box.top - at.top
+    else if (at.bottom > box.bottom) scroller.scrollTop += at.bottom - box.bottom
+  }, [selectedKey, list.status])
 
   function choose(group: string, item?: string): void {
     setParams(
@@ -187,21 +212,35 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
       {list.status === 'ready' && groups.length === 0 && <p className="wb-shell-project-notice">{NO_GROUPS}</p>}
       {list.status === 'ready' && selected !== undefined && (
         <div className="wb-shell-admin-layout wb-shell-codes-layout">
-          <ul className="wb-shell-admin-list" aria-label="공통코드 그룹">
-            {groups.map((group) => (
-              <li className="wb-shell-admin-list-item" key={group.key}>
-                <button
-                  className="wb-shell-admin-pick"
-                  type="button"
-                  aria-current={group.key === selected.key ? 'true' : undefined}
-                  onClick={() => choose(group.key)}
-                >
-                  <span className="wb-shell-admin-pick-name">{isolate(group.name)}</span>
-                  <span className="wb-shell-admin-pick-meta">{`${group.key} · 항목 ${group.items.length} · 사용 ${counts[group.key]?.group ?? 0}`}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="wb-shell-codes-side">
+            <input
+              className="wb-shell-project-input wb-shell-codes-find"
+              type="search"
+              aria-label="그룹 찾기"
+              placeholder="이름 · 키 찾기"
+              value={find}
+              onChange={(event) => setFind(event.target.value)}
+            />
+            {shownGroups.length === 0 ? (
+              <p className="wb-shell-project-notice">{NO_MATCH}</p>
+            ) : (
+              <ul className="wb-shell-admin-list wb-shell-codes-groups" aria-label="공통코드 그룹" ref={listRef}>
+                {shownGroups.map((group) => (
+                  <li className="wb-shell-admin-list-item" key={group.key}>
+                    <button
+                      className="wb-shell-admin-pick"
+                      type="button"
+                      aria-current={group.key === selected.key ? 'true' : undefined}
+                      onClick={() => choose(group.key)}
+                    >
+                      <span className="wb-shell-admin-pick-name">{isolate(group.name)}</span>
+                      <span className="wb-shell-admin-pick-meta">{`${group.key} · 항목 ${group.items.length} · 사용 ${counts[group.key]?.group ?? 0}`}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <section className="wb-shell-codes-group" aria-label={`그룹 ${selected.name}`}>
             <div className="wb-shell-admin-bar">
               <h2 className="wb-shell-codes-title">{isolate(selected.name)}</h2>

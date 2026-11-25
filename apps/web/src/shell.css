@@ -6702,6 +6702,40 @@
     gap: 16px;
   }
 }
+/* 왼쪽 칸 — 찾기 칸 · 그룹 목록. 넓은 창에서는 창 높이에 붙고 목록만 따로 구른다 — 그룹이 많아도 고른 그룹 · 찾기 칸이 화면에 남는다(뼈대 상자
+   `.wb-shell-workspace` 가 구르는 상자다). 위아래로 접힌 창(1099 이하)에서는 붙지 않고 목록 높이만 줄인다 — 상세가 그 밑이다. */
+.wb-shell-codes-side {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+}
+
+.wb-shell-codes-find {
+  width: 100%;
+  height: var(--wb-shell-button-sm);
+}
+
+.wb-shell-codes-groups {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px;
+}
+
+@media (max-width: 1099px) {
+  .wb-shell-codes-side {
+    position: static;
+    max-height: none;
+  }
+
+  .wb-shell-codes-groups {
+    max-height: 320px;
+  }
+}
+
 .wb-shell-codes-group {
   display: flex;
   flex-direction: column;

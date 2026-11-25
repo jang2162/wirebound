@@ -8,7 +8,7 @@ import type { CodeGroup, UsageHit } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import type { ApiClient, CodeUsageCounts } from '../../src/api/client'
 import type { ProjectView } from '../../src/api/types'
-import { BREAKS_REFERENCES } from '../../src/codes/codes-screen'
+import { BREAKS_REFERENCES, NO_MATCH } from '../../src/codes/codes-screen'
 import { isolate } from '../../src/shell/isolate'
 import { PAGE_ID, PROJECT_ID, PROJECT_NAME, pageDoc, renderEditor, selectionOutline } from '../editor-harness'
 import { currentPath, currentSearch } from '../helpers'
@@ -110,6 +110,34 @@ describe('공통코드 화면', () => {
     expect(within(rowOf('완료')).getAllByRole('cell')[3]!.textContent).toBe('사용 안 함')
     const usage = await screen.findByRole('list', { name: '사용처 목록' })
     expect(usage.textContent).toBe(`페이지 ${isolate('회원 목록')} › ${isolate('결제 대기 사이 글자')}`)
+  })
+
+  it('그룹 찾기 — 이름 · 키의 부분 일치(대소문자 무시) · 없으면 문장 · 걸러진 고른 그룹의 오른쪽은 그대로', async () => {
+    await open(fake())
+    const find = screen.getByRole('searchbox', { name: '그룹 찾기' })
+    const shown = () =>
+      within(screen.getByRole('list', { name: '공통코드 그룹' }))
+        .getAllByRole('button')
+        .map((pick) => pick.querySelector('.wb-shell-admin-pick-name')?.textContent)
+    expect(shown()).toEqual([isolate('주문 상태'), isolate('등급')])
+    fireEvent.change(find, { target: { value: 'grade' } })
+    expect(shown()).toEqual([isolate('등급')])
+    fireEvent.change(find, { target: { value: '주문' } })
+    expect(shown()).toEqual([isolate('주문 상태')])
+    fireEvent.change(find, { target: { value: '  Order_ ' } })
+    expect(shown()).toEqual([isolate('주문 상태')])
+    // 고른 그룹(주문 상태)이 걸러져도 오른쪽은 그대로 — 찾기는 고르기가 아니다.
+    fireEvent.change(find, { target: { value: '등' } })
+    expect(shown()).toEqual([isolate('등급')])
+    expect(screen.getByRole('region', { name: '그룹 주문 상태' })).toBeTruthy()
+    expect(currentSearch()).toBe('')
+    fireEvent.change(find, { target: { value: '없는 그룹' } })
+    expect(screen.queryByRole('list', { name: '공통코드 그룹' })).toBeNull()
+    screen.getByText(NO_MATCH)
+    expect(screen.getByRole('region', { name: '그룹 주문 상태' })).toBeTruthy()
+    // 비우면 다 선다.
+    fireEvent.change(find, { target: { value: '' } })
+    expect(shown()).toEqual([isolate('주문 상태'), isolate('등급')])
   })
 
   it('코드값 칸은 글뿐이다 — 고칠 칸이 없고 «…» 에도 코드값 바꾸기가 없다', async () => {
