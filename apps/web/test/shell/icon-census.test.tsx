@@ -3,6 +3,7 @@
  *
  * 1. **아이콘만 남은 단추는 이름과 `title` 을 가진다.** 화면을 그려 `button` 가운데 보이는 글이 없는 것을 모으고, 그 `aria-label` 과
  *    `title` 이 비었거나 서로 다르면 죽는다(이름 · `title` 은 아이콘을 얹기 전의 글 그대로다 — 표 머리말 «이름은 아이콘이 나르지 않는다»).
+ *    꺼진 단추가 까닭을 `aria-description` 에 들면 `title` 은 그 까닭이다(머리 «보기» — `src/shell/action-menu.tsx` 머리말 «꺼진 단추의 까닭»).
  * 2. **행동 메뉴 항목은 모두 아이콘을 받는다.** 화면의 행동 메뉴 단추(`aria-haspopup="menu"`)를 하나씩 열어 항목마다 아이콘
  *    (`svg.wb-shell-action-menu-icon`)이 있는지 센다. 일부러 아이콘을 안 주는 항목은 `WITHOUT_ICON` 에 이름으로 둔다(지금 비었다).
  * 3. **lucide 를 값으로 들이는 곳은 표 하나다**(표 머리말 «lucide 를 들이는 곳은 …») — 자리마다 직접 들이면 같은 동작이 다른 그림이
@@ -156,18 +157,29 @@ const WITHOUT_ICON: readonly string[] = []
 interface IconOnly {
   name: string | null
   title: string | null
+  /** 꺼진 단추의 까닭(`aria-description`) — 켜진 단추면 `null`. */
+  reason: string | null
 }
 
 /** 보이는 글이 없는 단추 — 아이콘만 남은 단추(머리말 1). */
 function iconOnlyButtons(root: ParentNode = document.body): IconOnly[] {
   return [...root.querySelectorAll<HTMLButtonElement>('button')]
     .filter((button) => (button.textContent ?? '').trim() === '')
-    .map((button) => ({ name: button.getAttribute('aria-label'), title: button.getAttribute('title') }))
+    .map((button) => ({
+      name: button.getAttribute('aria-label'),
+      title: button.getAttribute('title'),
+      reason: button.disabled ? button.getAttribute('aria-description') : null,
+    }))
 }
 
 /** 이름 · `title` 이 비었거나 서로 다른 것 — 비어야 한다. */
 function unnamed(found: readonly IconOnly[]): IconOnly[] {
-  return found.filter((button) => button.name === null || button.name.trim() === '' || button.title !== button.name)
+  return found.filter(
+    (button) =>
+      button.name === null ||
+      button.name.trim() === '' ||
+      (button.title !== button.name && (button.reason === null || button.title !== button.reason)),
+  )
 }
 
 /** 메뉴 항목 하나 — 이름과 아이콘이 있는가. */
@@ -185,8 +197,9 @@ async function openEveryMenu(): Promise<MenuEntry[]> {
   const entries: MenuEntry[] = []
   const done = new Set<string>()
   for (let guard = 0; guard < 100; guard += 1) {
+    // 꺼진 단추는 열리지 않는다(머리 «보기» — 끌 영역이 없는 판). 그 항목의 아이콘은 `./view-menu.test.tsx` 가 센다.
     const next = [...document.body.querySelectorAll<HTMLButtonElement>('[aria-haspopup="menu"]')].find(
-      (toggle) => !done.has(toggle.getAttribute('aria-label') ?? ''),
+      (toggle) => !toggle.disabled && !done.has(toggle.getAttribute('aria-label') ?? ''),
     )
     if (next === undefined) return entries
     const menu = next.getAttribute('aria-label') ?? ''
@@ -195,8 +208,12 @@ async function openEveryMenu(): Promise<MenuEntry[]> {
     await act(async () => {})
     const list = document.getElementById(next.getAttribute('aria-controls') ?? '')
     if (list === null) throw new Error(`«${menu}»를 열었는데 목록이 없다`)
-    // 하나를 고르는 항목(`menuitemradio` — 상태 전환기)도 행동 메뉴 항목이다.
-    for (const item of [...within(list).queryAllByRole('menuitem'), ...within(list).queryAllByRole('menuitemradio')]) {
+    // 하나를 고르는 항목(`menuitemradio` — 상태 전환기) · 켜고 끄는 항목(`menuitemcheckbox` — «보기»)도 행동 메뉴 항목이다.
+    for (const item of [
+      ...within(list).queryAllByRole('menuitem'),
+      ...within(list).queryAllByRole('menuitemradio'),
+      ...within(list).queryAllByRole('menuitemcheckbox'),
+    ]) {
       entries.push({ menu, item: item.textContent ?? '', icon: item.querySelector('svg.wb-shell-action-menu-icon') !== null })
     }
     fireEvent.keyDown(list, { key: 'Escape' })

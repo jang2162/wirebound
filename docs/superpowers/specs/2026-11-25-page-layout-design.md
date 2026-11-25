@@ -323,7 +323,7 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 | 바꿈 | 편집 묶음(하나 · 되돌리기 한 번) |
 |---|---|
 | 빈 ↔ 서브페이지 | `test /layout` → `replace /layout`. 잠금과 무관하다 |
-| → 팝업 | `test /layout` · `test /root/type` → `replace /layout` + 지금 `pageKindOps` 의 화면 → 팝업 연산(뿌리 `Popup` · 제목 = 페이지 이름) |
+| → 팝업 | `test /layout` · `test /root/type` → `replace /layout` + `layoutOps`(`apps/web/src/edit/page-kind-ops.ts`) 의 화면 → 팝업 연산(뿌리 `Popup` · 제목 = 페이지 이름) |
 | 팝업 → 빈 · 서브페이지 | `test /layout` · `test /root/type` → `replace /layout` + 지금의 팝업 → 화면 연산(바닥을 몸통 끝으로 · 제목 · 크기를 걷음) |
 
 팝업 경계를 넘는 바꿈은 뿌리를 쥔 사람이 있으면 꺼지고 까닭을 말한다(지금의 `blockedNotice`). 읽기만 하는 판(뷰 모드 · viewer)은 «레이아웃 · 서브페이지» 글이다. 메뉴 트리 줄의 팝업 아이콘 · 접근 이름 « — 팝업» 은 그대로다(판정이 `layout` 이다).

@@ -272,7 +272,7 @@ import { PAGE_DESCRIPTION_MAX_LENGTH } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
 import { judgeMeta, metaConflict, type MetaField } from '../api/page-meta'
-import { PageKind } from './page-kind'
+import { PageLayoutField } from './page-kind'
 import { MetaConflict, metaConflictSentence, type MetaWhat } from './meta-conflict'
 import { lockSlot, slotsOf, usePanelLock, usePanelSlot, type LockSlot, type PanelLock, type Slot } from './panel-drafts'
 import { MissedNotice, PendingNotice } from './pending-notice'
@@ -869,7 +869,7 @@ export function PageMeta(props: {
     return (
       <>
         <h2 className="wb-shell-panel-title">{state.title}</h2>
-        <PageKind projectId={projectId} pageId={pageId} title={state.title} canEdit={false} />
+        <PageLayoutField projectId={projectId} pageId={pageId} title={state.title} canEdit={false} />
         <MissedNotice lock={title.saving} />
         <MissedNotice lock={description.saving} />
         <h3 className="wb-shell-page-info-heading">페이지 설명</h3>
@@ -934,7 +934,7 @@ export function PageMeta(props: {
         {titleValue !== state.title && <span className="wb-shell-page-meta-dirty">바뀜</span>}
       </form>
       <MetaNotices field="title" write={title} />
-      <PageKind projectId={projectId} pageId={pageId} title={state.title} canEdit />
+      <PageLayoutField projectId={projectId} pageId={pageId} title={state.title} canEdit />
       <form
         className="wb-shell-page-description-form"
         aria-label="페이지 설명 저장"

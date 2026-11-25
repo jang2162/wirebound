@@ -10,7 +10,8 @@
  * ## 이름은 아이콘이 나르지 않는다
  *
  * 아이콘은 늘 `aria-hidden` 이다. 글과 함께 서는 자리(메뉴 항목 · 주 단추)는 글이 이름이고, 아이콘만 남는 단추는 `aria-label` 과
- * `title` 이 그 자리의 글을 그대로 든다 — 접근 이름은 아이콘을 얹기 전의 글과 글자까지 같다. 둘 다 `test/shell/icon-census.test.tsx` 가
+ * `title` 이 그 자리의 글을 그대로 든다 — 접근 이름은 아이콘을 얹기 전의 글과 글자까지 같다. 꺼진 단추가 까닭을 말하면(머리 «보기») `title` 은
+ * 그 까닭이고 `aria-description` 도 같은 글이다 — 이름은 그대로다(`shell/action-menu.tsx` 머리말 «꺼진 단추의 까닭»). 둘 다 `test/shell/icon-census.test.tsx` 가
  * 센다(아이콘만 남은 단추의 이름 · `title`, 행동 메뉴 항목의 아이콘).
  *
  * ## 크기 · 선 굵기 · 색은 자리가 정한다
@@ -78,6 +79,9 @@ import {
   Redo2,
   Replace,
   Settings,
+  PanelsTopLeft,
+  Square,
+  SquareCheck,
   SquareDashed,
   TableCellsSplit,
   TableRowsSplit,
@@ -172,6 +176,11 @@ export const ICONS = {
   renumber: ListOrdered,
   /** 캔버스의 배치 선(Flex · Grid 의 경계와 방향)을 켜고 끈다 — 머리. */
   layoutGuides: SquareDashed,
+  /** 캔버스의 레이아웃 영역(GNB · LNB …)을 켜고 끄는 «보기» 메뉴 — 머리(`shell/view-menu.tsx`). */
+  viewRegions: PanelsTopLeft,
+  /** 켜고 끄는 항목의 지금 값 — 켬 · 끔(`ActionMenuItem.toggled` — «보기» 메뉴의 영역 항목). 그림이 상태를 보이고 이름은 `aria-checked` 가 든다. */
+  toggledOn: SquareCheck,
+  toggledOff: Square,
   /** 동작이 아니라 결과의 표지 — 읽은 것 · 들어간 것(성공) · 실패 · 경고(페이지 가져오기 상자). */
   succeeded: CircleCheck,
   failed: CircleX,

@@ -74,7 +74,8 @@ describe('캔버스 도구는 머리에 있다', () => {
       (element) => element.getAttribute('aria-label') ?? element.tagName.toLowerCase(),
     )
     // 상태 전환기(`shell/view-state-switcher.tsx`)는 머리 도구의 맨 앞이다 — 이 판은 상태 목록이 없어 «기본».
-    expect(order).toEqual(['화면 상태: 기본', '모드', 'select', '줌', '더 보기'])
+    // «보기»(`shell/view-menu.tsx`)는 «배치 선» 곁 · 모드 앞이다 — 하네스 테마가 영역을 선언하지 않아 꺼진 채 선다.
+    expect(order).toEqual(['화면 상태: 기본', '보기', '모드', 'select', '줌', '더 보기'])
 
     expect(within(footer()).queryByRole('combobox', { name: '뷰포트 폭' })).toBeNull()
     expect(within(footer()).queryByRole('group', { name: '줌' })).toBeNull()

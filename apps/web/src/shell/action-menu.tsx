@@ -127,6 +127,18 @@
  *
  * 항목에 `checked` 를 주면 `menuitemradio` · `aria-checked` 로 선다(상태 전환기의 상태 목록 — 지금 상태가 참). 화살표 · Enter 는 다른 항목과
  * 같다 — 목록 안의 자리를 셀 때 두 역할을 함께 센다(`menuItems`).
+ *
+ * ## 켜고 끄는 항목 — `toggled`
+ *
+ * 항목에 `toggled` 를 주면 `menuitemcheckbox` · `aria-checked` 로 선다(머리 «보기» 의 영역 항목 — 켠 영역이 참). **골라도 메뉴를 닫지 않는다** —
+ * 여럿을 잇달아 켜고 끄는 목록이라, 닫으면 하나 바꿀 때마다 다시 열어야 한다. 포커스는 고른 항목에 남고, 뒤따르는 누름을 삼키지 않는다(삼킴은
+ * 닫힌 메뉴 뒤로 새는 누름을 막는 것이다 — 열린 채면 둘째 누름은 그 항목을 다시 바꾸는 사람의 손이다). 그림은 켬 · 끔의 표지(`ICONS.toggledOn` ·
+ * `toggledOff`)다 — `icon` 을 주지 않는다.
+ *
+ * ## 꺼진 단추의 까닭 — `reason`
+ *
+ * 단추를 끄는 까닭이 사람에게 할 말이면(«보기» — 끌 영역이 없는 레이아웃) `reason` 을 준다. 꺼진 동안 `title` 과 `aria-description` 이 그 문장이다
+ * — 이름(`aria-label`)은 그대로 `label` 이다.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
@@ -164,6 +176,8 @@ export interface ActionMenuItem {
   checked?: boolean
   /** 트리의 깊이 — 주면 글자 앞에 깊이만큼 들여 쓴다(머리 상태 전환기의 하위 상태). 들여쓰기는 빈 자리라 접근 이름에 안 든다. */
   depth?: number
+  /** 켜고 끄는 항목 — 주면 `menuitemcheckbox` 이고 참이 켬이다. 골라도 메뉴가 닫히지 않는다(머리말 «켜고 끄는 항목»). */
+  toggled?: boolean
 }
 
 export function ActionMenu(props: {
@@ -196,6 +210,8 @@ export function ActionMenu(props: {
   tag?: boolean
   /** 작은 단추 줄(에디터 밖 화면의 위 줄 · 표)의 높이로 선다 — 그 줄의 글 단추와 같은 높이의 정사각형(`shell.css` «셸 단추의 두 높이»). */
   size?: 'sm'
+  /** 단추가 꺼진 까닭 — 주면 단추를 끄고 `title` · `aria-description` 이 이 문장이다(머리말 «꺼진 단추의 까닭»). */
+  reason?: string
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -239,7 +255,8 @@ export function ActionMenu(props: {
   }
 
   // 연 렌더에서 이미 참이다 — 여는 누름(`onOpen`)이 그 줄을 고르는 것과 여는 것이 한 렌더에 묶인다.
-  const stale = open && (props.openWhile === false || props.disabled === true)
+  const off = props.disabled === true || props.reason !== undefined
+  const stale = open && (props.openWhile === false || off)
   useEffect(() => {
     if (stale) close()
   })
@@ -315,8 +332,12 @@ export function ActionMenu(props: {
     swallowFollowingClick(canvasDocument === null ? [window] : [window, canvasDocument], { x: event.clientX, y: event.clientY })
   }
 
-  /** 항목을 골랐다 — 먼저 닫고 돌려준 뒤 부른다(머리말 «고르면 먼저 닫고 …»). */
+  /** 항목을 골랐다 — 먼저 닫고 돌려준 뒤 부른다(머리말 «고르면 먼저 닫고 …»). 켜고 끄는 항목은 닫지 않는다(머리말 «켜고 끄는 항목»). */
   function choose(item: ActionMenuItem, event: MouseEvent): void {
+    if (item.toggled !== undefined) {
+      item.onSelect?.()
+      return
+    }
     guardFollowingClick(event)
     close()
     item.onSelect?.()
@@ -342,9 +363,10 @@ export function ActionMenu(props: {
           .filter(Boolean)
           .join(' ')}
         aria-label={props.label}
-        title={props.label}
+        title={props.reason ?? props.label}
+        aria-description={props.reason}
         aria-haspopup="menu"
-        disabled={props.disabled}
+        disabled={off}
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         onClick={() => (open ? setOpen(false) : openAt('first'))}
@@ -400,8 +422,8 @@ export function ActionMenu(props: {
                   ) : (
                     <button
                       type="button"
-                      role={item.checked === undefined ? 'menuitem' : 'menuitemradio'}
-                      aria-checked={item.checked}
+                      role={item.toggled !== undefined ? 'menuitemcheckbox' : item.checked === undefined ? 'menuitem' : 'menuitemradio'}
+                      aria-checked={item.toggled ?? item.checked}
                       tabIndex={-1}
                       className={
                         item.danger === true ? 'wb-shell-action-menu-item wb-shell-action-menu-danger' : 'wb-shell-action-menu-item'
@@ -435,7 +457,8 @@ function ToggleIcon(props: { icon: LucideIcon; compact: boolean }): ReactElement
 
 /** 항목의 글자 — 아이콘이 있으면 그 앞에 선다(머리말 «항목의 아이콘»). */
 function ItemLabel(props: { item: ActionMenuItem }): ReactElement {
-  const Icon = props.item.icon
+  const toggled = props.item.toggled
+  const Icon = toggled === undefined ? props.item.icon : toggled ? ICONS.toggledOn : ICONS.toggledOff
   const depth = props.item.depth ?? 0
   const indent =
     depth > 0 ? <span className="wb-shell-action-menu-indent" style={{ width: depth * MENU_INDENT_PX }} aria-hidden="true" /> : null
@@ -485,5 +508,5 @@ function swallowFollowingClick(targets: readonly EventTarget[], at: { x: number;
 /** 목록 안의 항목 — 화살표가 설 자리(끈 항목 포함 — 머리말 «끈 항목은 …»). 차례는 DOM 차례다. */
 function menuItems(box: HTMLElement | null): HTMLElement[] {
   if (box === null) return []
-  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')]
+  return [...box.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')]
 }
