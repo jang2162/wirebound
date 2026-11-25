@@ -1678,7 +1678,6 @@
 /* 메뉴가 넘치면 GNB 안에서 가로로 구른다 — 글자를 자르지 않고 머리 높이도 안 는다(스크롤바를 감춘다). */
 [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] {
   flex: 1;
-  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
