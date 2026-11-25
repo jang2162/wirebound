@@ -6835,6 +6835,11 @@
   background: #fff;
 }
 
+/* 묶음 하나(`<details>`) — 접히는 상자. 칸 밖으로 안 넘치게만 한다(꼴은 감싸는 줄 · 머리가 갖는다). */
+.wb-shell-codes-usage-fold {
+  min-width: 0;
+}
+
 .wb-shell-codes-usage-summary {
   display: flex;
   align-items: center;
