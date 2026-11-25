@@ -363,14 +363,16 @@ describe('system-admin CSS', () => {
 
   /**
    * 참조한 변수는 전부 `:root` 에 있다. 없는 변수를 가리킨 선언은 브라우저에서 조용히 무효가 된다(오류 없이 상속값 · 초기값으로 떨어진다).
-   * SDK 가 노드마다 나르는 변수(`--wb-node-*`)는 테마가 정의하지 않는다.
+   * SDK 가 노드마다 나르는 변수(`--wb-node-*`)와 호스트가 판의 높이로 주는 `--wb-frame-min-height`(설계서 §6.0 「레이아웃 틀」 — 폴백 `100vh` 를
+   * 함께 적는다)는 테마가 정의하지 않는다.
    */
   it('var() 가 가리키는 --wb-* 는 전부 :root 에 정의돼 있다', () => {
     const vars = ROOT_VARS()
     const referenced = new Set<string>()
     for (const d of declarations()) for (const match of d.value.matchAll(/var\(\s*(--wb-[A-Za-z0-9_-]+)/g)) referenced.add(match[1]!)
     expect(referenced.size).toBeGreaterThan(10)
-    expect([...referenced].filter((name) => !name.startsWith('--wb-node-') && !vars.has(name))).toEqual([])
+    const host = new Set(['--wb-frame-min-height'])
+    expect([...referenced].filter((name) => !name.startsWith('--wb-node-') && !host.has(name) && !vars.has(name))).toEqual([])
   })
 
   /** 점 찍힌 맨 이름(`semantic.primary`)이 값에 남으면 브라우저가 그 선언을 버린다 — 토큰은 `var(--wb-…)` 로만 가리킨다. */

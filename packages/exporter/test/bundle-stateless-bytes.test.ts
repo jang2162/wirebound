@@ -149,8 +149,13 @@ describe('상태 없는 페이지의 번들 바이트', () => {
     // 서는 요소(`bundle/shell.tsx` 의 `TokenSegments`)를 겨눈다.
     for (const selector of selectors) {
       expect(selector).toMatch(
-        /\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$|^\.wb-export-(codes|chapter|nav-heading-next)\b|^\.wb-export-token(-broken|-note)?$/,
+        /\.wb-export-state|^\.wb-export-nav-kind$|^\.wb-export-hidden$|^\.wb-export-(codes|chapter|nav-heading-next)\b|^\.wb-export-token(-broken|-note)?$|^(\.wb-export-screen )?\.wb-export-canvas$/,
       )
     }
+    // 장 상자를 겨눈 덧붙은 규칙은 레이아웃 틀의 높이 변수 하나만 싣는다 — 틀이 없는 장에는 그 변수를 읽는 자리가 없다(설계서 §6.0 「레이아웃 틀」).
+    const canvas = [...added.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((match) =>
+      /\.wb-export-canvas\s*$/.test(match[1]!),
+    )
+    expect(canvas.map((match) => match[2]!.trim().replace(/:.*$/s, ''))).toEqual(['--wb-frame-min-height', '--wb-frame-min-height'])
   })
 })
