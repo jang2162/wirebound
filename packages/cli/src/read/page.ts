@@ -36,12 +36,14 @@ import {
   matchPageTargets,
   migrateDocument,
   pageKindOf,
+  pageLayoutOf,
   pageTargetPath,
   pageView,
   targetedPages,
   type CommentTokenContext,
   type PageDocument,
   type PageKind,
+  type PageLayout,
   type PageView,
   type TargetedPage,
 } from '@wirebound/schema'
@@ -58,6 +60,8 @@ export interface PageSummary {
   menuPath: readonly string[]
   /** 페이지의 종류 — 문서의 레이아웃이 `popup` 이면 `popup`(`pageKindOf`). */
   kind: PageKind
+  /** 페이지 레이아웃(`pageLayoutOf` — 판 6 이하 문서는 뿌리에서 읽는다). */
+  layout: PageLayout
 }
 
 /** 메뉴 노드 하나. **평평하다** — payload의 모양 그대로다(`parentId`가 구조를 나른다). */
@@ -197,8 +201,15 @@ function tokenContext(payload: SnapshotPayload, ordered: readonly TargetedPage[]
 }
 
 function summarize(page: TargetedPage, payload: SnapshotPayload): PageSummary {
-  const kind = pageKindOf(payload.pages.find((item) => item.id === page.id)?.schema)
-  return { path: pageTargetPath(page.target), id: page.id, title: page.title, menuPath: page.menuPath, kind }
+  const schema = payload.pages.find((item) => item.id === page.id)?.schema
+  return {
+    path: pageTargetPath(page.target),
+    id: page.id,
+    title: page.title,
+    menuPath: page.menuPath,
+    kind: pageKindOf(schema),
+    layout: pageLayoutOf(schema),
+  }
 }
 
 /**
