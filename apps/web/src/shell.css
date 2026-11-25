@@ -132,7 +132,8 @@
 .wb-shell-admin-preview-pick,
 .wb-shell-admin-upload,
 .wb-shell-admin-template,
-.wb-shell-workspace-logout {
+.wb-shell-workspace-logout,
+.wb-shell-panel-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2645,6 +2646,9 @@
 .wb-shell-segments {
   display: inline-flex;
   flex-wrap: wrap;
+  /* 한 줄일 때 셸 작은 단추와 같은 높이(«셸 단추의 두 높이») — 넘쳐 접히면 그만큼 크다. */
+  box-sizing: border-box;
+  min-height: var(--wb-shell-button-sm);
   max-width: 100%;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;
@@ -2654,6 +2658,8 @@
 
 .wb-shell-segment {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
   border: 0;
   border-radius: 4px;
   padding: 2px 7px;
@@ -2683,6 +2689,8 @@
   appearance: none;
   width: 30px;
   height: 18px;
+  /* 칸 공용 꼴의 높이 하한(작은 단추 높이)을 풀어 18px 로 선다. */
+  min-height: 0;
   margin: 0;
   border: 0;
   border-radius: 999px;
@@ -2874,6 +2882,9 @@
    테두리·모서리·여백이 체크박스에 한꺼번에 살아난다. */
 .wb-shell-control {
   box-sizing: border-box;
+  /* 우측 패널 값 칸의 한 줄 칸 · 고르개는 셸 작은 단추와 같은 높이다(«셸 단추의 두 높이» — 하한이라 글 상자는 제 줄 수만큼 크다. 스위치는 제 규칙이
+     높이를 다시 정한다). */
+  min-height: var(--wb-shell-button-sm);
   max-width: 100%;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;

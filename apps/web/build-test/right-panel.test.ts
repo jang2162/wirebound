@@ -176,6 +176,15 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
             scroll: panel.scrollWidth - panel.clientWidth,
             // 공통코드에 묶인 선택지는 카드의 칩 한 줄에만 선다 — 선택지 칸(잠긴 목록)은 숨는다.
             chips: panel.querySelectorAll('.wb-shell-code-chip').length,
+            // 값 칸의 한 줄 칸 · 고르개 · 세그먼트 줄은 셸 작은 단추 높이(`--wb-shell-button-sm`)다.
+            heights: [
+              ...new Set(
+                [...panel.querySelectorAll('input.wb-shell-control:not([type="checkbox"]), select.wb-shell-control, .wb-shell-segments')]
+                  .filter((el) => (el as HTMLElement).offsetParent !== null)
+                  .map((el) => Math.round(el.getBoundingClientRect().height)),
+              ),
+            ],
+            token: getComputedStyle(panel).getPropertyValue('--wb-shell-button-sm').trim(),
             // 켬/끔 칸은 스위치 모양이다 — 칸 공용 꼴(`.wb-shell-control`)에 덮이면 흰 네모로 선다.
             switches: [...panel.querySelectorAll('input[type="checkbox"].wb-shell-switch')].map((box) => {
               const style = getComputedStyle(box)
@@ -197,6 +206,8 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
         chips: number
         optionsRow: boolean
         switches: string[]
+        heights: number[]
+        token: string
       }
       const sel = seen.n_sel as typeof col
       // 카나리아 — 칸이 서고 세그먼트가 섰다(GridColumn 의 정렬 · 폭 · 정렬 표시 · 음영 · 번호).
@@ -209,6 +220,12 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
         가로: 0,
         스위치: ['30pxx18px 999px'],
       })
+      expect({ 높이: [...col.heights, ...sel.heights], 토큰: col.token }).toEqual({
+        높이: [...col.heights, ...sel.heights].map(() => 28),
+        토큰: '28px',
+      })
+      // 카나리아 — 잰 칸이 있다(Select 판: 안내 문구 · 고른 값 · 몫 · 폭 세그먼트).
+      expect(sel.heights.length).toBeGreaterThan(0)
       expect({ 넘침: sel.past, 글넘침: sel.textPast, 가로: sel.scroll, 칩: sel.chips, 선택지칸: sel.optionsRow }).toEqual({
         넘침: 0,
         글넘침: 0,
@@ -257,6 +274,8 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
       const form = page.getByRole('form', { name: '페이지 이름 저장' })
       await form.locator('.wb-shell-page-meta-dirty').waitFor()
       expect(await page.locator('.wb-shell-page-meta-dirty').count()).toBe(1)
+      // 저장 단추는 셸 작은 단추 높이(`--wb-shell-button-sm` · 28)다.
+      expect(Math.round((await form.getByRole('button', { name: '이름 저장', exact: true }).boundingBox())!.height)).toBe(28)
       await form.getByRole('button', { name: '이름 저장', exact: true }).click()
       await poll(
         '저장 뒤 «바뀜» 이 걷힌다',
