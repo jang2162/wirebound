@@ -27,6 +27,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
     page: { title: '가져온 목록', description: null },
     schema: {
       version: CURRENT_DOCUMENT_VERSION,
+      layout: 'blank',
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'DataGrid' }] },
     },
     comments: [{ nodeId: 'file_list', body: '가' }],
@@ -60,6 +61,7 @@ describe('미리보기 판정 (화면 없이)', () => {
         file({
           schema: {
             version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
           },
           comments: [],
@@ -71,6 +73,7 @@ describe('미리보기 판정 (화면 없이)', () => {
         file({
           schema: {
             version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
             root: {
               id: 'file_root',
               type: 'Page',
@@ -94,6 +97,7 @@ describe('미리보기 판정 (화면 없이)', () => {
         file({
           schema: {
             version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
             root: {
               id: 'file_root',
               type: 'Page',

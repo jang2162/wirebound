@@ -23,9 +23,14 @@ import { describe, expect, it } from 'vitest'
 import '../../src/catalog-setup'
 import { createNode } from '../../src/edit/create-node'
 
+/** 뿌리 타입(`Page` · `Popup`)을 그대로 뿌리로 둔 페이지 — 레이아웃은 그 뿌리의 짝이다. */
+function rootPage(node: WbNode): PageDocument {
+  return { version: CURRENT_DOCUMENT_VERSION, layout: node.type === 'Popup' ? 'popup' : 'blank', root: node }
+}
+
 /** 만든 노드를 루트 밑에 하나 단 페이지. 검증은 문서 단위라 봉투가 필요하다. */
 function pageWith(node: WbNode): PageDocument {
-  return { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [node] } }
+  return { version: CURRENT_DOCUMENT_VERSION, layout: 'blank', root: { id: 'n_root', type: 'Page', children: [node] } }
 }
 
 /** 설 자리가 정해진 타입(`TabPanel`)은 그 자리(부모 타입의 그 구역)에 놓은 페이지 — 뿌리 밑에 두면 `misplaced-component` 로 늘 거절된다. */
@@ -108,7 +113,7 @@ describe('createNode', () => {
     for (const def of listComponents().filter((def) => def.type !== 'Page')) {
       const node = createNode(def.type, nextId)
       expect(node, def.type).not.toBeNull()
-      const doc = isRootType(def.type) ? { version: CURRENT_DOCUMENT_VERSION, root: node as WbNode } : placedPage(node as WbNode)
+      const doc = isRootType(def.type) ? rootPage(node as WbNode) : placedPage(node as WbNode)
       expect(nodeIssues(doc), def.type).toEqual([])
     }
   })
@@ -215,7 +220,7 @@ describe('createNode', () => {
     })
     for (const def of withSeeds) {
       const node = createNode(def.type, countingIds()) as WbNode
-      const doc = isRootType(def.type) ? { version: CURRENT_DOCUMENT_VERSION, root: node } : placedPage(node)
+      const doc = isRootType(def.type) ? rootPage(node) : placedPage(node)
       expect(validatePage(doc), def.type).toEqual([])
     }
   })

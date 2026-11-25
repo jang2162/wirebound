@@ -91,6 +91,7 @@ export function placeableGroups(): PickableGroup[] {
     }
     const probe: PageDocument = {
       version: CURRENT_DOCUMENT_VERSION,
+      layout: 'blank',
       root: { id: 'n-probe-root', type: 'Page', children: [placed] },
     }
     if (validatePage(probe).length > 0) continue

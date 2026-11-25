@@ -5,7 +5,7 @@ import { checkNodeAction, checkViewStateAction, isPageTargetAction, isTargetless
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
 import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
-import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type ViewState, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type PageLayout, type ViewState, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { zoneList, zonePointer } from './zones'
 import { getKoreanErrorMap } from './locale'
@@ -77,6 +77,12 @@ export type ValidationCode =
    * 모른다(lint 의 `broken-code-ref`). 표에서 항목을 지워도 문서는 저장된다.
    */
   | 'invalid-code-ref'
+  /**
+   * 레이아웃과 뿌리 타입이 짝이 아니다 — 팝업 레이아웃의 뿌리는 `Popup`, 빈 · 서브페이지 레이아웃의 뿌리는 `Page` 다. 경로는 `/layout`. 판정
+   * («팝업인가»)은 `layout` 하나가 하고 뿌리 `Popup` 은 그 짝이다 — 둘이 어긋난 문서가 저장 경계를 못 지나게 이 검사가 묶는다. **뿌리 타입을
+   * 판정으로 읽는 자리는 이 검사와 판 6 규칙(`migrate-page-layout.ts`)뿐이다** — `test/page-layout-census.test.ts` 가 센다.
+   */
+  | 'layout-root-mismatch'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -137,6 +143,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'view-state-missing': 'warning',
   'state-cases-left': 'error',
   'invalid-code-ref': 'error',
+  'layout-root-mismatch': 'error',
 }
 
 export interface ValidationIssue {
@@ -200,8 +207,8 @@ function ignoredVariantMessage(def: ComponentDef, variant: string): string {
 }
 
 /**
- * 뿌리에만 서는 타입 — 페이지의 «종류» 가 뿌리 타입이다(`Page` = 화면 · `Popup` = 팝업). 둘 다 뿌리 밖에 서면 `nested-page` 다. 레이아웃 뿌리는
- * `Page` 뿐이다(`validateLayout`).
+ * 뿌리에만 서는 타입 — `Page`(빈 · 서브페이지 레이아웃) · `Popup`(팝업 레이아웃 — `layout-root-mismatch` 가 짝을 본다). 둘 다 뿌리 밖에 서면
+ * `nested-page` 다. 레이아웃 뿌리는 `Page` 뿐이다(`validateLayout`).
  */
 export const ROOT_TYPES: readonly string[] = ['Page', 'Popup']
 
@@ -215,6 +222,8 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root, ROOT_TYPES, doc.viewStates)
+  const mismatch = layoutRootMismatch(doc)
+  if (mismatch !== null) issues.push(mismatch)
   // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
   if (doc.root.visibility !== undefined) {
     issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
@@ -224,6 +233,24 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
     issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
   }
   return issues
+}
+
+/** 레이아웃의 화면 이름 — 이슈 문장이 쓴다. */
+const LAYOUT_NAMES: Record<PageLayout, string> = { blank: '빈', popup: '팝업', subpage: '서브페이지' }
+
+/** `layout-root-mismatch` — 레이아웃이 없는 문서(판 6 이하 — 봉투가 판 7 에서 필수로 본다)는 짝을 묻지 않는다. */
+function layoutRootMismatch(doc: PageDocument): ValidationIssue | null {
+  if (doc.layout === undefined) return null
+  const wantsPopup = doc.layout === 'popup'
+  if (wantsPopup === (doc.root.type === 'Popup')) return null
+  return makeIssue(
+    'layout-root-mismatch',
+    null,
+    '/layout',
+    wantsPopup
+      ? `팝업 레이아웃의 뿌리는 Popup 입니다 (뿌리: ${doc.root.type})`
+      : `${LAYOUT_NAMES[doc.layout]} 레이아웃의 뿌리는 Page 입니다 (뿌리: ${doc.root.type})`,
+  )
 }
 
 /**

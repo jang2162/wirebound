@@ -87,6 +87,7 @@ const PROJECT_NAME = '관리자 콘솔 설계서'
  */
 const DOC: PageDocument = {
   version: CURRENT_DOCUMENT_VERSION,
+  layout: 'blank',
   root: {
     id: 'n-root',
     type: 'Page',

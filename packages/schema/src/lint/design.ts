@@ -103,6 +103,7 @@ export const VALIDATION_RULE: Record<ValidationCode, RelayRuleId> = {
   // `Record`가 요구해 둔다.
   'state-cases-left': 'document-invalid',
   'invalid-code-ref': 'document-invalid',
+  'layout-root-mismatch': 'document-invalid',
 }
 
 /**

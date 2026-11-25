@@ -33,6 +33,7 @@ describe('ValidationCode → lint 규칙', () => {
       // 저장 경계만 낸다(편집 전후) — lint 는 받지 않지만 표는 모든 코드를 덮는다.
       'state-cases-left': 'document-invalid',
       'invalid-code-ref': 'document-invalid',
+      'layout-root-mismatch': 'document-invalid',
     })
   })
 

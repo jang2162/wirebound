@@ -2,7 +2,7 @@
 
 설계: `docs/superpowers/specs/2026-11-25-page-layout-design.md`. 기준은 main `f3acecc0`. 태스크는 앞 태스크의 산출물을 쓰는 차례로 적었다. 브리프 · 워커 규칙은 `AGENTS.md` 「워커에게 맡길 때 — wirebound」 를 따른다 — 이 문서에 사본을 두지 않는다.
 
-**설계의 「남은 결정」 다섯은 권하는 값으로 간다** — 사용자가 다르게 답하면 해당 태스크(T7 · T8 · T6)의 그 갈래만 바뀐다.
+**설계의 「정한 것 — 레이아웃 갈래」 다섯은 사용자가 답한 값이다** — «페이지 추가» 는 `subpage` · 일괄 입구 없음 · PPTX 서브페이지 캡처 폭 720 그대로 · 메뉴 숨김 없음 · 즐겨찾기 · 접기는 그림만.
 
 ## 차례와 병렬
 
@@ -165,7 +165,7 @@ T4(`LayoutFrame` · SDK) 와 T5(`getViewPrefs`) 뒤.
 
 **rp · sp 병합 뒤** — 둘이 `shell.css` · 패널을 고친다.
 
-**건드릴 파일:** `apps/web/src/panels/page-kind.tsx` → «레이아웃» `[빈] [서브페이지] [팝업]`(이름은 `page-layout.tsx` 로 옮겨도 된다 — 옮기면 찾는 케이스를 센다) · `apps/web/src/edit/page-kind-ops.ts` → `layoutOps`(설계 「«페이지 정보» 탭의 «레이아웃»」 표) · 새 «보기» 단추와 팝오버(`apps/web/src/shell/` — `GuidesToggle` 곁) · `routes/editor.tsx` 머리 도구 줄 · `shell/head-fold.ts` 단계 표 · `apps/web/src/tree/use-tree-commands.tsx`(«페이지 추가» 가 `layout: 'subpage'` — 설계 「남은 결정」 1) · `shell.css`. 정본 「설계서 화면 구조」 의 «페이지 정보» 탭 · 머리 도구 · «팝업 페이지».
+**건드릴 파일:** `apps/web/src/panels/page-kind.tsx` → «레이아웃» `[빈] [서브페이지] [팝업]`(이름은 `page-layout.tsx` 로 옮겨도 된다 — 옮기면 찾는 케이스를 센다) · `apps/web/src/edit/page-kind-ops.ts` → `layoutOps`(설계 「«페이지 정보» 탭의 «레이아웃»」 표) · 새 «보기» 단추와 팝오버(`apps/web/src/shell/` — `GuidesToggle` 곁) · `routes/editor.tsx` 머리 도구 줄 · `shell/head-fold.ts` 단계 표 · `apps/web/src/tree/use-tree-commands.tsx`(«페이지 추가» 가 `layout: 'subpage'` — 설계 「정한 것 — 레이아웃 갈래」 1) · `shell.css`. 정본 「설계서 화면 구조」 의 «페이지 정보» 탭 · 머리 도구 · «팝업 페이지».
 
 **접근 이름 · 셸 CSS 를 바꾼다** — 그 커밋에서 `pnpm vitest run --project web` 전체와 실브라우저 전량을 한 번 돈다(지침 «접근 이름 · 셸 CSS 를 바꾼 항목은 …»). «종류» 라디오의 이름 «화면» · «팝업» 과 `aria-label="종류"` 를 찾는 케이스를 먼저 센다: `git grep -n -F -e "'종류'" -e "name: '화면'" -e "name: '팝업'" -- apps/web/test apps/web/build-test`(같은 이름의 다른 칸 — 초대 표 열 · 상호작용 액션 고르개 — 이 섞이므로 줄을 열어 가른다). 머리에 단추를 더하면 머리 접기 판(`apps/web/build-test` 의 머리 폭 판)과 `getByRole(… { name })` 부분 일치를 센다.
 
@@ -185,7 +185,7 @@ T4(`LayoutFrame` · SDK) 와 T5(`getViewPrefs`) 뒤.
 
 T4 뒤. T6 과 나란히.
 
-**건드릴 파일:** `packages/exporter/src/bundle/index.ts`(번들에 내비 한 벌 · 장 데이터는 페이지 id · 팝업 문서 판정) · `packages/exporter/src/browser/mount.tsx`(`ExportCanvas` 를 `LayoutFrame` 으로 · 링크 `href` · 다 켠 영역) · `packages/exporter/src/bundle/shell.tsx`(마크업을 바꾸면 `wb-export-` 정규식 케이스를 센다 — 지침) · `apps/api/src/services/export-bundle.ts`(트리 행에 `layout`) · `export-pptx.ts` · `screen-render-chromium.ts`(서브페이지 장의 캡처 폭 — 설계 「남은 결정」 3 · 크기 상한) · `export-worker-protocol.ts` · `export-worker.ts` · `export-worker-thread.ts`(`ExportRows` 에 칸을 더하면 워커로 가는 메시지 셋을 함께 — 지침) · `packages/exporter/test-support/fixtures.ts`(서브페이지 장 · 팝업 장에 `layout`). 정본 「HTML 정적 번들」.
+**건드릴 파일:** `packages/exporter/src/bundle/index.ts`(번들에 내비 한 벌 · 장 데이터는 페이지 id · 팝업 문서 판정) · `packages/exporter/src/browser/mount.tsx`(`ExportCanvas` 를 `LayoutFrame` 으로 · 링크 `href` · 다 켠 영역) · `packages/exporter/src/bundle/shell.tsx`(마크업을 바꾸면 `wb-export-` 정규식 케이스를 센다 — 지침) · `apps/api/src/services/export-bundle.ts`(트리 행에 `layout`) · `export-pptx.ts` · `screen-render-chromium.ts`(서브페이지 장도 캡처 폭 720 · 크기 상한 그대로 — 설계 「정한 것 — 레이아웃 갈래」 3) · `export-worker-protocol.ts` · `export-worker.ts` · `export-worker-thread.ts`(`ExportRows` 에 칸을 더하면 워커로 가는 메시지 셋을 함께 — 지침) · `packages/exporter/test-support/fixtures.ts`(서브페이지 장 · 팝업 장에 `layout`). 정본 「HTML 정적 번들」.
 
 **케이스:**
 
@@ -195,7 +195,7 @@ T4 뒤. T6 과 나란히.
 | 사람의 `hidden_regions` 가 있어도 번들 · PPTX 는 다 켠다 | `apps/api/test/export-routes.test.ts` 곁(라우트로 내려받은 zip — 워커를 지난 판) | `ExportRows` 에 표시 옵션을 실음 |
 | 내비가 번들에 한 벌이다(장 수와 무관한 크기) | `packages/exporter/test/bundle*.test.tsx` | 장마다 트리를 실음 |
 | 팝업 장 — 번들은 막 + 가운데 · PPTX 그림은 상자 크기 | `apps/api/build-test/screen-chromium.test.ts` 곁 | 캡처 판의 막 거름을 뗌 |
-| 서브페이지 장의 PPTX 그림 폭(결정값) | 같은 파일 | 폭을 720 으로 되돌림 |
+| 서브페이지 장의 PPTX 그림 폭이 720 이다(높이만 틀만큼 는다) | 같은 파일 | 서브페이지 장만 캡처 폭을 바꿈 |
 | `bundle-stateless-bytes` 해시 | 다시 짓고 머리말에 까닭 | — |
 
 번들 판은 `pnpm build` 뒤에 잰다(`editor-stack` 의 api 가 `packages/*/dist` 를 읽는다 — 지침). PPTX 판이 한꺼번에 «화면 그림 0» 이면 먼저 Playwright 캐시를 본다.
@@ -216,7 +216,7 @@ T4 뒤. T6 과 나란히.
 |---|---|---|
 | `wb-theme check` 초록 — 영역 넷이 `LayoutRegion` 으로 섬 | `system-themes/admin` 빌드 · `packages/theme-kit/build-test` | `title` 영역을 `LayoutRegion` 밖으로 |
 | 치수 — GNB 높이 60 · LNB 폭 240 · 제목 22px · 브레드크럼브 12.5px(실브라우저 · 토큰을 실은 판) | 새 `apps/web/build-test/admin-subpage.test.ts` | LNB 폭 토큰을 바꿈 |
-| 좁은 창(390)과 캡처 폭(720 · 결정값)에서 넘침 0 — 뼈대 상자 · 글자 노드 `Range` 로 | 같은 파일(지침 «화면 넘침은 요소 상자로만 세지 않는다») | 내용 칸 `min-width: 0` 을 뗌 |
+| 좁은 창(390)과 캡처 폭(720)에서 넘침 0 — 뼈대 상자 · 글자 노드 `Range` 로 | 같은 파일(지침 «화면 넘침은 요소 상자로만 세지 않는다») | 내용 칸 `min-width: 0` 을 뗌 |
 | 끄는 동안 캔버스가 안 멈춘다 — 서브페이지 판으로 끌기 훑기 | `apps/web/build-test/admin-drag-sweep.test.ts` 에 서브페이지 판 | 틀에 형제 셀렉터 배치 규칙을 심음 |
 
 **게이트:** 전량 넷 + `pnpm test:build`.

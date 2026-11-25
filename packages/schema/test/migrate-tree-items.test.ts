@@ -145,7 +145,7 @@ describe('liftTreeNodes — 노드 묶음', () => {
   })
 })
 
-describe('사슬 — 판 5 문서가 판 6 으로', () => {
+describe('사슬 — 판 5 문서가 판 6 을 지나 지금 판으로', () => {
   const v5 = (children: unknown[]): PageDocument => ({ version: 5, root: { id: 'n_root', type: 'Page', children: children as WbNode[] } })
 
   it('판 5 문서를 판 6 으로 올리고 옮긴 문서가 판 6 검증을 지난다', () => {
@@ -172,6 +172,7 @@ describe('사슬 — 판 5 문서가 판 6 으로', () => {
 describe('판 6 의 트리 항목 규칙', () => {
   const page = (items: unknown): PageDocument => ({
     version: CURRENT_DOCUMENT_VERSION,
+    layout: 'blank',
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_t', type: 'Tree', props: { items } }] },
   })
   const chain = (depth: number): TreeItem[] => {

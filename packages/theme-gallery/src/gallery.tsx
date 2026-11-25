@@ -65,7 +65,8 @@ export function galleryItemDocument(item: GalleryItem): AnyDocument {
   const node: WbNode = place !== undefined ? place(own) : within === undefined ? own : { ...within, children: [own] }
   return {
     version: CURRENT_DOCUMENT_VERSION,
-    // 뿌리 타입(`Page` · `Popup`)은 감싸지 않는다 — `Page` 안의 `Popup` 은 뿌리 판정(`nested-page`)에 걸린다.
+    // 뿌리 타입(`Page` · `Popup`)은 감싸지 않는다 — `Page` 안의 `Popup` 은 뿌리 판정(`nested-page`)에 걸린다. 레이아웃은 그 뿌리의 짝이다.
+    layout: node.type === 'Popup' ? 'popup' : 'blank',
     root: isRootType(node.type) ? node : { id: 'gallery', type: 'Page', children: [node] },
   } as AnyDocument
 }

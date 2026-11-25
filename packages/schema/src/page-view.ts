@@ -21,10 +21,10 @@
  * 않는다 — `describe.ts`의 `propLabel`이 레지스트리에서 못 찾으면 prop 이름을 쓴다). 설치는 **부르는 쪽**이 한다(`installCatalog`).
  */
 import { resolveCode, type CodeIndex, type ResolvedCode } from './codes-resolve'
-import type { CodeRef, NodeVisibility, PageDocument, ViewState, WbNode } from './node'
+import type { CodeRef, NodeVisibility, PageDocument, PageLayout, ViewState, WbNode } from './node'
 import { nodeAlias, nodeRowLabel } from './display'
 import { MISSING_NODE_NAME, describeNode, listInteractionSentences, namingContexts, type InteractionSentence } from './interaction/describe'
-import { pageKindOf, type PageKind } from './new-page'
+import { pageKindOf, pageLayoutOf, type PageKind } from './new-page'
 import { pageTargetPath } from './page-target'
 import { BODY_ZONE } from './component/define'
 import { commentTokenText, unresolvedCommentText, type CommentTokenContext } from './comment-tokens'
@@ -120,8 +120,10 @@ export interface PageView {
   /** 접두를 벗긴 「모델」(상호작용)의 경로. **사람이 치는 것이 이 모양이다**(`wireb page get 관리자/회원/목록`). */
   path: string
   menuPath: readonly string[]
-  /** 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). */
+  /** 페이지의 종류 — 팝업 레이아웃이면 `popup`, 그 밖은 `page`(`pageKindOf`). */
   kind: PageKind
+  /** 페이지 레이아웃(`document.layout` — `pageLayoutOf`). */
+  layout: PageLayout
   /** 화면 상태 목록(`document.viewStates` — `parent` 로 트리다). 없으면 빈 목록 — «기본»은 늘 있어 목록에 없다. */
   viewStates: ViewState[]
   /** 문서의 노드 수. **뿌리를 센다** — 빈 페이지도 1이다. */
@@ -177,6 +179,7 @@ export function pageView(input: PageViewInput): PageView {
     path: pageTargetPath(input.target),
     menuPath: input.menuPath,
     kind: pageKindOf(input.document),
+    layout: pageLayoutOf(input.document),
     viewStates,
     nodeCount: outline.length,
     nodes: outline,

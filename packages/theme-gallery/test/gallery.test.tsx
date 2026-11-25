@@ -52,9 +52,9 @@ describe('갤러리', () => {
         const { label, node } = sample
         // 칸이 그리는 문서 그대로 — 뿌리 타입(Page · Popup)은 감싸지 않는다(`galleryItemDocument`).
         const doc = galleryItemDocument({ type, variant: undefined, sample })
-        // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다.
-        const validate = node.type === 'Slot' ? validateLayout : validatePage
-        const errors = validate(doc as never).filter((i) => i.severity === 'error')
+        // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다. 레이아웃 문서에는 페이지 레이아웃(`layout`) 칸이 없다.
+        const issues = node.type === 'Slot' ? validateLayout({ version: doc.version, root: doc.root }) : validatePage(doc as never)
+        const errors = issues.filter((i) => i.severity === 'error')
         expect(errors, `${type} / ${label}`).toEqual([])
       }
     }

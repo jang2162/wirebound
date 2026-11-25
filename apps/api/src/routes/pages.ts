@@ -307,7 +307,7 @@ export function pageRoutes() {
               menuNodeId: body.menuNodeId,
               title: body.title,
               description: body.description ?? null,
-              schema: newPageDocument(body.kind ?? 'page', body.title),
+              schema: newPageDocument(body.kind === 'popup' ? 'popup' : 'blank', body.title),
               schemaVersion: CURRENT_DOCUMENT_VERSION,
             })
           } catch (error) {

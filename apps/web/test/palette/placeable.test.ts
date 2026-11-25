@@ -33,7 +33,7 @@ function placeableTypes(): string[] {
       const node = createNode(def.type, () => `n-probe-${made++}`)
       if (node === null) return false
       const version = CURRENT_DOCUMENT_VERSION
-      if (!validatePage({ version, root: node }).some((issue) => issue.code === 'bad-root')) return false
+      if (!validatePage({ version, layout: 'blank', root: node }).some((issue) => issue.code === 'bad-root')) return false
       // 설 자리가 정해진 타입(`TabPanel` · 그리드의 열 · 행 · 칸)은 그 자리에 놓아 잰다 — 하단 판이 그 타입을 «그 부모 안에 넣을 것» 으로 보이는
       // 것과 같다. 설 자리의 부모도 설 자리가 있으면(칸 → 행 → 그리드) 겹으로 감싼다.
       let placed: WbNode = node
@@ -44,7 +44,7 @@ function placeableTypes(): string[] {
           ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
         }
       }
-      return validatePage({ version, root: { id: 'r', type: 'Page', children: [placed] } }).length === 0
+      return validatePage({ version, layout: 'blank', root: { id: 'r', type: 'Page', children: [placed] } }).length === 0
     })
     .map((def) => def.type)
 }

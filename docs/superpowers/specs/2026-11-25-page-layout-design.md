@@ -42,7 +42,7 @@
 |---|---|
 | 판 6 이하 문서(저장된 것 · 가져오기 · 클립보드 · REST 의 옛 판) | 뿌리 `Popup` → `popup`, 그 밖 → `blank` |
 | `POST …/pages` 에 `layout` 이 없음 | `blank`(`kind: 'popup'` 이면 `popup`) — API · MCP · 테스트 픽스처의 페이지가 틀 없이 선다 |
-| 에디터 메뉴 트리 «페이지 추가» | 요청에 `layout` 을 실어 보낸다 — 값은 「남은 결정」 «새 페이지의 레이아웃» |
+| 에디터 메뉴 트리 «페이지 추가» | 요청에 `layout: 'subpage'` 를 실어 보낸다(「정한 것」 1) |
 | «팝업 페이지 추가» | `popup` |
 
 API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만든 페이지가 테마의 GNB · LNB 를 얻으면 캔버스의 노드 좌표 · PPTX 그림 크기가 테마마다 바뀌어, 좌표로 판을 세우는 실브라우저 케이스와 화면 크기를 견주는 api 케이스가 한꺼번에 흔들린다. 사람이 고르는 입구(에디터)만 사람의 기본값을 싣는다.
@@ -86,7 +86,7 @@ API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만
 | 같은 파일 `newPageDocument(kind, title)` | 종류 | `newPageDocument(layout, title)` — `layout` 을 싣고 `popup` 이면 지금처럼 뿌리 `Popup` + 바닥 |
 | `packages/schema/src/validate.ts` 의 `ROOT_TYPES` | 뿌리가 `Page` · `Popup` | 그대로 + `layout-root-mismatch` |
 | `packages/schema/src/page-view.ts` 의 `pageView` | `pageKindOf` | 그대로(판정이 바뀐다) + `layout` 칸 |
-| `packages/schema/src/lint/design.ts` | `pageKindOf` — `modal-target-not-popup` · `navigate` 가 팝업을 가리킴 · 화면의 `closeModal` | 그대로(판정이 바뀐다). 규칙 문장은 «팝업 페이지» → «팝업 레이아웃 페이지» 로 고칠지 「남은 결정」 밖 — 문장은 그대로 둔다 |
+| `packages/schema/src/lint/design.ts` | `pageKindOf` — `modal-target-not-popup` · `navigate` 가 팝업을 가리킴 · 화면의 `closeModal` | 그대로(판정이 바뀐다). 규칙 문장(«팝업 페이지»)은 그대로 둔다 |
 | `packages/renderer/src/popup-layer.tsx` 의 `isPopupDocument` | 뿌리 타입 | `doc.layout === 'popup'`(검증 전 문서는 `pageKindOf` 와 같은 꼴로 견딘다). 팝업 문서를 얻는 곳(캔버스 `canvas-popups.tsx` · 번들 `exporter/src/bundle/index.ts` · 런타임 `exporter/src/browser/mount.tsx`)이 이것을 부른다 |
 | `apps/api/src/services/menu-tree.ts` 의 `buildMenuTree` · `repos/pages.ts` 의 `listPageRows` | `schema->'root'->>'type'` | `schema->>'layout'` · 응답에 `layout` |
 | `apps/api/src/services/export-bundle.ts` · `export-pptx.ts` | `pageKindOf` | 그대로(판정이 바뀐다) |
@@ -338,7 +338,7 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 
 - 번들 장을 화면 모드로 찍으므로 틀이 다 켠 채로 함께 찍힌다.
 - 팝업 레이아웃 장은 지금처럼 **상자만** 찍는다 — 캡처 판(`html[data-wb-capture]`)에서 막을 안 그린다(`packages/theme-sdk/src/capture.ts` 의 캡처 규칙 자리).
-- **서브페이지 장의 캡처 폭은 「남은 결정」 이다** — 지금 캡처 뷰포트는 720(`VIEWPORT`)이라 LNB 240 을 빼면 내용 칸이 480 남짓이고 폼 표 · 그리드가 좁은 꼴로 접힌다.
+- **서브페이지 장도 캡처 폭 720(`VIEWPORT`)으로 찍는다**(「정한 것」 3) — LNB 240 을 빼면 내용 칸이 480 남짓이라 폼 표 · 그리드는 좁은 꼴로 접힌 채 실린다. 크기 상한(`maxArea`)도 그대로다.
 
 ### 좌표 · 크기가 바뀌는 판
 
@@ -346,7 +346,7 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 |---|---|
 | 캔버스 노드 상자 · 코멘트 번호 · 외곽선 | 서브페이지면 틀만큼 아래 · 오른쪽으로 밀린다 — 저장된 좌표가 없어 데이터는 안 바뀐다. 마이그레이션이 옛 페이지를 `blank` 로 두고 API 기본값이 `blank` 라 기존 실브라우저 판은 그대로다 |
 | 캔버스 문서 높이(`canvas-iframe.tsx` 가 재는 iframe 높이) | 틀만큼 커진다 |
-| 번들 장 · PPTX 그림 크기 | 서브페이지 장은 틀만큼 크다(캡처 폭은 「남은 결정」) |
+| 번들 장 · PPTX 그림 크기 | 서브페이지 장은 틀만큼 크다(PPTX 캡처 폭은 720 그대로 — 높이만 는다) |
 | 팝업 장 | 캔버스 · 번들은 뷰포트 폭의 막 위 가운데 · PPTX 는 상자만(그대로) |
 
 ---
@@ -387,12 +387,10 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 
 ---
 
-## 남은 결정
+## 정한 것 — 레이아웃 갈래
 
-사용자에게 물을 것만 모았다. 각각 권하는 값이 있고, 답이 없으면 계획은 그 값으로 간다.
-
-1. **새 페이지의 레이아웃** — 에디터 «페이지 추가» 가 실을 값. **권함: `subpage`**(이 기능의 주 쓰임이고 lms-skala 꼴 설계서의 기본 화면). 다른 길: `blank`(옛 화면과 같은 꼴로 시작) · 프로젝트마다 기본값을 두는 설정(설정 화면 · 칼럼이 는다). API 기본값은 이 결정과 무관하게 `blank` 다(「모델」 의 «기본값»).
-2. **옛 화면 페이지를 한꺼번에 서브페이지로** — 마이그레이션은 옛 페이지를 `blank` 로 둔다. SKALA 처럼 이미 페이지마다 제목 · 브레드크럼브를 노드로 그린 설계서(시안 항목 14)는 페이지마다 바꾸고 그 노드를 걷어야 한다. **권함: 일괄 입구를 만들지 않는다** — 페이지마다 «레이아웃» 을 바꾸고(에이전트는 `patch_page` 로 `/layout`), 일괄은 쓰임을 보고 메뉴 줄 행동으로 더한다. 다른 길: 메뉴 줄 «…» 에 «하위 페이지 레이아웃 바꾸기».
-3. **PPTX 의 서브페이지 캡처 폭** — 캡처 뷰포트 720 에서 LNB 240 을 빼면 내용이 480 남짓이다. **권함: 서브페이지 장만 캡처 폭을 1280(에디터 기본 뷰포트)으로 찍고 슬라이드 상자에 줄여 싣는다** — 크기 상한(`maxArea`)은 같은 높이 예산으로 폭에 맞춰 늘린다. 다른 길: 720 그대로(좁은 꼴로 접힌 화면이 실린다) · PPTX 만 GNB · LNB 를 빼고 찍기(정해진 것 3 «늘 전부 켠 상태» 와 어긋난다).
-4. **메뉴 숨김** — lms-skala 는 숨긴 메뉴를 GNB · LNB 에서 빼고 브레드크럼브에는 남긴다. wirebound 메뉴에는 숨김 표지가 없다. **권함: 이 차례에는 두지 않는다**(모든 메뉴가 선다). 다른 길: `menu_nodes.hidden` 칼럼 + 메뉴 줄 «GNB · LNB 에서 숨김» — 메뉴 쓰기 · 스냅샷 payload 가 함께 는다.
-5. **«즐겨찾기» 탭 · LNB 접기 손잡이** — lms-skala LNB 의 탭(메뉴 / 즐겨찾기)과 접기 손잡이를 설계서 데이터로 둘지. **권함: 테마가 그림으로만 그린다**(즐겨찾기 탭은 고정 글 · 접기는 모양만) — 즐겨찾기 목록을 데이터로 두면 사람마다의 값이 생겨 표시 옵션과 다른 저장이 는다.
+1. **새 페이지의 레이아웃** — 에디터 «페이지 추가» 는 `subpage` 를 싣는다(이 기능의 주 쓰임이고 lms-skala 꼴 설계서의 기본 화면). API 기본값은 이와 무관하게 `blank` 다(「모델」 의 «기본값»).
+2. **옛 화면 페이지를 한꺼번에 서브페이지로 바꾸는 입구는 두지 않는다** — 마이그레이션은 옛 페이지를 `blank` 로 두고, 사람은 페이지마다 «레이아웃» 을 바꾼다(에이전트는 `patch_page` 로 `/layout`). 이미 페이지마다 제목 · 브레드크럼브를 노드로 그린 설계서(시안 항목 14)는 그 노드를 함께 걷는다.
+3. **PPTX 의 서브페이지 캡처 폭은 720 그대로다** — 캡처 뷰포트(`VIEWPORT`)와 크기 상한(`maxArea`)을 서브페이지 장이라고 바꾸지 않는다. 내용 칸이 480 남짓이라 폼 표 · 그리드는 좁은 꼴로 접힌 채 실린다. GNB · LNB 를 빼고 찍지 않는다(«정해진 것» 3 — 늘 전부 켠 상태).
+4. **메뉴 숨김을 두지 않는다** — 모든 메뉴가 GNB · LNB 에 선다(`menu_nodes` 에 숨김 칸이 없다).
+5. **«즐겨찾기» 탭 · LNB 접기 손잡이는 테마가 그림으로만 그린다** — 즐겨찾기 탭은 고정 글 · 접기는 모양만이다. 즐겨찾기 목록을 데이터로 두지 않는다.

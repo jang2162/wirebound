@@ -97,6 +97,14 @@ declare const documentKind: unique symbol
  */
 export interface PageDocument {
   version: number
+  /**
+   * 페이지 내용을 감싸는 틀(`PAGE_LAYOUTS` — 빈 · 팝업 · 서브페이지). 틀은 테마가 그린다. **판 7 문서에는 늘 있다** — 봉투(`envelope.ts` 의
+   * `PageEnvelopeSchema`)가 판 7 이상에서 없는 값 · 모르는 값을 거절한다. 타입이 선택인 까닭은 판 6 이하 문서(마이그레이션 전 입력)도 이
+   * 타입으로 들기 때문이다 — 그 문서의 레이아웃은 `migrate-page-layout.ts` 의 판 6 규칙으로 읽는다(`pageLayoutOf`).
+   * 팝업 레이아웃 ⇔ 뿌리 `Popup` 이다(`validate.ts` 의 `layout-root-mismatch`). 루트 노드가 아니라 문서에 두는 까닭은 `viewStates` 와 같다 —
+   * `/layout` 편집이 노드 잠금에 막히지 않는다.
+   */
+  layout?: PageLayout
   root: WbNode
   /**
    * 화면 상태 목록(설계서 「페이지 스키마 노드」의 화면 상태). 없거나 비면 상태가 없는 페이지다 — «기본»은 목록에 없고 늘 있다.
@@ -107,6 +115,12 @@ export interface PageDocument {
   viewStates?: ViewState[]
   readonly [documentKind]?: 'page'
 }
+
+/** 페이지 레이아웃 — 페이지 내용을 감싸는 틀. 셋으로 고정이다. */
+export type PageLayout = 'blank' | 'popup' | 'subpage'
+
+/** 레이아웃 값 셋 — 봉투가 이 목록 밖의 값을 거절한다. */
+export const PAGE_LAYOUTS: readonly PageLayout[] = ['blank', 'popup', 'subpage']
 
 /**
  * 화면 상태 하나. `id`는 노드 id 와 같은 규칙으로 화면이 짓고 이름을 바꿔도 그대로다 — 노드 보임(`NodeVisibility.states`)이 가리키는

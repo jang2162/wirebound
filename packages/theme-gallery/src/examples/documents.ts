@@ -48,7 +48,11 @@ const field = (id: string, label: string, pieces: WbNode[], extra: Partial<WbNod
 }
 const options = (labels: readonly string[], selected?: string) =>
   labels.map((label) => (label === selected ? { label, selected: true } : { label }))
-const page = (id: string, children: WbNode[]): PageDocument => ({ version: CURRENT_DOCUMENT_VERSION, root: { id, type: 'Page', children } })
+const page = (id: string, children: WbNode[]): PageDocument => ({
+  version: CURRENT_DOCUMENT_VERSION,
+  layout: 'blank',
+  root: { id, type: 'Page', children },
+})
 
 /** 주문 한 줄 — 목록 · 대시보드의 표가 쓴다. */
 interface OrderRow {
@@ -431,6 +435,7 @@ const orderForm = page('ex-of', [
 
 const deletePopup: PageDocument = {
   version: CURRENT_DOCUMENT_VERSION,
+  layout: 'popup',
   root: {
     id: 'ex-pd',
     type: 'Popup',

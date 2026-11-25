@@ -18,6 +18,7 @@ beforeAll(installCatalog)
 function doc(piece: Record<string, unknown>): PageDocument {
   return {
     version: CURRENT_DOCUMENT_VERSION,
+    layout: 'blank',
     root: {
       id: 'n_root',
       type: 'Page',

@@ -25,6 +25,7 @@ import {
   CATALOG_DEFS,
   COMPONENT_GROUPS,
   CURRENT_DOCUMENT_VERSION,
+  PAGE_LAYOUTS,
   DEFAULT_VIEW_STATE,
   InteractionSchema,
   MAX_OPS_PER_EDIT,
@@ -129,7 +130,8 @@ const NODE_FIELDS: Record<string, string> = {
 /** 페이지 문서 필드 → 영어 한 줄. 키가 `PageEnvelopeSchema` 의 키와 같아야 한다. */
 const PAGE_FIELDS: Record<string, string> = {
   version: `Document format version. The server stores and returns version ${CURRENT_DOCUMENT_VERSION}.`,
-  root: 'The root node — a `Page` (a screen) or a `Popup` (a popup page). A page’s kind is its root type.',
+  layout: `The frame around the page content — one of ${PAGE_LAYOUTS.map((layout) => `\`${layout}\``).join(', ')} (the theme draws it; \`subpage\` adds the menu bars, breadcrumb and page title). Required. \`popup\` pairs with a \`Popup\` root and the others with a \`Page\` root — change both in one patch.`,
+  root: 'The root node — a `Page` (blank or subpage layout) or a `Popup` (popup layout). Whether a page is a popup is its `layout`.',
   viewStates: `Optional named screen states (\`{ id, name, parent?, description? }\`), at most ${VIEW_STATES_MAX}, names 1–${VIEW_STATE_NAME_MAX} characters, nesting at most ${VIEW_STATE_DEPTH_MAX} deep, \`description\` free text up to ${VIEW_STATE_DESCRIPTION_MAX} characters (omit it rather than send a blank one). Nodes refer to them from \`visibility\`.`,
 }
 

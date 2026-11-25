@@ -86,7 +86,9 @@ describe('프리셋 — 카탈로그', () => {
             ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
           }
         }
-        expect(validatePage({ version: CURRENT_DOCUMENT_VERSION, root: { id: 'root', type: 'Page', children: [placed] } })).toEqual([])
+        expect(
+          validatePage({ version: CURRENT_DOCUMENT_VERSION, layout: 'blank', root: { id: 'root', type: 'Page', children: [placed] } }),
+        ).toEqual([])
         checked += 1
       }
     }

@@ -2,9 +2,11 @@ import { z } from 'zod'
 import { hasRejectedAliasChar, isBlankAlias } from './alias'
 import { CodeKeySchema, CodeValueSchema } from './codes'
 import { BODY_ZONE, ZONE_NAME_PATTERN } from './component/define'
+import { CURRENT_DOCUMENT_VERSION } from './migrate'
 import {
   DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
+  PAGE_LAYOUTS,
   VIEW_STATE_DEPTH_MAX,
   VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
@@ -14,6 +16,7 @@ import {
   type CodeRef,
   type Interaction,
   type NodeVisibility,
+  type PageLayout,
   type ViewState,
   type WbNode,
 } from './node'
@@ -285,9 +288,30 @@ export const ViewStatesSchema: z.ZodType<ViewState[]> = z
     })
   })
 
-/** 페이지 문서의 봉투 — 레이아웃 봉투(`DocumentEnvelopeSchema`)에 상태 목록을 더한 것. 저장 경계 · 가져오기 · 스냅샷이 쓴다. */
-export const PageEnvelopeSchema: z.ZodType<{ version: number; root: WbNode; viewStates?: ViewState[] }> = z.strictObject({
-  version: z.int().positive(),
-  root: WbNodeSchema,
-  viewStates: ViewStatesSchema.optional(),
-})
+/** 페이지 레이아웃(`PageDocument.layout`)이 문서에 늘 있는 첫 판. */
+export const PAGE_LAYOUT_SINCE_VERSION = 7
+
+/**
+ * 페이지 문서의 봉투 — 레이아웃 봉투(`DocumentEnvelopeSchema`)에 상태 목록 · 레이아웃을 더한 것. 저장 경계 · 가져오기 · 스냅샷이 쓴다.
+ *
+ * **`layout` 은 판 `PAGE_LAYOUT_SINCE_VERSION` ~ 지금 판(`CURRENT_DOCUMENT_VERSION`)에서 필수다.** 판 6 이하 문서(사슬이 아직 안 올린
+ * 입력 · 그 판으로 짓는 케이스 픽스처)는 키 없이 지난다 — 그 문서의 레이아웃은 판 6 규칙(`migrate-page-layout.ts` 의 `legacyPageLayout`)이
+ * 뿌리에서 읽는다. 지금보다 높은 판도 이 키로 거절하지 않는다 — 이 판이 그 판의 꼴을 모르고, 읽는 자리(CLI · MCP 의 덤프)는 그 문서를 «올릴 수
+ * 없다» 로 말하며 나머지 페이지를 계속 낸다. 모르는 값은 판과 무관하게 거절한다.
+ */
+export const PageEnvelopeSchema: z.ZodType<{ version: number; layout?: PageLayout; root: WbNode; viewStates?: ViewState[] }> = z
+  .strictObject({
+    version: z.int().positive(),
+    layout: z.enum(PAGE_LAYOUTS as [PageLayout, ...PageLayout[]]).optional(),
+    root: WbNodeSchema,
+    viewStates: ViewStatesSchema.optional(),
+  })
+  .superRefine((doc, ctx) => {
+    if (doc.version >= PAGE_LAYOUT_SINCE_VERSION && doc.version <= CURRENT_DOCUMENT_VERSION && doc.layout === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['layout'],
+        message: `판 ${PAGE_LAYOUT_SINCE_VERSION} 이상의 페이지 문서에는 layout 이 있어야 합니다`,
+      })
+    }
+  })

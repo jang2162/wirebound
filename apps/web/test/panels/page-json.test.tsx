@@ -56,6 +56,7 @@ function pageDetail(id: string, title: string): PageDetail {
     headSeq: 1,
     schema: {
       version: CURRENT_DOCUMENT_VERSION,
+      layout: 'blank',
       root: { id: 'n_00000000000a', type: 'Page', children: [{ id: 'n_00000000000b', type: 'DataGrid', marker: 1 }] },
     },
   }
@@ -78,6 +79,7 @@ function file(patch: Partial<PageJson> = {}): PageJson {
     page: { title: '가져온 목록', description: null },
     schema: {
       version: CURRENT_DOCUMENT_VERSION,
+      layout: 'blank',
       root: { id: 'file_root', type: 'Page', children: [{ id: 'file_list', type: 'DataGrid' }] },
     },
     comments: [{ nodeId: 'file_list', body: '가' }],
@@ -373,6 +375,7 @@ function warnedFile(): PageJson {
   return file({
     schema: {
       version: CURRENT_DOCUMENT_VERSION,
+      layout: 'blank',
       root: {
         id: 'file_root',
         type: 'Page',
@@ -403,6 +406,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
         file({
           schema: {
             version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
             root: { id: 'file_root', type: 'Page', children: [{ id: 'file_odd', type: '없는타입' }] },
           },
           comments: [],
@@ -423,6 +427,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
         page: { title: '옛 페이지' },
         document: {
           version: CURRENT_DOCUMENT_VERSION,
+          layout: 'blank',
           root: {
             id: 'n_oldroot0001',
             type: 'Page',
@@ -454,6 +459,7 @@ describe('미리보기가 서버와 같은 게이트를 지난다', () => {
         file({
           schema: {
             version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
             root: {
               id: 'file_root',
               type: 'Page',

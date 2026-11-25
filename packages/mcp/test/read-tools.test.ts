@@ -99,6 +99,7 @@ describe('get_page — 무엇을 싣나', () => {
         'id',
         'interactions',
         'kind',
+        'layout',
         'menuPath',
         'nodeCount',
         'nodes',
