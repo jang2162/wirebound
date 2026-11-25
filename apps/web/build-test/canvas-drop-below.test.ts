@@ -487,7 +487,8 @@ describe.skipIf(!전제.ok)('문서 아래 바탕에 놓기 — 실브라우저'
       const gapHeights = [1, 2, 3, 4].map((i) => boxesById[`n_g${i + 1}`]!.y - (boxesById[`n_g${i}`]!.y + boxesById[`n_g${i}`]!.height))
       await page.mouse.up()
       expect({
-        gapsExist: gapHeights.every((h) => h >= 8),
+        // 화면 px 라 열린 배율(폭 맞춤 — 창 1440 · 우측 기본 346 에서 60%)을 따른다. 위 · 가운데 · 아래 세 점이 갈릴 만큼이면 된다.
+        gapsExist: gapHeights.every((h) => h >= 6),
         pairs: samples.map((sample) => `${sample.gap} ${sample.shown.join()}`),
       }).toEqual({
         gapsExist: true,

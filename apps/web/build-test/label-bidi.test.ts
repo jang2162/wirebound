@@ -159,7 +159,7 @@ describe.skipIf(!전제.ok)('라벨 · 선택지 이름의 방향 제어 글자 
     try {
       await a.page.getByRole('tab', { name: '상호작용' }).click()
       // 고른 노드가 없으면 편집 칸 대신 페이지 전체 문장 목록이 선다.
-      const item = a.page.locator('li.wb-shell-interaction-sentence').first()
+      const item = a.page.locator('.wb-shell-interaction-list .wb-shell-interaction-sentence').first()
       await item.waitFor()
       const sentence = piecesInOrder(await glyphsOf(item), ['①', HOSTILE, '클릭', '②', '저장'])
       expect(

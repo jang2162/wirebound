@@ -317,6 +317,8 @@ describe('일괄 속성', () => {
 
     const content = field('내용') as HTMLInputElement
     expect({ value: content.value, placeholder: content.getAttribute('placeholder') }).toEqual({ value: '', placeholder: '여러 값' })
+    // 여럿을 고른 판도 한 노드의 판과 같은 묶음이다(`src/panels/prop-groups.ts`) — Text 는 내용(«내용») · 표시(«역할»).
+    expect([...document.body.querySelectorAll('.wb-shell-prop-group-toggle')].map((button) => button.textContent)).toEqual(['내용', '표시'])
 
     fireEvent.change(content, { target: { value: '같게' } })
     fireEvent.blur(content)

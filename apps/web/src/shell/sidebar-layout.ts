@@ -15,7 +15,7 @@
  *
  * 좌측에 하나만 두면 나머지 한쪽이 고쳐지지 않는다. 위 실측의 고장이 **둘**이기 때문이다:
  * 폭이 좁은 것과 배분이 내용과 무관한 것은 서로 다른 원인이고 한쪽을 고쳐도 다른 쪽이
- * 남는다. **우측 패널도 폭을 사람이 정한다**(기본 · 최소 300px — `PANEL_WIDTH_DEFAULT`) — 속성 · 상호작용 칸이 좁을 때 넓힐 길이다.
+ * 남는다. **우측 패널도 폭을 사람이 정한다**(기본은 창의 24% 를 300 ~ 380px 로 자른 값 · 최소 300px — `panelWidthDefault`) — 속성 · 상호작용 칸이 좁을 때 넓힐 길이다.
  *
  * ## 두 폭은 한 예산을 나눠 쓴다
  *
@@ -166,8 +166,20 @@ export interface PanelFolds {
 
 const UNFOLDED: PanelFolds = { side: false, panel: false }
 
-/** 우측 패널 기본 폭(px) — 격자의 넷째 칸이 고정이던 때의 값 그대로다. 좌측과 같이 `.wb-shell-panel`의 인라인 `width`로 붙는다. */
-export const PANEL_WIDTH_DEFAULT = 300
+/**
+ * 우측 패널 기본 폭(px) — **창 폭의 24% 를 `PANEL_WIDTH_MIN` ~ `PANEL_WIDTH_DEFAULT_MAX` 로 자른 값**(창 1280 → 307 · 1440 → 346 · 1920 →
+ * 380). 넓은 창은 칸 · 상호작용 문장에 폭을 더 주고, 캔버스 몫은 창의 4분의 3 남짓으로 남긴다. 사람이 끌어 둔 폭(저장값)이 이기고, 저장값이 없는
+ * 동안은 창을 따라간다. 좌측과 같이 `.wb-shell-panel`의 인라인 `width`로 붙는다.
+ */
+export function panelWidthDefault(shellWidth: number): number {
+  return clamp(Math.round(shellWidth * PANEL_WIDTH_DEFAULT_RATIO), PANEL_WIDTH_MIN, PANEL_WIDTH_DEFAULT_MAX)
+}
+
+/** 기본 폭이 창에서 차지하는 몫(`panelWidthDefault`). */
+export const PANEL_WIDTH_DEFAULT_RATIO = 0.24
+
+/** 기본 폭의 상한(px) — 그보다 넓은 패널은 사람이 끌어 정한다. */
+export const PANEL_WIDTH_DEFAULT_MAX = 380
 
 /** 우측 패널 최소 폭(px). 속성 패널의 라벨(96px)과 칸이 한 줄에 서는 폭이 기본값이라 그 아래로 줄이지 않는다. */
 export const PANEL_WIDTH_MIN = 300
@@ -710,7 +722,7 @@ export function useSidebarLayout(): SidebarLayout {
   const folds: PanelFolds = { side: stored.sideFolded === true, panel: stored.panelFolded === true }
   const { side: sideWidth, panel: panelWidth } = fitWidths(
     stored.sideWidth ?? SIDE_WIDTH_DEFAULT,
-    stored.panelWidth ?? PANEL_WIDTH_DEFAULT,
+    stored.panelWidth ?? panelWidthDefault(shellWidth),
     shellWidth,
     folds,
   )
@@ -739,7 +751,12 @@ export function useSidebarLayout(): SidebarLayout {
     panelWidthMax: panelWidthMax(shellWidth, sideWidth, folds),
     grabPanelWidth: () => panelWidth,
     setPanelWidth: (width) => setStored((prev) => ({ ...prev, panelWidth: clampPanelWidth(width, shellWidth, sideWidth, folds) })),
-    resetPanelWidth: () => setStored((prev) => ({ ...prev, panelWidth: PANEL_WIDTH_DEFAULT })),
+    // 기본값으로 되돌리기는 저장값을 지운다 — 창을 따라가는 기본 폭(`panelWidthDefault`)으로 돌아간다.
+    resetPanelWidth: () =>
+      setStored((prev) => {
+        const { panelWidth: _dropped, ...rest } = prev
+        return rest
+      }),
     regionRatio,
     regionRatioMin: regionRatioMin(metrics.shared),
     regionGrow: regionGrow(regionRatio, metrics),

@@ -337,7 +337,8 @@ function namesHolder(): boolean {
  * 추가·삭제는 즉시 커밋이라 칸만 꺼도 그 둘로 값이 그대로 나간다.
  */
 function widgets(): HTMLElement[] {
-  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button')]
+  // 세그먼트 단추(`.wb-shell-segment` — 넷 이하 선택지의 고르개)도 위젯이다 — 잠기면 함께 꺼져야 한다.
+  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button, .wb-shell-segment')]
 }
 
 function disabledOf(elements: HTMLElement[]): boolean[] {
@@ -680,9 +681,8 @@ describe('안 막는다 — 서버가 통과시킬 것은 그대로 나간다', 
     await settle()
 
     expect(allWidgetsOff()).toBe(false)
-    fireEvent.change(within(panel()).getByLabelText<HTMLSelectElement>('방향'), {
-      target: { value: 'vertical' },
-    })
+    // «방향»(선택지 둘)은 세그먼트 단추다(`src/panels/controls/select-control.tsx`).
+    fireEvent.click(within(within(panel()).getByRole('radiogroup', { name: '방향' })).getByRole('radio', { name: 'vertical' }))
     await waitFor(() => expect(view.calls).toHaveLength(1))
     expect(view.status).toEqual([200])
   })
@@ -799,9 +799,15 @@ function openTab(name: string): void {
  */
 function panelControls(): HTMLElement[] {
   return [...body().querySelectorAll<HTMLElement>('input, textarea, select, button')].filter(
-    (element) => element.getAttribute('role') !== 'tab',
+    (element) => element.getAttribute('role') !== 'tab' && !NAVIGATION.some((selector) => element.matches(selector)),
   )
 }
+
+/**
+ * 편집이 아니라 보기의 이동인 단추 — 탭처럼 잠금과 무관하게 산다. «이 페이지의 상호작용» 줄(그 노드를 고른다 — `src/panels/interaction-panel.tsx`)과
+ * 머리 카드의 위치 사슬(`src/panels/node-head.tsx` — 고를 수 없는 조상은 스토어의 고르기 판정으로 따로 꺼진다).
+ */
+const NAVIGATION = ['.wb-shell-interaction-row', '.wb-shell-node-head-crumb']
 
 /** 패널 안의 안내 줄들. */
 function panelNotices(): string[] {
@@ -921,6 +927,10 @@ describe('상호작용 탭도 같은 값으로 닫힌다 — 「스택 몰살」
     const tabs = within(panel()).getAllByRole<HTMLButtonElement>('tab')
     expect(tabs.length).toBeGreaterThan(1)
     expect(disabledOf(tabs)).toEqual(tabs.map(() => false))
+    // 목록 줄(그 노드로 가기)도 산다 — 잠긴 노드의 규칙을 읽으러 갈 길이다.
+    const rows = [...body().querySelectorAll<HTMLButtonElement>('.wb-shell-interaction-row')]
+    expect(rows.length).toBeGreaterThan(0)
+    expect(disabledOf(rows)).toEqual(rows.map(() => false))
   })
 
   it('잠긴 동안 도착한 blur는 여기서도 커밋이 아니다', async () => {

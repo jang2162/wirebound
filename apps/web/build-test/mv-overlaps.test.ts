@@ -14,7 +14,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MIN } from '../src/shell/sidebar-layout'
+import { PANEL_WIDTH_MIN, panelWidthDefault } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
@@ -298,8 +298,8 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
 
   // 900 은 캔버스가 최소 몫(`CANVAS_MIN_WIDTH`) 아래로 줄어드는 좁은 창이다 — 패널은 최소 폭에 머문다.
   it.each([1280, 1440, 900])('창 %i 의 우측 패널 기본 폭에서 탭 이름이 모두 한 줄이고 패널 안에 서며, 눌러 고를 수 있다', async (width) => {
-    // 카나리아 — 기본 폭이 곧 최소 폭이다(그보다 좁은 판이 없다).
-    expect(PANEL_WIDTH_DEFAULT).toBe(PANEL_WIDTH_MIN)
+    // 카나리아 — 900 은 기본 폭이 곧 최소 폭인 판이다(그보다 좁은 판이 없다).
+    if (width === 900) expect(panelWidthDefault(width)).toBe(PANEL_WIDTH_MIN)
     const P = await seed(`mv-tabs-${width}`, [{ id: 'm_first', type: 'Text', props: { content: '처음 글' } }])
     const opened = await open(P, width)
     const { page } = opened
@@ -307,7 +307,7 @@ describe.skipIf(!전제.ok)('트랙 겹침 — 실브라우저', () => {
       const seen = await measureTabs(page)
       // eslint-disable-next-line no-console
       console.log(`[탭 머리 ${width}] ${JSON.stringify(seen)}`)
-      expect(seen.panel).toBe(PANEL_WIDTH_DEFAULT)
+      expect(seen.panel).toBe(panelWidthDefault(width))
       expect(seen.tabs.map((t) => t.name)).toEqual(['페이지 정보', '컴포넌트', '코멘트', '상호작용'])
       expect({ 줄: seen.tabs.map((t) => t.lines), 탭줄: seen.rows, 넘침: seen.listOverflow, 패널안: seen.pastPanel <= 0 }).toEqual({
         줄: [1, 1, 1, 1],
