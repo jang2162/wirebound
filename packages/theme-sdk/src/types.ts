@@ -74,6 +74,7 @@ export interface LayoutNavItem {
   /** 메뉴 id 또는 페이지 id. */
   id: string
   kind: 'menu' | 'page'
+  /** 메뉴 · 페이지 이름 — 호스트가 방향 제어 글자를 가둬(`isolateBidi`) 내린다. 다른 글과 이어 그려도 이름 밖을 안 뒤집는다. */
   title: string
   /** 누르면 갈 페이지 — 페이지면 제 id, 메뉴면 그 아래 첫 화면 페이지, 없으면 `null`. `<LayoutLink>` 가 이것으로 링크인지 가른다. */
   pageId: string | null
@@ -84,7 +85,7 @@ export interface LayoutNavItem {
 
 export interface LayoutViewProps {
   layout: PageLayout
-  /** 페이지 이름 — 제목 영역이 쓴다. 팝업 제목(`Popup.title`)과 따로다. */
+  /** 페이지 이름 — 제목 영역이 쓴다. 팝업 제목(`Popup.title`)과 따로다. 항목 이름처럼 방향을 가둬 내린다. */
   title: string
   /** 메뉴 트리 뿌리들 — GNB. 항목마다 하위가 다 들어 있다. */
   gnb: readonly LayoutNavItem[]

@@ -13,7 +13,7 @@
  * 그리고, 뷰가 던지면 노드 뷰처럼 기본으로 대신 그리며 틀에 `data-wb-error` 를 단다(`wb-theme check` 의 폴백 셈이 줍는다).
  */
 import { Component, createElement, type ErrorInfo, type ReactElement, type ReactNode } from 'react'
-import type { LayoutNav, PageLayout as SchemaPageLayout } from '@wirebound/schema'
+import { isolateBidi, type LayoutNav, type PageLayout as SchemaPageLayout } from '@wirebound/schema'
 import {
   DEFAULT_LAYOUT_VIEWS,
   LayoutHostContext,
@@ -31,7 +31,7 @@ void LAYOUTS_AGREE
 export interface LayoutFrameProps {
   theme: ThemeDefinition
   layout: PageLayout
-  /** 페이지 이름 — 제목 영역이 쓴다. */
+  /** 페이지 이름 — 제목 영역이 쓴다. 뷰에는 `isolateBidi` 로 가둔 것을 내린다(내비 항목 이름과 같다 — `buildLayoutNav` 머리말). */
   title: string
   /** `buildLayoutNav` 의 결과. 팝업 레이아웃 · 빈 레이아웃도 같은 값을 넘긴다(뷰가 안 쓰면 그만이다). */
   nav: LayoutNav
@@ -69,7 +69,7 @@ export function LayoutFrame(props: LayoutFrameProps): ReactElement {
   const content = createElement('div', { 'data-wb-layout-content': '' }, props.children)
   const viewProps = {
     layout: props.layout,
-    title: props.title,
+    title: isolateBidi(props.title),
     gnb: props.nav.gnb,
     lnb: props.nav.lnb,
     trail: props.nav.trail,

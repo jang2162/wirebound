@@ -5,7 +5,7 @@
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { buildLayoutNav, installCatalog, type LayoutNavMenu, type PageDocument } from '@wirebound/schema'
+import { buildLayoutNav, installCatalog, isolateBidi, type LayoutNavMenu, type PageDocument } from '@wirebound/schema'
 import { CAPTURE_CSS, defaultViewsCss, LayoutLink, LayoutRegion, type LayoutView, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { LayoutFrame, layoutRegions, NO_THEME, renderDocument, type LayoutFrameProps } from '@wirebound/renderer'
 
@@ -124,6 +124,13 @@ describe('LayoutFrame', () => {
     expect(layoutRegions(theme(), 'subpage', ['gnb', 'nope'])).toEqual({ gnb: false, title: true })
     expect(layoutRegions(theme(), 'popup', ['gnb'])).toEqual({})
     expect(layoutRegions(NO_THEME, 'subpage')).toEqual({})
+  })
+
+  it('페이지 이름(title)은 방향을 가둬 뷰에 내린다 — 실 Chrome 판은 theme-kit build-test/layout-bidi.test.ts', () => {
+    const title = `주문${String.fromCharCode(0x202e)}AB`
+    const { container } = frame({ title })
+    expect(container.querySelector('h1')?.textContent).toBe(isolateBidi(title))
+    expect(container.querySelector('h1')?.textContent).not.toBe(title)
   })
 
   it('틀 링크의 누름은 navigate 로 간다', () => {
