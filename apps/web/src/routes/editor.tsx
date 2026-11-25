@@ -34,6 +34,7 @@ import { SignedOut, toFailure, type Failure } from '../api/failure'
 import type { PageDetail, ProjectView } from '../api/types'
 import { Canvas } from '../canvas/canvas'
 import { CanvasDocumentProvider } from '../canvas/canvas-document'
+import { LayoutMenuProvider } from '../canvas/layout-menu'
 import { PlacementRegionsProvider } from '../drag/use-placement'
 import { CommentPanel, useNodeComments } from '../panels/comment-panel'
 import { MenuTree } from '../panels/menu-tree'
@@ -91,6 +92,7 @@ import {
 import type { PendingEdit } from '../store/edit-queue'
 import { LOSS_RANK } from '../store/loss-notice'
 import { EditorStoreProvider, useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { ViewPrefsProvider } from '../store/use-view-prefs'
 
 /** 서버가 이유를 주지 않은 실패에 쓸 문장. */
 const UNKNOWN_FAILURE = '프로젝트를 불러오지 못했습니다'
@@ -540,7 +542,13 @@ export function EditorShellRoute(): ReactElement {
                 {/* **지금 고른 화면 상태**(`shell/use-view-state.ts`) — 사람 · 탭마다의 값이라 셸째 한 번 깔고(셸의 머리 `…` 도 읽는다), 페이지를
                 옮기면 기본으로 돌아간다. */}
                 <ModeViewStateProvider pageId={params.pageId}>
-                  <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
+                  {/* **레이아웃 틀의 두 입력**(설계 `2026-11-25-page-layout-design.md` 「캔버스」) — 트리 칸이 그린 메뉴 트리(`canvas/layout-menu.tsx`)와
+                  내가 끈 영역(`store/use-view-prefs.ts`). 쓰는 쪽(트리 칸 · 머리의 «보기»)과 읽는 쪽(캔버스)의 공통 조상이 셸이다. */}
+                  <LayoutMenuProvider>
+                    <ViewPrefsProvider projectId={state.project.id}>
+                      <EditorShell project={state.project} roleKnown={roleKnown} pageId={params.pageId} onMembership={onMembership} />
+                    </ViewPrefsProvider>
+                  </LayoutMenuProvider>
                 </ModeViewStateProvider>
               </PlacementRegionsProvider>
             </ProjectCommentIndexProvider>

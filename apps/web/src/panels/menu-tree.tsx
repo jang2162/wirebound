@@ -37,6 +37,7 @@ import { pageKindOf, type PageKind } from '@wirebound/schema'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import { SignedOut } from '../api/failure'
+import { usePublishLayoutMenu } from '../canvas/layout-menu'
 import { DropIndicator } from '../drag/drop-indicator'
 import { HOVER_OPEN_EVENT, hoverRow } from '../drag/hover-open'
 import { elementAt, scrollParent, usePointerDrag, type PointerDrag } from '../drag/use-pointer-drag'
@@ -318,6 +319,8 @@ export function MenuTree(props: {
   })
   // 끄는 사이 남의 변경으로 트리가 바뀌어 줄이 밀리면 표시를 마지막 좌표로 다시 묻는다 — 같은 부모의 줄이면 따라가고 다른 부모면 걷는다.
   const shownMenu = state.status === 'ready' ? state.menu : null
+  // 캔버스의 서브페이지 틀(GNB · LNB · 브레드크럼브)이 이 트리로 내비를 짓는다(`canvas/layout-menu.tsx`).
+  usePublishLayoutMenu(shownMenu)
   useLayoutEffect(() => {
     drag.refresh()
   }, [drag.refresh, shownMenu])

@@ -327,9 +327,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listAdminProjects: ['../src/admin/projects-section.tsx', '../src/admin/users-section.tsx'],
   transferProjectOwner: ['../src/admin/projects-section.tsx'],
   listAudit: ['../src/admin/audit-section.tsx'],
-  // 표시 옵션 — 에디터 머리의 «보기» 가 부를 자리다(설계 「에디터의 입구 — 머리의 «보기»」). 그 입구가 서기 전이라 부르는 자리가 없다.
-  getViewPrefs: [],
-  putViewPrefs: [],
+  // 표시 옵션 — 셸의 공급자(`store/use-view-prefs.ts`)가 열 때 읽고, 바꾸면(머리의 «보기» — 설계 「에디터의 입구 — 머리의 «보기»」) 보낸다.
+  getViewPrefs: ['../src/store/use-view-prefs.ts'],
+  putViewPrefs: ['../src/store/use-view-prefs.ts'],
   // 공통코드 — 셸의 표(`codes/project-codes.tsx`)와 공통코드 화면(`codes/codes-screen.tsx` — 표 · 사용 수 · 사용처 · 쓰기 여섯)이 부른다.
   listCodes: ['../src/codes/project-codes.tsx', '../src/codes/codes-screen.tsx'],
   createCodeGroup: ['../src/codes/codes-screen.tsx'],
