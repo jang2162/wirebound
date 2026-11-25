@@ -22,7 +22,6 @@ export default defineManifest({
       'color.text': { type: 'color', label: '글자색', group: 'color', default: '#0f172a' },
       'font.body': { type: 'font', label: '본문 글꼴', group: 'type', default: 'Pretendard, system-ui, sans-serif' },
       'radius.card': { type: 'length', label: '카드 모서리', group: 'shape', default: '8px' },
-      density: { type: 'select', label: '밀도', options: ['compact', 'comfortable'], default: 'comfortable' },
     },
   },
   components: {

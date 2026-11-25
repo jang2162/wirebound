@@ -42,6 +42,7 @@ npm run typecheck
 import { Focus, Root, useToken, view } from '@wirebound/theme-sdk'
 
 export const CardView = view(({ props, variant, states, children }) => {
+  // density 는 theme.config.ts 에 선언한 select 토큰이다(스타터에는 없다 — 선언만 하고 안 읽으면 wb-theme check 가 «안 쓰는 토큰» 으로 막는다).
   const density = useToken('density')
   return (
     <Root as="section" className={`card card--${density}`} marker={{ placement: 'top-end', offset: [4, -8] }}>
