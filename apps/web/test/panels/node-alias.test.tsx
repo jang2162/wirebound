@@ -178,13 +178,15 @@ const CARD = '/root/children/0/alias'
 const SAVE = '/root/children/0/children/0/alias'
 
 describe('속성 패널 «별칭» 칸', () => {
-  it('맨 아래 칸이다 — 고른 노드의 별칭을 보이고, 바꿔 떠나면 `replace` 하나를 보낸다', async () => {
+  it('머리 카드 안 첫 칸이다 — 고른 노드의 별칭을 보이고, 바꿔 떠나면 `replace` 하나를 보낸다', async () => {
     const b = await board()
     fireEvent.click(rowButton('n-card'))
 
     const rows = panel().querySelectorAll('.wb-shell-prop')
     expect(rows.length).toBeGreaterThan(1)
-    expect(rows[rows.length - 1]?.querySelector('.wb-shell-prop-label')?.textContent).toBe('별칭')
+    // 별칭 칸은 칸들 위 머리 카드(`src/panels/node-head.tsx`) 안이다 — 속성 칸 줄 가운데 첫째.
+    expect(rows[0]?.querySelector('.wb-shell-prop-label')?.textContent).toBe('별칭')
+    expect(rows[0]?.closest('.wb-shell-node-head')).not.toBeNull()
     expect(aliasField().value).toBe('회원 카드')
 
     fireEvent.change(aliasField(), { target: { value: '회원 정보 카드' } })
@@ -514,5 +516,57 @@ describe('입력을 연 노드가 문서에서 빠지면', () => {
 
     fireEvent.keyDown(input!, { key: 'Enter' })
     await waitFor(() => expect(b.calls).toEqual([[{ op: 'add', path: '/root/children/2/alias', value: '옮김 중' }]]))
+  })
+})
+
+/**
+ * **«컴포넌트» 탭의 머리 카드**(`src/panels/node-head.tsx`) — 제목 · 줄 요약 · 위치 사슬. 사슬 단추는 그 조상을 고르고(구조 트리 줄의 `aria-current`가
+ * 옮겨 간다), 남이 쥔 조상의 단추는 꺼진다. 단추의 접근 이름은 ««줄 이름» 고르기» 다 — 같은 이름의 구조 트리 줄과 갈린다.
+ */
+describe('머리 카드', () => {
+  function crumbs(): HTMLButtonElement[] {
+    return within(within(panel()).getByRole('navigation', { name: '고른 노드의 위치' })).getAllByRole('button')
+  }
+
+  function current(): string | null {
+    return (
+      structureRegion()
+        .querySelector('.wb-shell-structure-node[aria-current="true"]')
+        ?.closest('[data-tree-id]')
+        ?.getAttribute('data-tree-id') ?? null
+    )
+  }
+
+  it('제목은 «타입 (별칭)» · 곁에 줄 요약 · 위치는 뿌리부터 부모까지이고 누르면 그 조상을 고른다', async () => {
+    await board()
+    fireEvent.click(rowButton('n-save'))
+    const head = panel().querySelector('.wb-shell-node-head')!
+    expect({
+      제목: head.querySelector('h2')?.textContent,
+      배지: head.querySelector('.wb-shell-node-head-type')?.textContent,
+      요약: head.querySelector('.wb-shell-node-head-summary')?.textContent,
+      위치: crumbs().map((button) => button.getAttribute('aria-label')),
+    }).toEqual({ 제목: 'Button', 배지: 'Button', 요약: '저장', 위치: ['«Page» 고르기', '«Card (회원 카드) 회원» 고르기'] })
+
+    fireEvent.click(crumbs()[1]!)
+    await waitFor(() => expect(current()).toBe('n-card'))
+    expect(panel().querySelector('.wb-shell-node-head h2')?.textContent).toBe('Card (회원 카드)')
+    expect(crumbs().map((button) => button.getAttribute('aria-label'))).toEqual(['«Page» 고르기'])
+
+    fireEvent.click(crumbs()[0]!)
+    await waitFor(() => expect(current()).toBe('n-root'))
+    // 뿌리는 위치가 없다 — 사슬이 안 선다.
+    expect(within(panel()).queryByRole('navigation', { name: '고른 노드의 위치' })).toBeNull()
+  })
+
+  // 고를 수 없는 조상은 스토어의 고르기 판정과 같다(`useLockedBy`) — 남의 잠금을 품은 조상(뿌리)도 고를 수 없다.
+  it('고를 수 없는 조상(남의 잠금을 품은 뿌리)의 단추는 꺼지고 눌러도 고르지 않는다', async () => {
+    const b = await board()
+    fireEvent.click(rowButton('n-save'))
+    b.lock([{ pageId: PAGE_ID, nodeId: 'n-text', userId: 'u-bora', userName: '보라' }])
+    await waitFor(() => expect(crumbs()[0]!.disabled).toBe(true))
+    expect(crumbs()[1]!.disabled).toBe(false)
+    fireEvent.click(crumbs()[0]!)
+    expect(current()).toBe('n-save')
   })
 })

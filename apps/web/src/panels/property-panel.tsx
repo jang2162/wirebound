@@ -46,6 +46,8 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { useProjectTheme } from '../theme/project-theme'
 import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
 import { CodeBindingField, codeLockedProp } from './code-binding'
+import { ancestorsOf, NodeHead } from './node-head'
+import { useProjectCodes } from '../codes/project-codes'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
 // 통째로 지운다. 실측: 그 문서에서 **노드를 고르는 순간** `.wb-shell`이 DOM에서 사라진다 —
@@ -234,6 +236,8 @@ export function PropertyPanel(props: {
   const lockOf = useLockedBy()
   // 캔버스가 그리는 그 바인딩의 manifest(`theme/project-theme.tsx`). 아직 못 읽었으면 테마 없음 — variant 칸은 카탈로그 기본이다.
   const manifest = useProjectTheme().manifest ?? NO_THEME.manifest
+  /** 머리 카드의 줄 요약 · 위치 사슬이 공통코드에 묶인 노드를 표의 이름으로 부른다(구조 트리 줄과 같은 표). */
+  const codes = useProjectCodes().index
   /** 지금 상태 · 그 상태에서 숨은 노드 — «상태 보임» 칸이 «없음»에서 옮길 첫 상태와 «숨어 있다» 한 줄을 읽는다(`./visibility-field.tsx`). */
   const viewState = useViewState(props.pageId)
   const hiddenNodes = useHiddenNodes(props.pageId)
@@ -372,10 +376,53 @@ export function PropertyPanel(props: {
   // 아니라 **필드 단위** 결과라 노드 단위로 말하는 모양은 편집과 맞지 않는다.
   return (
     <>
-      <h2 className="wb-shell-panel-title">{nodeHeading(node)}</h2>
-      {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 별칭 칸은 어느 컴포넌트에나 서므로 위젯이 없는 판이 없다 —
-          편집할 속성이 없는 컴포넌트(`Page`·`Slot`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
-      {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
+      {/* **머리 카드** — 타입 · 별칭 · 위치 · 별칭 칸 · 꺼진 이유(`./node-head.tsx`). 꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다 — 별칭 칸은
+          어느 컴포넌트에나 서므로 위젯이 없는 판이 없다(편집할 속성이 없는 `Page` · `Slot` 도 꺼진 별칭 칸의 이유를 여기서 말한다). **별칭 칸은 칸들
+          위다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을 떠날 때 커밋하는 길은
+          글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
+      <NodeHead
+        node={node}
+        type={type}
+        ancestors={doc === null ? [] : ancestorsOf(doc.root, node.id)}
+        codes={codes}
+        pickBlocked={(nodeId) => lockOf(nodeId) !== null}
+        onPick={(nodeId) => store.selectNode(nodeId)}
+        notice={notice}
+      >
+        <div className="wb-shell-prop wb-shell-node-head-field" data-wb-node-alias="">
+          <div className="wb-shell-prop-label">
+            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
+              {ALIAS_FIELD.label}
+            </label>
+          </div>
+          <div className="wb-shell-prop-value">
+            <TextControl
+              key={node.id}
+              field={ALIAS_FIELD}
+              value={nodeAlias(node) ?? ''}
+              id={controlId(ALIAS_FIELD.prop)}
+              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
+              maxLength={NODE_ALIAS_MAX}
+              describedBy={`${controlId(ALIAS_FIELD.prop)}-note`}
+              disabled={blocked}
+              onCommit={(value) => {
+                if (blocked || doc === null) return
+                const ops = aliasOps(doc, node.id, String(value))
+                if (ops !== null) commitOps(ops)
+              }}
+              onLeave={(value) =>
+                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
+                  aliasOps(running, nodeId, String(value)),
+                )
+              }
+            />
+            {/* 한도는 칸 밖 안내다 — 빈 칸의 자리표(`placeholder`)로 두면 값처럼 읽혔다. */}
+            <p className="wb-shell-prop-note" id={`${controlId(ALIAS_FIELD.prop)}-note`}>
+              {aliasNote()}
+            </p>
+          </div>
+        </div>
+      </NodeHead>
       {fields.length === 0 && variantField === null ? (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
@@ -525,41 +572,6 @@ export function PropertyPanel(props: {
             }}
           />
         )}
-        {/* **별칭이 맨 아래다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을
-            떠날 때 커밋하는 길은 글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
-        <div className="wb-shell-prop" key={ALIAS_FIELD.prop} data-wb-node-alias="">
-          <dt className="wb-shell-prop-label">
-            <label id={`${controlId(ALIAS_FIELD.prop)}-label`} htmlFor={controlId(ALIAS_FIELD.prop)}>
-              {ALIAS_FIELD.label}
-            </label>
-          </dt>
-          <dd className="wb-shell-prop-value">
-            <TextControl
-              key={node.id}
-              field={ALIAS_FIELD}
-              value={nodeAlias(node) ?? ''}
-              id={controlId(ALIAS_FIELD.prop)}
-              // 61자째부터는 칸이 받지 않는다 — 안 막으면 떠날 때 `tidyAlias` 가 60자에서 말없이 잘라 저장했다.
-              maxLength={NODE_ALIAS_MAX}
-              describedBy={`${controlId(ALIAS_FIELD.prop)}-note`}
-              disabled={blocked}
-              onCommit={(value) => {
-                if (blocked || doc === null) return
-                const ops = aliasOps(doc, node.id, String(value))
-                if (ops !== null) commitOps(ops)
-              }}
-              onLeave={(value) =>
-                commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
-                  aliasOps(running, nodeId, String(value)),
-                )
-              }
-            />
-            {/* 한도는 칸 밖 안내다 — 빈 칸의 자리표(`placeholder`)로 두면 값처럼 읽혔다. */}
-            <p className="wb-shell-prop-note" id={`${controlId(ALIAS_FIELD.prop)}-note`}>
-              {aliasNote()}
-            </p>
-          </dd>
-        </div>
       </dl>
     </>
   )
@@ -792,14 +804,19 @@ function BulkProperties(props: {
 
   return (
     <>
-      <h2 className="wb-shell-panel-title">
-        {type} {nodes.length}개
-      </h2>
+      {/* 여럿을 고른 머리도 한 노드의 머리 카드와 같은 상자다 — 타입 배지 · 수 · 꺼진 이유. 위치 · 별칭은 노드마다라 없다. */}
+      <div className="wb-shell-node-head">
+        <h2 className="wb-shell-panel-title wb-shell-node-head-title">
+          {type} {nodes.length}개
+        </h2>
+        {notice !== null && fields.length + (variantField === null ? 0 : 1) > 0 && (
+          <p className="wb-shell-panel-notice wb-shell-node-head-notice">{notice}</p>
+        )}
+      </div>
       {fields.length === 0 && variantField === null ? (
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (
         <>
-          {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
           <dl className="wb-shell-props">
             {variantField !== null &&
               (() => {

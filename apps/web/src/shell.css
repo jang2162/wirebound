@@ -2150,6 +2150,17 @@
   color: var(--wb-shell-muted);
 }
 
+/* «속성» 묶음 이름은 눈에 안 보이고 접근 이름으로만 남는다 — 머리 카드가 무엇을 고쳤는지 말하고, 보조 기술 · 케이스는 «속성» 영역을 그 이름으로
+   찾는다(`region { name: '속성' }`). 감추는 꼴은 화면 밖 1px 상자다(`display: none` 이면 이름에서도 빠진다). */
+.wb-shell-component-part-title-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* 코멘트 탭. 새 코멘트 폼과 무리 목록이 세로로 쌓인다. */
 .wb-shell-comments {
   display: flex;
@@ -2468,6 +2479,106 @@
   margin: 0;
   font-size: 13px;
   color: var(--wb-shell-muted);
+}
+
+/* «컴포넌트» 탭의 머리 카드(`panels/node-head.tsx`) — 타입 배지 · 별칭 · 줄 요약 · 위치 사슬 · 별칭 칸 · 꺼진 이유. 칸들과 갈라 보이게 옅은 바탕의 상자다. */
+.wb-shell-node-head {
+  margin: 0 0 10px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-node-head-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 제목(`h2`)은 머리 줄 안이라 아래 여백을 줄이 갖는다. */
+.wb-shell-node-head-title {
+  margin: 0;
+}
+
+.wb-shell-node-head-type {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: #e6eefd;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--wb-shell-accent);
+}
+
+.wb-shell-node-head-alias {
+  overflow-wrap: anywhere;
+}
+
+/* 줄 요약(구조 트리 줄의 꼬리) — 사람 글이라 어디서든 접는다. */
+.wb-shell-node-head-summary {
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* 위치 사슬 — 조상마다 단추 하나 · 사이에 «›». 긴 이름은 단추마다 줄임표로 자른다(전체는 `title`). */
+.wb-shell-node-head-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-node-head-step {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.wb-shell-node-head-sep {
+  padding: 0 2px;
+}
+
+.wb-shell-node-head-crumb {
+  appearance: none;
+  max-width: 160px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 3px;
+  padding: 1px 3px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.wb-shell-node-head-crumb:hover {
+  color: var(--wb-shell-accent);
+  text-decoration: underline;
+}
+
+.wb-shell-node-head-crumb:disabled {
+  color: var(--wb-shell-muted);
+  text-decoration: none;
+  cursor: default;
+}
+
+/* 머리 안의 별칭 칸 — 칸 줄(`.wb-shell-prop`)의 꼴을 쓰되 상자 안이라 밑금이 없다. */
+.wb-shell-node-head-field {
+  margin-top: 6px;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.wb-shell-node-head-notice {
+  margin-top: 6px;
 }
 
 .wb-shell-props {
