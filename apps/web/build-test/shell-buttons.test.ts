@@ -158,4 +158,41 @@ describe.skipIf(!전제.ok)('셸 단추의 두 높이 — 실브라우저', () =
     // eslint-disable-next-line no-console
     console.log(`[shell-buttons 판 줄] ${JSON.stringify(log)}`)
   })
+  /**
+   * 프로젝트 목록 위 줄 — 검색 · 역할 · 정렬 칸이 한 높이(`--wb-shell-button-md`)다. 같은 줄의 카드는 설명이 없어도 바닥 줄(슬러그 · 단추)이 설명 있는
+   * 카드와 같은 높이에 선다 — 설명 없는 카드의 빈자리는 빈 줄이 아니라 같은 줄 카드의 높이에 맞춘 늘임이다(창 390 의 한 줄 하나에서는 안 남는다).
+   */
+  it('프로젝트 목록 — 위 줄 칸 셋이 한 높이 · 같은 줄 카드의 바닥 줄이 같은 높이(창 1280)', async () => {
+    await stack.request(alice, 'POST', '/projects', {
+      name: '설명 있음',
+      slug: `described-${Date.now().toString(36)}`,
+      description: '설명 한 줄',
+    })
+    const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1280, height: 900 } })
+    try {
+      await page.goto('/')
+      await page.getByRole('link', { name: '설명 있음 열기' }).waitFor()
+      const got = await page.evaluate(() => {
+        const root = document.querySelector('.wb-shell-workspace')!
+        const md = parseFloat(getComputedStyle(root).getPropertyValue('--wb-shell-button-md'))
+        const controls = [...document.querySelectorAll('.wb-shell-home-bar input, .wb-shell-home-bar select')].map(
+          (el) => el.getBoundingClientRect().height,
+        )
+        const cards = [...document.querySelectorAll('.wb-shell-home-card:not(.wb-shell-home-add)')].map((card) => ({
+          top: card.getBoundingClientRect().top,
+          described: card.querySelector('.wb-shell-home-desc') !== null,
+          actions: card.querySelector('.wb-shell-home-actions')!.getBoundingClientRect().top,
+        }))
+        return { md, controls, cards }
+      })
+      // 판 카나리아 — 칸 셋 · 같은 줄에 설명 있는 카드와 없는 카드.
+      expect(got.controls).toHaveLength(3)
+      const row = got.cards.filter((card) => card.top === got.cards[0]!.top)
+      expect(new Set(row.map((card) => card.described))).toEqual(new Set([true, false]))
+      expect(got.controls).toEqual([got.md, got.md, got.md])
+      expect(new Set(row.map((card) => card.actions)).size).toBe(1)
+    } finally {
+      await context.close()
+    }
+  })
 })

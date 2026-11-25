@@ -3524,6 +3524,12 @@
   color: var(--wb-shell-muted);
 }
 
+/* 위 줄의 칸 셋(검색 · 역할 · 정렬) — 한 높이. 같은 클래스(`-project-input`)여도 네이티브 `<select>` 는 글 칸보다 2px 높게 선다(Chrome).
+   `<select>` 는 네이티브 그대로 둔다(키보드 · 화면 읽기 · 기존 케이스) — 높이만 정한다. 높이는 셸 보통 단추와 같다(«셸 단추의 두 높이»). */
+.wb-shell-home-control {
+  height: var(--wb-shell-button-md);
+}
+
 /* 프로젝트 수 — 제목 곁(`.wb-shell-workspace-title-note` 안 · `routes/project-list.tsx`). */
 .wb-shell-home-count {
   font-size: 14px;
