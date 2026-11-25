@@ -171,6 +171,10 @@ Shadow DOM 은 CSS 는 가르지만 `@media` 가 창 폭으로 판정되는 문�
 
   "patterns": {
     "hero.split": { "name": "히어로 — 좌우 분할", "slots": { "…": "…" }, "schema": { "…": "…" } }
+  },
+
+  "layouts": {
+    "subpage": { "regions": [{ "id": "gnb", "label": "GNB" }, { "id": "title", "label": "페이지 제목", "toggle": false }] }
   }
 }
 ```
@@ -183,6 +187,7 @@ Shadow DOM 은 CSS 는 가르지만 `@media` 가 창 폭으로 판정되는 문�
 | `preview` | 선택. 패키지 안의 이미지 경로 |
 | `tokens.items` | 키는 `[a-zA-Z0-9.-]+`. 타입은 `color` · `length` · `number` · `font` · `shadow` · `select` 여섯. 기본값은 그 타입의 리터럴이거나 같은 타입 토큰의 참조(`{키}`). 참조 순환 · 없는 키 · 타입이 다른 참조는 거부한다 |
 | `components` | 키는 카탈로그의 컴포넌트 이름. `variants` 는 하나 이상, `defaultVariant` 는 그 안의 id. `hideProps` 는 그 컴포넌트의 props 이름 |
+| `layouts` | 선택(SDK 1.10.0). 키는 페이지 레이아웃(`blank` · `popup` · `subpage`). `regions` 는 그 틀의 영역 — `id` 는 `^[a-z][A-Za-z0-9]{0,31}$` 이고 레이아웃 안에서 유일, `label` 은 1 ~ 20자, `toggle: false` 면 못 끈다, 레이아웃마다 8 개까지. 뷰는 `ThemeDefinition.layouts` 로 내고 끌 수 있는 영역을 SDK `LayoutRegion` 으로 감싼다(`docs/superpowers/specs/2026-11-25-page-layout-design.md` 「테마 계약」) |
 | `patterns` | 이름은 `<범주>.<변형>`, 범주는 고정 목록(`header` · `nav` · `hero` · `features` · `content` · `cta` · `pricing` · `testimonial` · `footer` · `auth` · `empty` · `error`). `schema` 는 `schema` 패키지 검증을 통과해야 한다. 전개 규칙(삽입 때 id 새로 발급, `slot` 은 템플릿에만)은 지금과 같다 |
 
 **토큰이 화면에 닿는 길**
