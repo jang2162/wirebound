@@ -14,7 +14,7 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 회색 선의 표 격자와 파란 주색을 쓴다.',
-  version: '2.0.0',
+  version: '2.1.0',
   sdk: '^1.8.0',
   tokens: {
     groups: [
