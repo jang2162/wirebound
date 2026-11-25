@@ -146,6 +146,8 @@
 
 그 밖에 돈 것: api 6 파일(항목 5 — 97 통과 · 실패 0 · 건너뜀 0, api vitest 는 그 한 번) · 탐침 넷(실브라우저 `nav.probe.ts` 3 통과 · `overlay.probe.ts` 1 · node `size.probe.ts` 1 · `pptx.probe.ts` 3 — 탐침은 값을 적는 것이 몫이다). 끝에 이 워크트리 경로의 vitest · vite · tsx · Chrome 0, 게이트 그룹 프로세스 0.
 
+끝: 보고 파일을 뺀 `git ls-files -s | md5` = `52d1341d4a32aa626b39ba39a6484065`(시작과 같다 — 다른 쓰는 자 없음) · `git status --short` = `?? .build/` · `9d2d6f49..HEAD` 의 바뀐 파일은 이 보고 하나.
+
 ## 남은 것
 
 - 낮음 1(3 «크기 상한») — 서브페이지 장이 틀 높이만큼 먼저 상한에 닿는다. 설계대로라 고칠 것이 아니다. README 「화면 그리기 상한」 · 정본 PPTX 문단에 «틀이 든 높이도 상한에 든다» 한 줄을 둘지는 코디네이터 판단.
