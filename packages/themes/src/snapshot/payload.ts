@@ -83,6 +83,10 @@
  * 옮겼고 레이아웃 표는 없다 — 판 5 에는 키가 없다. 저장된 판 4 이하는 마이그레이션(`apps/api`의 `0038-drop-layouts.ts`)이 판 5 로 고친다.
  * 판 5 를 이 판보다 앞선 `wireb` 는 못 읽는다(그쪽 규격이 `layouts` 를 묻는다).
  *
+ * **판 4 이하 payload 의 `layouts` 는 받고 걷는다**(아래 `dropRetiredLayouts`) — 이 판의 `wireb` 가 옛 서버의 덤프(`GET …/snapshot`)를
+ * 읽어야 한다. 앞 판까지는 규격이 키를 더하기만 해 새 CLI 가 옛 덤프를 읽었고, 키를 걷은 이 판에서 그 방향을 지키는 자리가 이것이다.
+ * 걷은 값은 보지 않는다(레이아웃 문서를 읽는 소비자가 없다). **판 5 이상의 `layouts` 는 모르는 키다** — 아래 strict 가 그대로 죽인다.
+ *
  * ---
  *
  * # 겹layer(런타임 상태)를 담지 않는다
@@ -206,11 +210,7 @@ const ThemeSchema = z.strictObject({
   tokens: z.record(z.string(), z.union([z.string(), z.number()])),
 })
 
-/**
- * payload 전체. **`z.strictObject`인 것이 규칙이다** — 겹layer든 무엇이든 선언되지 않은
- * 절이 실리면 파싱이 죽는다(위 "겹layer" 절).
- */
-export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject({
+const PayloadObjectSchema = z.strictObject({
   // 리터럴이 아닌 이유는 위 `payloadVersion` 절에 있다 — 읽는 쪽이 값을 보고 판정한다.
   payloadVersion: z.int().positive(),
   // **`z.string()`이 아니라 ISO datetime이다.** `insertSnapshot`이 이 값을
@@ -224,7 +224,25 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
   theme: ThemeSchema.nullable().optional(),
   // 판 3 이하 payload 에는 없다 — 선택이다(위 「공통코드 표 — 판 4」 절).
   codes: CodeTableSchema.optional(),
-}) as z.ZodType<SnapshotPayload>
+})
+
+/** 판 4 이하의 `layouts` 키를 걷는다(위 「레이아웃 표를 담지 않는다 — 판 5」 절). 다른 값은 그대로 넘겨 strict 가 본다. */
+function dropRetiredLayouts(input: unknown): unknown {
+  if (typeof input !== 'object' || input === null || Array.isArray(input) || !('layouts' in input)) return input
+  const version = (input as { payloadVersion?: unknown }).payloadVersion
+  if (typeof version !== 'number' || !Number.isInteger(version) || version > 4) return input
+  const { layouts: _retired, ...rest } = input as Record<string, unknown>
+  return rest
+}
+
+/**
+ * payload 전체. **`z.strictObject`인 것이 규칙이다** — 겹layer든 무엇이든 선언되지 않은
+ * 절이 실리면 파싱이 죽는다(위 "겹layer" 절). 그 앞에서 판 4 이하의 `layouts` 만 걷는다.
+ */
+export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.preprocess(
+  dropRetiredLayouts,
+  PayloadObjectSchema,
+) as unknown as z.ZodType<SnapshotPayload>
 
 /**
  * payload가 담는 자원의 이름. **손으로 적지 않고 규격에서 읽는다** — 세는 쪽과 담는 쪽이
@@ -233,6 +251,6 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
  * *"payload에 담기는 것은 넷이고 겹layer는 없다"*를 실행으로 지키는 케이스가
  * 이것을 센다.
  */
-export const SNAPSHOT_RESOURCES: readonly string[] = Object.keys(
-  (SnapshotPayloadSchema as unknown as { shape: Record<string, unknown> }).shape,
-).filter((key) => key !== 'payloadVersion' && key !== 'capturedAt')
+export const SNAPSHOT_RESOURCES: readonly string[] = Object.keys(PayloadObjectSchema.shape).filter(
+  (key) => key !== 'payloadVersion' && key !== 'capturedAt',
+)
