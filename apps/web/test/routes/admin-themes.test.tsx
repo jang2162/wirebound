@@ -257,6 +257,9 @@ describe('테마 관리 — 목록 · 상세 · 미리보기', () => {
     // latest 는 숨기지 않은 판의 최대(1.0.0)다 — 숨긴 1.1.0 이 위에 있어도.
     expect(within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 미리보기' }).getAttribute('aria-pressed')).toBe('true')
     expect(within(theme('acme')).getByRole('button', { name: 'acme@1.1.0 미리보기' }).getAttribute('aria-pressed')).toBe('false')
+    // 고른 판은 글도 바뀐다 — 색에만 기대지 않는다. 접근 이름은 판마다 그대로다.
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.0.0 미리보기' }).textContent).toBe('미리보기 중')
+    expect(within(theme('acme')).getByRole('button', { name: 'acme@1.1.0 미리보기' }).textContent).toBe('미리보기')
     await waitFor(() => expect(api.getThemeManifest).toHaveBeenCalledWith({ themeId: 'acme', version: '1.0.0' }, expect.anything()))
     within(theme('acme')).getByRole('heading', { name: '미리보기 — acme@1.0.0' })
   })

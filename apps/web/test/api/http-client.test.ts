@@ -1050,7 +1050,7 @@ const SHAPE_CASES: Array<{
   {
     shape: 'codeUsage',
     broken: { usage: [{ kind: 'page', id: 'pg', title: '목록', nodes: [{ nodeId: 'n' }] }] },
-    ok: { usage: [{ kind: 'page', id: 'pg', title: '목록', nodes: [{ nodeId: 'n', name: '이름' }] }] },
+    ok: { usage: [{ kind: 'page', id: 'pg', title: '목록', nodes: [{ nodeId: 'n', name: '이름', type: 'Text', trail: ['카드'] }] }] },
     call: (c) => c.codeUsage('p1', 'S'),
   },
   {

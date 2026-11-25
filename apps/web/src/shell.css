@@ -19,7 +19,7 @@
      `.wb-shell-canvas-surface`. **프레임 안에 설계서 문서가 들어오므로**(`canvas/canvas.tsx`)
      다섯 모두가 검사 대상이다.
 
-     **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 일곱 개도
+     **예외 — 커스텀 프로퍼티.** 아래 `.wb-shell`이 선언하는 `--wb-shell-*` 아홉 개도
      상속 속성이라 프레임 안까지 내려간다. 그래도 두는 것은 `wb-shell-` 접두어가
      테마의 변수 이름과 겹칠 수 없고, 쓰이지 않는 변수는 아무것도 그리지 않기 때문이다.
      접두어 없는 변수는 그 넷에 선언할 수 없다 — 검사가 막는다(아래).
@@ -79,7 +79,7 @@
    루트): 그 화면의 링크 색이 `rgb(0, 0, 0)`, 루트의 `--wb-shell-line`이 빈
    문자열로 잡힌다. **셸 밖에 새 화면 루트를 만드는 사람은 여기 한 줄을 더해야 한다.**
 
-   **일곱이다.** **이 수는 적어 두면 낡는다** — 다른 파일이 이 수를 근거로 적으면 변수가
+   **아홉이다.** **이 수는 적어 두면 낡는다** — 다른 파일이 이 수를 근거로 적으면 변수가
    늘거나 줄 때 조용히 거짓이 된다 — 수가 아니라 성질로 적는다.
    테마가 `:root`에 싣는 이름과 **교집합이 비어 있다**는 성질을 떠받치는 것은
    **접두어가 전부 `--wb-shell-`이라는 것**이므로 변수가 몇이 되든 참이다. 여기 적힌 수는 세어 보라는 안내일 뿐이다.
@@ -104,6 +104,51 @@
   --wb-shell-accent: #2f6fed;
   --wb-shell-comment: #d92d20;
   --wb-shell-gap: 1px;
+  --wb-shell-button-sm: 28px;
+  --wb-shell-button-md: 32px;
+}
+
+/* ── 셸 단추의 두 높이 ─────────────────────────────────────────────────────────────────────────
+
+   에디터 밖 화면(프로젝트 목록 · 설정 · 계정 · 관리자 · 공통코드)과 그 대화 상자의 단추는 높이가 두 벌 가운데 하나다 — 작은 단추
+   `--wb-shell-button-sm`(줄 · 표 · 위 줄의 동작) · 보통 단추 `--wb-shell-button-md`(화면 머리 오른쪽의 «에디터 열기»).
+
+   - **높이를 패딩이 아니라 `height` 로 정한다.** 단추마다 패딩 · 글자 크기 · 아이콘 유무가 다르면 높이가 1–7px 씩 갈리고, `inline-block` ·
+     `block` · `flex` 가 섞이면 한 줄에 선 두 단추가 서로 다른 기준선에 서 위아래가 어긋난다(테마 판 줄의 «미리보기» · «숨김», 공통코드
+     머리의 «항목 추가» · «…»). `inline-flex` + `align-items: center` 라 글 · 아이콘이 상자 가운데에 서고, 같은 높이의 단추는 줄이 어느
+     맞춤이어도 같은 자리에 선다.
+   - **새 단추는 `.wb-shell-button-sm` · `.wb-shell-button-md` 를 함께 붙이거나 제 클래스를 아래 목록에 더한다.** 색 · 테두리 · 가로 패딩은
+     제 규칙이 갖는다(이 블록이 앞에 있어 뒤의 제 규칙이 이긴다 — 높이는 아무도 다시 안 쓴다). 아이콘만 든 단추는 같은 높이의 정사각형이다 —
+     행동 메뉴는 `size="sm"`(`.wb-shell-action-menu-sm`).
+   - **에디터 머리 도구모음(`.wb-shell-history-step` 과 그 줄)은 목록에 없다** — 그 줄은 제 값으로 이미 한 벌이고, 머리 접힘 문턱
+     (`shell/head-fold.ts`)이 그 폭으로 잰 값이다.
+   - **카드 바닥의 보조 링크(`.wb-shell-home-settings`)도 없다** — 손가락으로 눌리는 하한 36px 이다(그 규칙의 주석).
+
+   재는 자: `build-test/shell-buttons.test.ts`(관리자 · 공통코드 · 프로젝트 목록의 보이는 단추가 두 높이 가운데 하나다). */
+.wb-shell-button-sm,
+.wb-shell-project-action,
+.wb-shell-project-submit,
+.wb-shell-project-danger,
+.wb-shell-admin-preview-pick,
+.wb-shell-admin-upload,
+.wb-shell-admin-template,
+.wb-shell-workspace-logout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: var(--wb-shell-button-sm);
+}
+
+.wb-shell-button-md,
+.wb-shell-settings-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: var(--wb-shell-button-md);
 }
 
 .wb-shell {
@@ -3307,12 +3352,10 @@
 }
 
 .wb-shell-workspace-logout {
-  display: inline-flex;
-  align-items: center;
   appearance: none;
   border: 0;
   border-radius: 4px;
-  padding: 2px 0;
+  padding: 0;
   background: transparent;
   font: inherit;
   font-size: 13px;
@@ -3479,6 +3522,12 @@
 .wb-shell-home-filter-label {
   font-size: 12px;
   color: var(--wb-shell-muted);
+}
+
+/* 위 줄의 칸 셋(검색 · 역할 · 정렬) — 한 높이. 같은 클래스(`-project-input`)여도 네이티브 `<select>` 는 글 칸보다 2px 높게 선다(Chrome).
+   `<select>` 는 네이티브 그대로 둔다(키보드 · 화면 읽기 · 기존 케이스) — 높이만 정한다. 높이는 셸 보통 단추와 같다(«셸 단추의 두 높이»). */
+.wb-shell-home-control {
+  height: var(--wb-shell-button-md);
 }
 
 /* 프로젝트 수 — 제목 곁(`.wb-shell-workspace-title-note` 안 · `routes/project-list.tsx`). */
@@ -3815,7 +3864,7 @@
   flex: none;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;
-  padding: 3px 8px;
+  padding: 0 8px;
   background: #fff;
   font: inherit;
   font-size: 13px;
@@ -4427,6 +4476,18 @@
   font: inherit;
   color: var(--wb-shell-ink);
   cursor: pointer;
+}
+
+/* 작은 단추 줄(에디터 밖 화면의 위 줄 · 표 — `size="sm"`)에 서는 `…` — 그 줄의 글 단추와 같은 높이의 정사각형(위 «셸 단추의 두 높이»).
+   토글 규칙 뒤에 두어 그 패딩을 이긴다. */
+.wb-shell-action-menu-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--wb-shell-button-sm);
+  height: var(--wb-shell-button-sm);
+  padding: 0;
 }
 
 .wb-shell-action-menu-toggle[aria-expanded='true'] {
@@ -5291,10 +5352,11 @@
   gap: 8px;
 }
 
-/* 확정은 묻던 자리에서 **단추 한 높이(24px) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
-   내려가도 확정에 닿는다. 줄 하나의 확정(아래 `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
+/* 확정은 묻던 자리에서 **단추 한 높이(`--wb-shell-button-sm`) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
+   내려가도 확정에 닿는다. 여백은 그 토큰에서 짓는다 — 단추 높이가 바뀌면 거리도 따라간다(여백 + `gap` = 단추 높이). 줄 하나의 확정(아래
+   `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
 .wb-shell-tokens-bulk-confirm {
-  margin-top: 16px;
+  margin-top: calc(var(--wb-shell-button-sm) - 8px);
 }
 
 .wb-shell-tokens-name {
@@ -5325,7 +5387,7 @@
 .wb-shell-tokens-confirm {
   order: 2;
   margin-left: auto;
-  margin-top: 18px;
+  margin-top: calc(var(--wb-shell-button-sm) - 6px);
 }
 
 /* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
@@ -5341,11 +5403,9 @@
 
 /* 머리 오른쪽의 «에디터 열기»(`routes/settings.tsx`) — 링크라 밑줄을 지우고 단추 꼴로 선다. */
 .wb-shell-settings-open {
-  display: inline-flex;
-  align-items: center;
   border: 1px solid var(--wb-shell-line);
   border-radius: 6px;
-  padding: 6px 12px;
+  padding: 0 12px;
   background: #fff;
   color: var(--wb-shell-accent);
   text-decoration: none;
@@ -5520,7 +5580,7 @@
   display: flex;
   flex: 1 1 100%;
   justify-content: flex-end;
-  margin-top: 18px;
+  margin-top: calc(var(--wb-shell-button-sm) - 6px);
 }
 
 /* 계정 설정 «내 정보»(`<dl>`) — 줄(라벨 | 값)을 세로로 쌓고 줄 사이를 16px 연다. 재는 자: `build-test/v4-settings-ui.test.ts` 의 «간격». */
@@ -5931,12 +5991,10 @@
    라벨이 `:focus-within` 으로 테두리를 그린다. */
 .wb-shell-admin-upload {
   position: relative;
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
   border: 1px solid var(--wb-shell-accent);
   border-radius: 4px;
-  padding: 5px 12px;
+  padding: 0 12px;
   background: var(--wb-shell-accent);
   font-size: 13px;
   color: #fff;
@@ -5973,13 +6031,11 @@
 /* 템플릿 받기 — 흰 단추(`-project-action` 의 꼴)에 그림. 도구 줄의 오른쪽 끝. */
 .wb-shell-admin-template {
   appearance: none;
-  display: inline-flex;
-  align-items: center;
   gap: 2px;
   margin-left: auto;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;
-  padding: 5px 12px;
+  padding: 0 12px;
   background: #fff;
   font: inherit;
   font-size: 13px;
@@ -6106,12 +6162,10 @@
 /* 판 줄의 «미리보기» — 흰 단추에 그림. 고른 판(`aria-pressed`)은 강조 테두리 · 글. */
 .wb-shell-admin-preview-pick {
   appearance: none;
-  display: inline-flex;
   flex: none;
-  align-items: center;
   border: 1px solid var(--wb-shell-line);
   border-radius: 4px;
-  padding: 3px 8px;
+  padding: 0 8px;
   background: #fff;
   font: inherit;
   font-size: 13px;
@@ -6124,6 +6178,22 @@
   border-color: var(--wb-shell-accent);
   background: #eaf1fe;
   color: var(--wb-shell-accent);
+}
+
+/* 판 줄(`routes/admin-themes.tsx` 의 `ThemeDetail`) — 줄 상자(`.wb-shell-project-item`)는 계정 토큰 · 멤버 목록과 같은 꼴이고 거기는 기준선
+   맞춤에 기대는 잰 거리가 있어(`.wb-shell-tokens-confirm`) 그 규칙을 안 바꾼다. 이 줄만 가운데 맞춤 — 판 이름 · 테마 이름과 단추 상자가 같은
+   가운데에 선다(재는 자: `build-test/shell-buttons.test.ts` «테마 판 줄 …»). */
+.wb-shell-admin-version {
+  align-items: center;
+}
+
+/* 판 줄의 단추 둘(«미리보기» · «숨김») — 한 상자로 줄 오른끝에. */
+.wb-shell-admin-version-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 /* 미리보기 묶음 — 제목 밑에 미리보기 틀. */
@@ -6157,8 +6227,12 @@
   margin: 0 0 12px;
 }
 
-/* 위 줄의 마지막 단추를 오른끝에 — 좁으면 줄을 바꿔 왼끝에 선다. */
+/* 위 줄의 마지막 단추(· 단추 묶음)를 오른끝에 — 좁으면 줄을 바꿔 왼끝에 선다. 묶음이면 안의 단추를 가운데 맞춤으로 한 줄에 세운다 — 블록 상자
+   안에 두면 글 단추는 기준선에, `…` 는 위에 붙어 위아래가 갈린다(공통코드 머리의 «항목 추가» · «…»). */
 .wb-shell-admin-bar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
 }
 
@@ -6634,6 +6708,40 @@
     gap: 16px;
   }
 }
+/* 왼쪽 칸 — 찾기 칸 · 그룹 목록. 넓은 창에서는 창 높이에 붙고 목록만 따로 구른다 — 그룹이 많아도 고른 그룹 · 찾기 칸이 화면에 남는다(뼈대 상자
+   `.wb-shell-workspace` 가 구르는 상자다). 위아래로 접힌 창(1099 이하)에서는 붙지 않고 목록 높이만 줄인다 — 상세가 그 밑이다. */
+.wb-shell-codes-side {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-height: calc(100vh - 32px);
+}
+
+.wb-shell-codes-find {
+  width: 100%;
+  height: var(--wb-shell-button-sm);
+}
+
+.wb-shell-codes-groups {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px;
+}
+
+@media (max-width: 1099px) {
+  .wb-shell-codes-side {
+    position: static;
+    max-height: none;
+  }
+
+  .wb-shell-codes-groups {
+    max-height: 320px;
+  }
+}
+
 .wb-shell-codes-group {
   display: flex;
   flex-direction: column;
@@ -6657,6 +6765,33 @@
   font-size: 12px;
   color: var(--wb-shell-muted);
   overflow-wrap: anywhere;
+}
+
+/* 항목 표의 몸 — 칸을 세로 가운데에(관리자 표 넷은 위 맞춤 — 칸에 둘째 줄이 있다). 줄 끝 «…»(28px)가 줄 높이를 정하고 글 칸이 그 가운데에
+   선다(재는 자: `build-test/codes-polish.test.ts` «표의 줄마다 …»). 좁은 창의 카드 꼴에서는 몸이 flex 라 이 값이 안 닿는다. */
+.wb-shell-codes-body {
+  vertical-align: middle;
+}
+
+/* 코드값 — 개발자가 옮겨 적는 값이라 고정폭(이 파일의 다른 고정폭 글과 같은 글꼴 목록 — 셸에 고정폭 토큰은 없다). */
+.wb-shell-codes-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* 사용 여부 — 작은 표지. 글이 뜻을 말하고 색은 거든다(사용 = 초록 · 사용 안 함 = 흐림). */
+.wb-shell-codes-active {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: #e7f6ec;
+  font-size: 12px;
+  color: #067647;
+  white-space: nowrap;
+}
+
+.wb-shell-codes-active[data-active='false'] {
+  background: var(--wb-shell-chrome);
+  color: var(--wb-shell-muted);
 }
 
 /* 사용 수 — 누르면 사용처를 그 항목으로 좁힌다. 글처럼 보이는 단추다. */
@@ -6683,8 +6818,97 @@
   overflow-wrap: anywhere;
 }
 
-.wb-shell-codes-usage-link {
+/* 사용처 목록(`UsageList`) — 페이지마다 접는 묶음. 위의 `-codes-usage` · `-codes-usage-item` 은 지우기 확인 상자의 글머리표 목록이다. */
+.wb-shell-codes-usage-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-shell-codes-usage-hit {
+  min-width: 0;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+/* 묶음 하나(`<details>`) — 접히는 상자. 칸 밖으로 안 넘치게만 한다(꼴은 감싸는 줄 · 머리가 갖는다). */
+.wb-shell-codes-usage-fold {
+  min-width: 0;
+}
+
+.wb-shell-codes-usage-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.wb-shell-codes-usage-count {
+  flex: none;
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--wb-shell-chrome);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-codes-usage-nodes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--wb-shell-line);
+  padding: 4px 0;
+  list-style: none;
+}
+
+.wb-shell-codes-usage-node {
+  min-width: 0;
+}
+
+/* 줄 하나 — 타입 표지 · 노드 이름 · 조상 이름(흐림). 링크든 글이든 같은 꼴이다. */
+.wb-shell-codes-usage-link,
+.wb-shell-codes-usage-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 4px 10px;
+  color: var(--wb-shell-ink);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-codes-usage-link:hover {
+  background: #eaf1fe;
+}
+
+.wb-shell-codes-usage-type {
+  flex: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  background: var(--wb-shell-chrome);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-codes-usage-name {
+  font-weight: 600;
   color: var(--wb-shell-accent);
+}
+
+.wb-shell-codes-usage-trail {
+  font-size: 12px;
+  color: var(--wb-shell-muted);
 }
 
 /* 속성 패널의 «공통코드» 칸(`panels/code-binding.tsx`). */

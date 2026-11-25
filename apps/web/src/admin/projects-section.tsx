@@ -146,6 +146,7 @@ export function ProjectsSection(): ReactElement {
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
                   {!project.hasActiveOwner && (
                     <ActionMenu
+                      size="sm"
                       label={`${project.name} 더 보기`}
                       items={[{ key: 'owner', label: 'owner 넘기기', icon: ICONS.transferOwner, onSelect: () => setMoving(project) }]}
                     />
