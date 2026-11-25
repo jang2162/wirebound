@@ -35,7 +35,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'migrations'])
  * - **구역을 따로 본다**: `lock/structure.ts`(`sameStructure` 의 구역 견주기) · `canvas-preview.ts` · `anchored-ops.ts` · `exporter/src/nodes.ts`
  *   (`nodesOnly` — 깨진 줄을 몸통 · 구역마다 거른다) · `page-kind-ops.ts`(팝업 → 화면 — 뿌리의 몸통이 있는가 · 바닥 밖 구역이 남는가).
  * - **노드가 아니다**: 메뉴 트리(`repos/menu.ts` · `menu-tree.ts` · `http-client.ts` · `menu-tree.tsx` · `tree-actions.ts` · `use-tree-commands.tsx` ·
- *   `layout-nav.ts` 의 내비 항목 ·
+ *   `layout-nav.ts` 의 내비 항목 · `canvas.tsx` 가 틀의 내비 · 페이지 이름을 짓는 메뉴 트리 ·
  *   `interaction-panel.tsx` 의 페이지 고르개) · 트리 항목(`catalog/data.ts` 의 `treeShape` · `tree-items-control.tsx` · `theme-sdk` 기본 뷰의 `TreeEntries`) · DOM(`canvas-drop.ts` ·
  *   `canvas-iframe.tsx`) · 뷰 인자(`view-host.tsx` 의 `viewProps.children`).
  */
@@ -47,6 +47,7 @@ const DIRECT_READS: Record<string, number> = {
   'apps/web/src/canvas/canvas-drop.ts': 2,
   'apps/web/src/canvas/canvas-iframe.tsx': 1,
   'apps/web/src/canvas/canvas-preview.ts': 4,
+  'apps/web/src/canvas/canvas.tsx': 2,
   'apps/web/src/canvas/layout-guides.tsx': 4,
   'apps/web/src/drag/use-placement.ts': 2,
   'apps/web/src/edit/create-node.ts': 4,
