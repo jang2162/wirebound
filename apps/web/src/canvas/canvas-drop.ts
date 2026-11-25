@@ -52,10 +52,17 @@
  *
  * **문서 옆 · 위의 바탕은 못 놓는 자리로 남긴다** — 놓다 마는 자리가 칸 안에 하나는 있어야 하고(Escape 말고), 문서가 칸보다 좁고 긴 판에서는
  * 옆 바탕의 페이지 끝이 화면 밖이라 미리보기 없이 놓이게 된다. 아래 바탕은 문서 끝이 보일 때만 드러나므로 미리보기가 늘 보인다.
+ *
+ * ## 레이아웃 틀은 바탕이 아니다
+ *
+ * 서브페이지의 GNB · LNB · 브레드크럼브 · 팝업 레이아웃의 막(`./canvas-pick.ts` 의 `inLayoutFrame`)은 노드가 아니라 `data-wb-id` 조상이 없다 — 그대로
+ * 두면 «조상 없음 → 페이지 끝» 으로 읽혀 LNB 위에서 놓은 컴포넌트가 문서 끝에 붙는다. 틀 위는 **놓을 자리가 없다**(`over-layout-frame` — 미리보기
+ * 없음 · 놓아도 편집 없음). 틀이 민 문서 안쪽(`[data-wb-layout-content]` 안)은 그대로다.
  */
 import { BODY_ZONE } from '@wirebound/schema'
 import type { DropMiss } from '../drag/drag-debug'
 import { dropBand, type DropBand } from '../tree/tree-drop'
+import { inLayoutFrame } from './canvas-pick'
 import { EMPTY_ZONE_ATTR, EMPTY_ZONE_OF_ATTR } from './empty-zones'
 
 export interface Rect {
@@ -248,6 +255,11 @@ export function canvasHitAt(
   const point = hostToFrame(hostPoint, frameRect, zoom)
   const under: unknown = doc.elementFromPoint(point.x, point.y)
   let cursor: Element | null = isElement(under) ? under : null
+  // 레이아웃 틀 위는 놓을 자리가 없다(머리말 «레이아웃 틀은 바탕이 아니다»).
+  if (cursor !== null && inLayoutFrame(cursor)) {
+    why?.('over-layout-frame')
+    return null
+  }
   // 사본 안의 틀 칸도 `data-wb-column-of` 를 단다 — 열로 읽기 전에 사본인지 먼저 본다.
   const copy = cursor?.closest(`[${COPY_OF_ATTR}],[data-wb-id]`) ?? null
   if (copy !== null && copy.hasAttribute(COPY_OF_ATTR))

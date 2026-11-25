@@ -60,6 +60,23 @@ function lineOf(cell: Element, body: HTMLElement): string | null {
   return null
 }
 
+/**
+ * **그 대상이 레이아웃 틀 위인가** — 렌더러의 `LayoutFrame` 이 그린 `[data-wb-layout]` 안이고 문서를 감싼 `[data-wb-layout-content]` 밖이다(설계
+ * `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「캔버스」 «틀은 노드가 아니다»). 틀(GNB · LNB · 브레드크럼브 · 팝업의 막)에는 `data-wb-id` 가
+ * 없어 `nodeIdAt` 은 `null` 을 내는데, 그 `null` 은 «바탕을 누름»(고름을 비움)이다 — 틀은 그 갈래에 들지 않는다. 누름(`./canvas.tsx`)과 놓을
+ * 자리(`./canvas-drop.ts`)가 이 판정 하나를 쓴다. 글 노드면 그 부모로 본다.
+ */
+export function inLayoutFrame(target: EventTarget | null): boolean {
+  const node = target as Node | null
+  if (node === null || typeof node !== 'object' || !('nodeType' in node)) return false
+  const element = node.nodeType === 1 ? (node as Element) : node.parentElement
+  if (element === null) return false
+  const frame = element.closest('[data-wb-layout]')
+  if (frame === null) return false
+  const content = element.closest('[data-wb-layout-content]')
+  return content === null || !frame.contains(content)
+}
+
 /** 빈 id 는 없는 것이다 — 렌더러의 모양 가드가 흡수한 폴백은 빈 `data-wb-id` 를 단다(`packages/renderer/src/fallback.tsx`). */
 function filled(value: string | null): string | null {
   return value === null || value === '' ? null : value

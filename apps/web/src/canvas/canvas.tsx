@@ -34,6 +34,7 @@ import {
   focusElement,
   isPopupClose,
   isPopupDocument,
+  LayoutFrame,
   markerPoint,
   NO_OPEN_POPUP,
   NO_OPEN_POPUP_DIRECT,
@@ -46,14 +47,26 @@ import {
   type NodeRenderError,
   type RevealTarget,
 } from '@wirebound/renderer'
-import { DEFAULT_VIEW_STATE, describePageTarget, type PageDocument } from '@wirebound/schema'
+import {
+  buildLayoutNav,
+  DEFAULT_VIEW_STATE,
+  describePageTarget,
+  PAGE_LAYOUTS,
+  type LayoutNav,
+  type LayoutNavMenu,
+  type PageDocument,
+  type PageLayout,
+} from '@wirebound/schema'
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router'
 import { KeepDropPlace } from './keep-drop-place'
 import { projectAssetUrl } from '../api/asset-url'
 import { useApi } from '../api/context'
-import { COPY_OF_ATTR, nodeIdAt } from './canvas-pick'
+import { COPY_OF_ATTR, inLayoutFrame, nodeIdAt } from './canvas-pick'
+import { useLayoutMenu } from './layout-menu'
+import type { TreeMenuNode } from '../api/types'
 import { useCanvasPopups, usePopupArea } from './canvas-popups'
 import { platformOf } from '../edit/editor-shortcuts'
 import { findNodeSafely, walkSafely } from '../edit/safe-walk'
@@ -62,6 +75,7 @@ import type { SelectionChange } from '../store/editor-store'
 import { nodeHeadingLabel } from '../panels/node-shape'
 import { useLockedBy } from '../store/use-locked-by'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
+import { hiddenIn, useViewPrefs } from '../store/use-view-prefs'
 import { useViewState } from '../shell/use-view-state'
 import { useTellCanvasPick } from '../shell/canvas-pick'
 import { useCommentPointing, type Revealed } from '../comments/comment-pointing'
@@ -212,6 +226,28 @@ export function Canvas(props: {
   const documentLoads = useEditorStore(store, (s) => s.documentLoads)
   const zoom = useEditorStore(store, (s) => s.zoom)
   const viewportWidth = useEditorStore(store, (s) => s.viewportWidth)
+  /**
+   * **레이아웃 틀**(설계 `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「캔버스」) — 문서를 렌더러의 `LayoutFrame` 으로 감싼다. 내비는 트리
+   * 칸이 그린 메뉴 트리로 짓고(`./layout-menu.tsx`), 끈 영역은 **편집 모드에만** 적용한다(뷰 모드는 늘 다 켬 — 설계 «정해진 것» 3). 뷰 모드의 틀
+   * 링크는 그 페이지를 연다(메뉴 트리 칸의 링크와 같은 주소 — `panels/menu-tree.tsx`) · 편집 모드는 아무 일도 없다(`LayoutLink` 가 기본 동작을 막는다).
+   */
+  const menu = useLayoutMenu()
+  const prefs = useViewPrefs()
+  const navigateTo = useNavigate()
+  const layout = layoutOf(doc)
+  const nav = useMemo(() => layoutNav(menu, props.pageId), [menu, props.pageId])
+  const hiddenKey = mode === 'edit' ? hiddenIn(prefs.hidden, layout).join('\n') : ''
+  const hiddenRegions = useMemo(() => (hiddenKey === '' ? NO_IDS : hiddenKey.split('\n')), [hiddenKey])
+  const projectId = props.projectId
+  const frameNavigate = useMemo(
+    () => (mode === 'view' ? (pageId: string) => navigateTo(`/projects/${projectId}/pages/${pageId}`) : undefined),
+    [mode, navigateTo, projectId],
+  )
+  /**
+   * **틀이 노드를 미는 값** — 내비 · 끈 영역 · 레이아웃이 바뀌면 틀의 크기가 바뀌어 문서의 노드가 옮긴다. 아래 측정 이펙트(외곽선 · 마커 · 배치 선 ·
+   * 다시 잰 판)의 의존이다 — iframe 의 높이 관찰은 높이가 그대로인 판(LNB 폭만 바뀜 · 같은 높이의 GNB 를 끔)을 못 받는다.
+   */
+  const frameShape = useMemo(() => ({}), [layout, nav, hiddenRegions])
 
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   /** 고른 노드마다의 외곽선 상자 — 고른 차례(문서 차례). 기준 노드의 것이 `box`, 코멘트 링의 것이 `ringBox` 다(아래 `outlinedIds`). */
@@ -529,7 +565,21 @@ export function Canvas(props: {
     // `live.overlay`의 참조가 그대로라 이 이펙트가 안 돌고, **아웃라인이 옛 자리에 남는다**.
     // **`frame`·`measureTick`도 자리를 바꾼다** — iframe 문서가 서야 잴 수 있고, 문서 밖의 것이 상자를 바꾸면
     // iframe 이 다시 잰다(위 `measureTick`).
-  }, [outlinedIds, ringId, revealed, rendered, reveal, viewState, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [
+    outlinedIds,
+    ringId,
+    revealed,
+    rendered,
+    reveal,
+    viewState,
+    zoom,
+    viewportWidth,
+    live.overlay,
+    live.notices,
+    frame,
+    measureTick,
+    frameShape,
+  ])
 
   /**
    * **번호 마커의 자리를 잰다**(「설계서 화면 구조」). 위 아웃라인 이펙트와 같은 장치이고
@@ -579,7 +629,7 @@ export function Canvas(props: {
     // (`findNodeElement`가 `null`을 내므로 아래 루프가 건너뛴다). `live.notices`도 같은
     // 이유다: 알림 줄이 문서를 아래로 민다. **빠뜨리면 마커가 옛 자리에 남는다.**
     // `rendered` 는 배치 미리보기가 끼운 사본이다 — 미리보기가 노드를 밀거나 걷히면 다시 잰다(위 `preview` 주석).
-  }, [doc, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [doc, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick, frameShape])
 
   /**
    * **배치 선의 자리를 잰다**(`./layout-guides.tsx`). 외곽선 · 마커와 같은 장치 · 같은 의존이다 — 줌 · 뷰포트 폭 · 남의 편집 · 미리보기 ·
@@ -607,13 +657,13 @@ export function Canvas(props: {
         next.push({ nodeId: node.id, ...guide, lines: guide.lines.map((line) => onSurface(line, offset)), box: measure(target, offset) })
     }
     setGuides((prev) => (sameGuides(prev, next) ? prev : next))
-  }, [guidesOn, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  }, [guidesOn, rendered, reveal, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick, frameShape])
 
   /**
    * **다시 잰 판** — 위 두 측정 이펙트와 같은 의존이 바뀔 때마다 새 값이다. 손잡이가 끄는 중이면 이 값이 바뀔 때 마지막 좌표로 다시
    * 묻는다(`./canvas-drag-handle.tsx` 머리말 «캔버스가 다시 잴 때») — 노드가 밀려도 표시가 옛 좌표에 남지 않게.
    */
-  const layoutKey = useMemo(() => ({}), [rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick])
+  const layoutKey = useMemo(() => ({}), [rendered, zoom, viewportWidth, live.overlay, live.notices, frame, measureTick, frameShape])
   // 캔버스 밖에서 끄는 쪽(컴포넌트 목록 카드)도 같은 때 다시 묻는다(`drag/use-placement.ts` 의 `useCanvasRemeasured`).
   useAnnounceCanvasRemeasure(layoutKey)
 
@@ -646,6 +696,8 @@ export function Canvas(props: {
       //
       // iframe 안의 클릭도 여기 닿는다 — 문서는 portal 로 그려져 React 이벤트가 이 트리로 버블링한다.
       onClick={(event: MouseEvent<HTMLDivElement>) => {
+        // 레이아웃 틀은 노드가 아니다 — 누름은 고름도 링도 안 바꾼다(`./canvas-pick.ts` 의 `inLayoutFrame`). 뷰 모드의 틀 링크는 `LayoutLink` 가 연다.
+        if (inLayoutFrame(event.target)) return
         // 캔버스를 누르면 코멘트의 링 · 펼침이 걷힌다(`../comments/comment-pointing.tsx` «걷히는 때») — 두 모드 다.
         point(null)
         setCommentReveal(null)
@@ -718,6 +770,11 @@ export function Canvas(props: {
               <KeepDropPlace slots={emptyZones !== null} frame={f}>
                 <CanvasDocument
                   doc={rendered ?? doc}
+                  layout={layout}
+                  title={pageTitle(menu, props.pageId)}
+                  nav={nav}
+                  hiddenRegions={hiddenRegions}
+                  {...(frameNavigate === undefined ? {} : { navigate: frameNavigate })}
                   theme={definition}
                   viewState={viewState}
                   interaction={interaction}
@@ -886,6 +943,12 @@ export function Canvas(props: {
  */
 function CanvasDocument(props: {
   doc: PageDocument
+  /** 레이아웃 틀(`LayoutFrame`)의 입력 — `Canvas` 의 «레이아웃 틀» 머리말. */
+  layout: PageLayout
+  title: string
+  nav: LayoutNav
+  hiddenRegions: readonly string[]
+  navigate?: (pageId: string) => void
   theme: ThemeDefinition
   /** 지금 상태 — 렌더러의 `viewState`(목록 밖 id 는 렌더러가 기본으로 읽는다). */
   viewState: string | null
@@ -945,9 +1008,66 @@ function CanvasDocument(props: {
           </div>,
           props.bannerHost,
         )}
-      {tree}
+      <LayoutFrame
+        theme={props.theme}
+        layout={props.layout}
+        title={props.title}
+        nav={props.nav}
+        hiddenRegions={props.hiddenRegions}
+        {...(props.navigate === undefined ? {} : { navigate: props.navigate })}
+      >
+        {tree}
+      </LayoutFrame>
     </>
   )
+}
+
+/**
+ * 문서의 레이아웃 — 판 7 문서에는 늘 있다(봉투가 지킨다). 검증 전 문서 · 모르는 값은 빈 레이아웃으로 그린다(틀 없음 — 옛 화면과 같다). 판정의
+ * 출처는 `layout` 하나다(설계 「팝업 옮기기」 — 뿌리 타입을 읽지 않는다).
+ */
+function layoutOf(doc: PageDocument | null): PageLayout {
+  const value = (doc as { layout?: unknown } | null)?.layout
+  return PAGE_LAYOUTS.includes(value as PageLayout) ? (value as PageLayout) : 'blank'
+}
+
+/** 트리 칸의 트리에서 지은 내비 — 트리가 없으면(첫 조회 중 · 실패) 빈 트리로 «지금 페이지가 트리에 없는» 판이다. */
+function layoutNav(menu: readonly TreeMenuNode[] | null, pageId: string | undefined): LayoutNav {
+  return buildLayoutNav(byOrder(menu ?? NO_MENU).map(navMenu), { id: pageId ?? '', title: pageTitle(menu, pageId) })
+}
+
+const NO_MENU: readonly TreeMenuNode[] = []
+
+/**
+ * 트리 응답 → 내비 입력. **차례는 `sortOrder` 다** — 트리 응답은 차례대로 오지 않고 트리 칸이 그릴 때 정렬한다(`panels/menu-tree.tsx` 의 `byOrder`).
+ * 레이아웃을 안 실은 페이지(가짜 api 의 트리)는 빈 레이아웃이다(`api/types.ts` 의 `TreePage.layout`).
+ */
+function navMenu(node: TreeMenuNode): LayoutNavMenu {
+  return {
+    id: node.id,
+    title: node.title,
+    pages: byOrder(node.pages).map((page) => ({ id: page.id, title: page.title, layout: page.layout ?? 'blank' })),
+    children: byOrder(node.children).map(navMenu),
+  }
+}
+
+function byOrder<T extends { sortOrder: number }>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => a.sortOrder - b.sortOrder)
+}
+
+/** 지금 페이지의 이름(`pages.title`) — 트리 칸이 그린 이름이다(이름 바꾸기가 트리를 다시 받아 따라온다). 트리에 없으면 빈 글. */
+function pageTitle(menu: readonly TreeMenuNode[] | null, pageId: string | undefined): string {
+  if (menu === null || pageId === undefined) return ''
+  const walk = (nodes: readonly TreeMenuNode[]): string | null => {
+    for (const node of nodes) {
+      const page = node.pages.find((item) => item.id === pageId)
+      if (page !== undefined) return page.title
+      const below = walk(node.children)
+      if (below !== null) return below
+    }
+    return null
+  }
+  return walk(menu) ?? ''
 }
 
 /** 오류 경계의 상태. 메시지가 있으면 그 문장을 대신 그린다. */

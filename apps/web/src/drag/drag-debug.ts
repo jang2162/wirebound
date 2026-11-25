@@ -42,6 +42,7 @@ export type DropMiss =
   | 'no-frame-element'
   | 'outside-canvas'
   | 'beside-or-above-document'
+  | 'over-layout-frame'
   | 'over-copy'
   // `edit/structure-drop.ts` 의 판정
   | 'no-root'
