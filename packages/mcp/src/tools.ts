@@ -88,14 +88,15 @@ export const TOOLS: readonly ToolSpec[] = [
     name: 'list_pages',
     description:
       '이 리포에 바인딩된 설계 프로젝트의 메뉴 트리와 페이지 목록을 돌려줍니다. ' +
-      '각 페이지의 경로(관리자/회원/목록)가 get_page·validate 의 인자이고, kind 가 그 페이지의 종류(page 화면 · popup 팝업)입니다.',
+      '각 페이지의 경로(관리자/회원/목록)가 get_page·validate 의 인자입니다. layout 이 그 페이지의 레이아웃(blank 틀 없음 · subpage 서브페이지 · popup 팝업)이고 kind 는 그것에서 지은 종류(popup 이면 popup, 그 밖은 page)입니다.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     spec: '프로젝트 메뉴/페이지 트리 조회',
   },
   {
     name: 'get_page',
     description:
-      '페이지 하나의 스키마 문서·노드 개요·코멘트·상호작용 문장을 돌려줍니다. ' + '경로가 없거나 둘 이상이면 후보를 함께 말합니다.',
+      '페이지 하나의 스키마 문서·레이아웃(layout)·노드 개요·코멘트·상호작용 문장을 돌려줍니다. ' +
+      '경로가 없거나 둘 이상이면 후보를 함께 말합니다.',
     inputSchema: { type: 'object', properties: { path: PATH_ARG }, required: ['path'], additionalProperties: false },
     spec: '페이지 스키마 + 코멘트 + 상호작용 문장 조회',
   },

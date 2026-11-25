@@ -27,7 +27,7 @@
  * **이 파일에는 글자만 있다.** `--json`은 `lookupPage`가 낸 값을 **그대로** 낸다 — 사람이
  * 읽는 판과 기계가 읽는 판이 같은 값에서 나와야 갈리지 않는다.
  */
-import { stateLineage, viewStateOrder, type PageView, type PageViewNode } from '@wirebound/schema'
+import { stateLineage, viewStateOrder, type PageLayout, type PageView, type PageViewNode } from '@wirebound/schema'
 import { EXIT, usageError } from '../exit'
 import type { Io } from '../io'
 import { fetchSnapshot, requireProject } from '../project'
@@ -36,6 +36,9 @@ import { lookupPage } from '../read/page'
 export interface PageGetOptions {
   json: boolean
 }
+
+/** 레이아웃의 화면 이름(에디터 «레이아웃» 의 이름과 같다). 빈 레이아웃은 줄에 안 싣는다. */
+const LAYOUT_NAMES: Record<PageLayout, string | null> = { blank: null, subpage: '서브페이지', popup: '팝업' }
 
 /** 후보를 몇 개까지 보일지. 프로젝트 전체를 터미널에 쏟지 않는다. */
 const CANDIDATE_LIMIT = 10
@@ -81,8 +84,9 @@ export async function runPageGet(io: Io, path: string | undefined, options: Page
  * 이미 정해져 있고 이 함수는 그것을 들여쓸 뿐이다.
  */
 export function renderPageView(view: PageView): string[] {
-  // 팝업 페이지는 이름 뒤에 종류를 말한다 — 화면 페이지는 옛 출력 그대로.
-  const lines = [view.path, `  ${view.title}${view.kind === 'popup' ? ' · 팝업' : ''} · ${view.id} · 노드 ${view.nodeCount}개`]
+  // 이름 뒤에 레이아웃을 말한다 — 빈 레이아웃(틀 없음 · API 가 짓는 기본값)은 옛 출력 그대로 아무것도 안 붙인다.
+  const layout = LAYOUT_NAMES[view.layout]
+  const lines = [view.path, `  ${view.title}${layout === null ? '' : ` · ${layout}`} · ${view.id} · 노드 ${view.nodeCount}개`]
   if (view.description !== null && view.description.length > 0) {
     lines.push(`  ${view.description}`)
   }

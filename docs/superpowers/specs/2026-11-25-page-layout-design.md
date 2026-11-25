@@ -55,8 +55,8 @@ API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만
 | 스냅샷 payload | `pages[].schema.layout`(판 7 문서). payload 판은 「겹치는 기존 장치」 의 `layouts` 걷기와 함께 4 → 5 |
 | 페이지 JSON(가져오기 · 내보내기) | `schema.layout`. 판 6 파일은 런타임 사슬이 채운다. `page.layoutRef` 는 그대로 «받되 쓰지 않는다»(「겹치는 기존 장치」) |
 | 클립보드 봉투 · 모듈 | 노드 묶음이라 `layout` 과 무관하다 |
-| MCP `get_page` · CLI `page get` | `document.layout` 과 `PageView` 의 새 칸 `layout`(`pageView` 가 `document.layout` 에서 읽는다). `kind` 는 남긴다 — `layout === 'popup'` 이면 `popup`, 그 밖은 `page`(읽는 자리가 이미 쓰는 값이다) |
-| MCP `patch_page` | `/layout` 을 고치는 연산을 그대로 받는다 — 팝업 경계를 넘는 묶음은 뿌리 갈아 끼우기를 함께 실어야 검증(`layout-root-mismatch`)을 지난다 |
+| MCP `get_page` · `list_pages` · CLI `page get` | `document.layout` 과 `PageView` 의 새 칸 `layout`(`pageView` 가 `pageLayoutOf` 로 읽는다 — 판 6 이하 문서는 뿌리에서) · `list_pages` 의 페이지마다 `layout`. `kind` 는 남긴다 — `layout === 'popup'` 이면 `popup`, 그 밖은 `page`(읽는 자리가 이미 쓰는 값이다). `page get` 의 사람 출력은 이름 뒤에 «서브페이지» · «팝업» 을 붙인다(빈 레이아웃은 옛 줄 그대로) |
+| MCP `patch_page` | `/layout` 을 고치는 연산을 그대로 받는다 — 팝업 경계를 넘는 묶음은 뿌리 갈아 끼우기를 함께 실어야 검증(`layout-root-mismatch`)을 지난다. 꼴은 스킬 문서(`packages/mcp/skill/SKILL.md` 「고칠 때」)가 가르치고 `apps/api/test/page-layout-skill.test.ts` 가 그 예를 글자 그대로 보낸다 |
 | 메뉴 트리 응답(`GET …/tree`) | 페이지마다 `layout` 을 더하고 `kind` 는 그것에서 짓는다 |
 | `POST …/pages` | 본문에 `layout?` 를 더한다. `kind` 는 남긴다(`kind: 'popup'` ≡ `layout: 'popup'`). 둘이 어긋나면(`kind: 'popup'` + `layout: 'subpage'`) 400 |
 
@@ -98,7 +98,7 @@ API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만
 
 ### 마이그레이션
 
-새 DB 마이그레이션(번호는 계획이 정한다)이 판 6 문서를 판 7 로 옮긴다 — `packages/schema` 의 판 6 → 7 함수(`liftPageLayout` — 런타임 사슬과 같은 함수)를 저장된 문서가 사는 자리마다 부른다.
+DB 마이그레이션 `0037-page-layout` 이 판 6 문서를 판 7 로 옮긴다 — `packages/schema` 의 판 6 → 7 함수(`liftPageLayout` — 런타임 사슬과 같은 함수)를 저장된 문서가 사는 자리마다 부른다.
 
 | 표 · 칸 | 옮기는 것 |
 |---|---|
@@ -115,8 +115,8 @@ API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만
 
 | 테마 | 팝업 페이지 | 서브페이지 |
 |---|---|---|
-| 기본테마 1.5.0 · 1.6.0 · 1.7.0 · 2.0.0(그리고 `layouts` 를 선언하지 않은 모든 저장된 테마) | 뿌리 `Popup` 을 그 테마가 그대로 그린다. 바뀌는 것은 호스트가 그리는 바깥뿐이다 — 캔버스 · 번들 장에서 흐린 막 위 가운데(「캔버스 · 내보내기」) | SDK 기본 레이아웃 뷰가 내용만 그린다 — 화면은 `blank` 와 같다. 끌 영역이 없어 «보기» 메뉴가 «이 테마는 끌 영역을 선언하지 않았습니다» 를 말한다 |
-| 레이아웃 뷰를 낸 판(계획의 기본테마 새 판) | 같다 | 테마의 GNB · LNB · 브레드크럼브 · 제목 |
+| 기본테마 1.5.0 · 1.6.0 · 1.7.0 · 2.0.0 · 2.1.0(그리고 `layouts` 를 선언하지 않은 모든 저장된 테마) | 뿌리 `Popup` 을 그 테마가 그대로 그린다. 바뀌는 것은 호스트가 그리는 바깥뿐이다 — 캔버스 · 번들 장에서 흐린 막 위 가운데(「캔버스 · 내보내기」) | SDK 기본 레이아웃 뷰가 내용만 그린다 — 화면은 `blank` 와 같다. 끌 영역이 없어 «보기» 메뉴가 «이 테마는 끌 영역을 선언하지 않았습니다» 를 말한다 |
+| 레이아웃 뷰를 낸 판(기본테마 2.2.0 부터) | 같다 | 테마의 GNB · LNB · 브레드크럼브 · 제목 |
 
 마이그레이션은 옛 화면 페이지를 `blank` 로 두므로 테마를 올리기 전에도 뒤에도 옛 페이지는 사람이 `subpage` 로 바꿀 때까지 그대로다.
 
@@ -137,7 +137,7 @@ interface LayoutRegionDecl {
 }
 ```
 
-기본테마의 선언(계획의 테마 태스크가 짓는다):
+기본테마의 선언(2.2.0 부터):
 
 ```ts
 layouts: {
@@ -223,7 +223,8 @@ SDK 판은 1.10.0(더하기만 하는 계약 — `^1.8.0` 을 선언한 테마�
 | 레이아웃 뷰가 `children` 을 정확히 한 번 둔다 · 안 던진다 | 그린 판마다(모두 켬 · 끌 수 있는 영역 하나씩 끔 · 지금 페이지가 트리에 없는 내비 · 빈 내비) 그려진 `[data-wb-layout-content]` 수와 문서 뿌리 노드(`[data-wb-id=<뿌리 id>]`) 수가 1 · 틀에 `data-wb-error` 가 없다 — 뷰가 `regions` · `lnb` 로 갈라 그리면 한 판만 세서는 끈 판에서 내용이 사라지거나 두 번 서는 뷰가 지나고, 내용 상자 속성만 흉내 낸 빈 요소는 뿌리 노드로 걸린다 |
 | 선언한 끌 수 있는 영역이 `LayoutRegion` 으로 섰다 | 모두 켠 판에 `[data-wb-layout-region=<id>]` 가 있고, 그 하나만 끈 판에 없다 |
 | 선언 밖 영역 id | 그려진 `data-wb-layout-region` 가운데 manifest 에 없는 것 — 경고 |
-| 틀의 배치 규칙이 형제 구조로 안 가른다 | 노드 뷰 CSS 와 같은 규칙(정본 「테마의 범위」 의 형제 셀렉터 금지)을 `[data-wb-layout]` 안에도 — 끄는 동안의 미리보기는 틀 밖이지만 영역을 끄면 형제가 바뀐다 |
+
+**틀의 배치 규칙이 형제 구조로 안 가르는지는 kit 이 안 본다** — 노드 뷰 CSS 의 형제 셀렉터도 안 보는 것과 같다(읽으려면 CSS 파서가 든다). 영역을 끄면 형제가 바뀌므로 그 성질은 테마 몫이다 — 기본테마는 틀 규칙째 `system-themes/admin/test/admin.test.ts` «배치를 바꾸는 규칙은 형제 구조로 안 가른다» 가 센다. 올린 테마에는 열려 있다.
 
 ---
 
