@@ -40,6 +40,8 @@ import {
 } from './input'
 export { FORMTABLE_COLUMNS_VAR, formTableCellsAttrs, SEARCHFORM_COLUMNS_VAR, searchFormFieldsAttrs, TEXTAREA_ROWS_VAR } from './input'
 import { CardView, FlexView, GridView, PageView, PopupView, SectionView, structureCssBlocks, TabPanelView, TabsView } from './structure'
+import { layoutCssBlocks } from './layout'
+export { DEFAULT_LAYOUT_VIEWS } from './layout'
 
 export const DEFAULT_VIEWS: Readonly<Record<string, View>> = Object.freeze({
   Page: PageView,
@@ -104,6 +106,7 @@ export function defaultViewsCss(): string {
     ...inputCssBlocks(),
     ...actionCssBlocks(),
     ...documentCssBlocks(),
+    ...layoutCssBlocks(),
     LONG_WORD_CSS,
   ].join('\n')
 }

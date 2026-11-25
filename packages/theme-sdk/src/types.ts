@@ -42,7 +42,66 @@ export interface ThemeManifest {
     items: Readonly<Record<string, TokenDecl>>
   }
   components?: Readonly<Record<string, ComponentDecl>>
+  /**
+   * 레이아웃마다 그 틀이 갖는 영역(SDK 1.10.0) — 끌 수 있는 영역이 에디터 «보기» 메뉴의 항목이 된다. 선언하지 않은 레이아웃 · 이 키가 없는
+   * manifest 는 «선언한 영역 없음» 이다. 검증은 `@wirebound/themes` 의 `validateManifest`(레이아웃 키 · 겹친 id · id 꼴 · 영역 수)다.
+   */
+  layouts?: Readonly<Partial<Record<PageLayout, LayoutDecl>>>
 }
+
+/**
+ * 페이지 레이아웃 — 페이지 내용을 감싸는 틀(빈 · 팝업 · 서브페이지). `@wirebound/schema` 의 `PageLayout` 과 같은 값이다 — SDK 는 schema 에
+ * 기대지 않으므로(테마 번들이 SDK 만 싣는다) 따로 적는다. 두 이름이 갈리면 렌더러의 `LayoutFrame` 이 타입 검사에서 걸린다.
+ */
+export type PageLayout = 'blank' | 'popup' | 'subpage'
+
+export interface LayoutDecl {
+  regions: readonly LayoutRegionDecl[]
+}
+
+/** 레이아웃 틀의 영역 하나 — 뷰는 그 영역을 `<LayoutRegion id>` 로 감싼다. */
+export interface LayoutRegionDecl {
+  /** `^[a-z][A-Za-z0-9]{0,31}$` — 레이아웃 안에서 유일하다. */
+  id: string
+  /** 1–20 자 — «보기» 메뉴의 항목 이름. */
+  label: string
+  /** 끌 수 있나 — 없으면 끌 수 있다. */
+  toggle?: boolean
+}
+
+/** 서브페이지 틀의 내비 항목 하나 — 메뉴 또는 페이지(`@wirebound/schema` 의 `buildLayoutNav` 가 짓는다). */
+export interface LayoutNavItem {
+  /** 메뉴 id 또는 페이지 id. */
+  id: string
+  kind: 'menu' | 'page'
+  title: string
+  /** 누르면 갈 페이지 — 페이지면 제 id, 메뉴면 그 아래 첫 화면 페이지, 없으면 `null`. `<LayoutLink>` 가 이것으로 링크인지 가른다. */
+  pageId: string | null
+  /** 지금 페이지이거나 그 조상 메뉴. */
+  current: boolean
+  children: readonly LayoutNavItem[]
+}
+
+export interface LayoutViewProps {
+  layout: PageLayout
+  /** 페이지 이름 — 제목 영역이 쓴다. 팝업 제목(`Popup.title`)과 따로다. */
+  title: string
+  /** 메뉴 트리 뿌리들 — GNB. 항목마다 하위가 다 들어 있다. */
+  gnb: readonly LayoutNavItem[]
+  /** 지금 페이지가 든 뿌리 메뉴 — LNB 는 그 `children` 이다. 트리에 없는 페이지면 `null`. */
+  lnb: LayoutNavItem | null
+  /** 뿌리 메뉴 → … → 지금 페이지. 브레드크럼브. */
+  trail: readonly LayoutNavItem[]
+  /** 선언한 영역마다 지금 그리는가 — 호스트가 정한다. `<LayoutRegion>` 이 같은 값을 문맥으로 읽는다. */
+  regions: Readonly<Record<string, boolean>>
+  /**
+   * 페이지 내용(문서 뿌리를 그린 것 — 렌더러가 `data-wb-layout-content` 로 감쌌다). **뷰는 이것을 정확히 한 번 둔다** — 안 두면 페이지가 안 보이고,
+   * 두 번 두면 노드 id 가 겹쳐 캔버스가 노드를 못 가른다(`wb-theme check` 가 센다).
+   */
+  children: ReactNode
+}
+
+export type LayoutView = ComponentType<LayoutViewProps>
 
 export interface ViewProps<P extends Record<string, unknown> = Record<string, unknown>> {
   nodeId: string
@@ -118,4 +177,6 @@ export type View = ComponentType<ViewProps>
 export interface ThemeDefinition {
   manifest: ThemeManifest
   views: Readonly<Partial<Record<string, View>>>
+  /** 레이아웃 틀의 뷰(SDK 1.10.0). 없는 레이아웃은 SDK 기본 레이아웃 뷰(내용만)로 그린다. */
+  layouts?: Readonly<Partial<Record<PageLayout, LayoutView>>>
 }
