@@ -6,8 +6,11 @@
  * 문서는 사용자 데이터가 아니다(DB 에 안 들어간다). 지금 카탈로그 검증을 지나고 다섯 그룹을 다 싣는다 — `test/examples.test.tsx` 가 잠근다.
  * 글은 흔한 관리자 화면의 말이고 실제 회사 · 사람 이름을 쓰지 않는다. 노드 id 는 장마다 접두(`ex-l` · `ex-d` · `ex-o` · `ex-od` · `ex-of` ·
  * `ex-pd`)를 둔다 — 틀(`ex-l`)은 장마다 같은 id 다.
+ *
+ * 장은 서브페이지 레이아웃이고 `ThemeExamples` 가 `EXAMPLE_MENU` 로 지은 내비와 함께 `LayoutFrame` 으로 감싼다 — 레이아웃 뷰를 낸 테마는 GNB ·
+ * LNB 를 그 틀로 그린다. 문서 안 틀(`ex-l`)은 레이아웃 뷰가 없는 테마(SDK 기본 — 내용만)에서도 장이 이어지게 남겨 둔다.
  */
-import { CURRENT_DOCUMENT_VERSION, type Interaction, type PageDocument, type WbNode } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, type Interaction, type LayoutNavMenu, type PageDocument, type WbNode } from '@wirebound/schema'
 
 export type ExamplePageId = 'dashboard' | 'orders' | 'order' | 'order-form'
 
@@ -50,7 +53,7 @@ const options = (labels: readonly string[], selected?: string) =>
   labels.map((label) => (label === selected ? { label, selected: true } : { label }))
 const page = (id: string, children: WbNode[]): PageDocument => ({
   version: CURRENT_DOCUMENT_VERSION,
-  layout: 'blank',
+  layout: 'subpage',
   root: { id, type: 'Page', children: [shell(children)] },
 })
 
@@ -462,3 +465,33 @@ export const EXAMPLE_PAGES: readonly ExamplePage[] = [
 
 /** 팝업 — 장 이름 줄에 없고 주문 상세의 «삭제» 가 연다. */
 export const EXAMPLE_POPUPS: readonly ExamplePopup[] = [{ target: TARGET.deletePopup, document: deletePopup }]
+
+/** 팝업의 페이지 id — 메뉴 트리에 들되 내비(GNB · LNB · 브레드크럼브)에는 안 선다(팝업 레이아웃). */
+export const EXAMPLE_POPUP_ID = 'order-delete'
+
+/**
+ * **예제의 메뉴 트리** — 서브페이지 장의 틀(GNB · LNB · 브레드크럼브)을 `buildLayoutNav` 가 이것으로 짓는다(테마의 레이아웃 뷰가 그린다). 뿌리 메뉴
+ * 둘(«주문 관리» 와 페이지 없는 «회원 관리») · 하위 메뉴 하나 · 팝업 페이지 하나를 둬 내비의 갈래(하위 메뉴 · `pageId: null` · 팝업 거르기)가
+ * 갤러리 판에서도 선다. id 는 장 id 와 같다.
+ */
+export const EXAMPLE_MENU: readonly LayoutNavMenu[] = [
+  {
+    id: 'menu-orders',
+    title: '주문 관리',
+    pages: [{ id: 'dashboard', title: '대시보드', layout: 'subpage' }],
+    children: [
+      {
+        id: 'menu-order-list',
+        title: '주문',
+        pages: [
+          { id: 'orders', title: '주문 목록', layout: 'subpage' },
+          { id: 'order', title: '주문 상세', layout: 'subpage' },
+          { id: 'order-form', title: '주문 등록', layout: 'subpage' },
+          { id: EXAMPLE_POPUP_ID, title: '주문 삭제', layout: 'popup' },
+        ],
+        children: [],
+      },
+    ],
+  },
+  { id: 'menu-members', title: '회원 관리', pages: [], children: [] },
+]

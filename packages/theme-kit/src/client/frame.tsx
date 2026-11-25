@@ -28,13 +28,14 @@ function Frame(): ReactElement {
     overlay: false,
     view: 'components',
     page: EXAMPLE_PAGES[0]!.id,
+    hiddenRegions: [],
   })
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data = event.data as FrameState | null
       if (event.source === window.parent && data?.type === 'wb-state')
-        setState({ tokens: data.tokens, overlay: data.overlay, view: data.view, page: data.page })
+        setState({ tokens: data.tokens, overlay: data.overlay, view: data.view, page: data.page, hiddenRegions: data.hiddenRegions })
     }
     window.addEventListener('message', onMessage)
     window.parent.postMessage(
@@ -56,7 +57,16 @@ function Frame(): ReactElement {
       window.parent.postMessage({ type: 'wb-page', page } satisfies FramePage, '*')
     }
     // 프레임은 셸 안에서 제 창으로 구른다 — 팝업은 창 전체(프레임의 보이는 구간)에 선다.
-    return <ThemeExamples theme={theme} tokens={tokens} window={window} page={state.page} onPageChange={onPageChange} />
+    return (
+      <ThemeExamples
+        theme={theme}
+        tokens={tokens}
+        window={window}
+        page={state.page}
+        onPageChange={onPageChange}
+        hiddenRegions={state.hiddenRegions}
+      />
+    )
   }
   return <ThemeGallery theme={theme} tokens={tokens} window={window} showOverlay={state.overlay} />
 }

@@ -42,6 +42,7 @@ npm run typecheck
 import { Focus, Root, useToken, view } from '@wirebound/theme-sdk'
 
 export const CardView = view(({ props, variant, states, children }) => {
+  // density 는 theme.config.ts 에 선언한 select 토큰이다(스타터에는 없다 — 선언만 하고 안 읽으면 wb-theme check 가 «안 쓰는 토큰» 으로 막는다).
   const density = useToken('density')
   return (
     <Root as="section" className={`card card--${density}`} marker={{ placement: 'top-end', offset: [4, -8] }}>
@@ -164,6 +165,7 @@ export const CardView = view(({ props, variant, states, children }) => {
 | `tokens.items` | 키는 `[a-zA-Z0-9.-]+`. 타입은 `color` · `length` · `number` · `font` · `shadow` · `select` 여섯 |
 | `tokens.groups` | 토큰 패널의 묶음. 토큰의 `group` 이 그 `id` 를 가리킨다 |
 | `components` | 키는 카탈로그의 컴포넌트 이름. `variants` 는 하나 이상, `defaultVariant` 는 그 안의 id |
+| `layouts` | 선택(SDK 1.10.0). 키는 `blank` · `popup` · `subpage`. `regions` 는 그 틀의 영역 — `id` 는 `^[a-z][A-Za-z0-9]{0,31}$`(레이아웃 안에서 유일), `label` 은 1–20 자(에디터 «보기» 메뉴의 항목 이름), `toggle: false` 면 못 끈다. 레이아웃마다 8 개까지 |
 
 **토큰 값**
 
@@ -191,6 +193,25 @@ export const CardView = view(({ props, variant, states, children }) => {
   않으면 그 변형을 고른 노드에 lint 경고가 나고 그 테마의 `defaultVariant` 로 그려진다.
 - **세로 `Divider`(`[data-wb-variant='vertical']`)에 백분율 높이(`min-height: 100%`)를 걸지 않는다** — 높이가 정해지지 않은
   부모에서 0 이 되어 선이 안 보인다. 한 줄 높이(`1.5em`)를 바닥으로 두고 `align-self: stretch`.
+
+## 레이아웃 뷰
+
+페이지는 레이아웃(`blank` 빈 · `popup` 팝업 · `subpage` 서브페이지) 하나를 고르고, 그 틀은 테마가 그린다(SDK 1.10.0). `defineTheme({ manifest,
+views, layouts: { subpage: SubpageView } })` — 뷰를 안 낸 레이아웃은 SDK 기본(내용만)으로 그린다.
+
+- 뷰는 `LayoutViewProps` 를 받는다 — `title`(페이지 이름) · `gnb`(메뉴 트리 뿌리들) · `lnb`(지금 페이지가 든 뿌리 메뉴 — 그 `children` 이 LNB) ·
+  `trail`(뿌리 메뉴 → … → 지금 페이지) · `regions` · `children`(페이지 내용). 팝업 레이아웃 페이지는 내비 어디에도 안 선다.
+- **`children` 을 정확히 한 번 둔다** — 안 두면 페이지가 안 보이고, 두 번 두면 노드가 겹쳐 캔버스가 노드를 못 가른다.
+- **끌 수 있는 영역은 manifest `layouts.<레이아웃>.regions` 에 선언하고 `<LayoutRegion id>` 로만 감싼다** — 호스트가 끈 영역은 감싸는 요소째 안
+  그린다(에디터의 «보기» 메뉴 · 편집 모드에서만 끈다 — 뷰 모드 · 번들 · PPTX 는 늘 다 켠다).
+- 메뉴 항목은 `<LayoutLink item>` 으로 둔다 — 누름은 호스트가 정하고(편집 모드는 아무 일도 없다 · 뷰 모드는 그 페이지를 연다 · 번들은 그 장 파일로
+  간다), `pageId` 가 없는 메뉴는 링크가 아닌 글로, 지금 페이지는 `aria-current="page"` 로 선다. 틀은 노드가 아니다 — 틀 안에 `Root` 를 두지 않는다.
+- 메뉴 · 페이지 이름(`item.title` · `title`)은 사람이 지은 글이라 방향 제어 글자가 들 수 있다 — 호스트가 **이름마다 방향을 가둬**(`isolateBidi`)
+  내리므로 `<LayoutLink>` 로 두든 «홈 > 주문 > 목록» 한 글자열로 이어 붙이든 뒤 글자의 차례가 안 뒤집힌다. 이름을 글자 단위로 자르거나 고쳐
+  그리지 않는다(앞뒤의 격리 글자가 떨어진다). 따로 요소(`<a>` · `<span>`)는 격리가 아니다 — 이름을 다른 데서 받아 그리면 `<bdi>` 로 감싼다.
+- `wb-theme check` 가 내용 한 번(다 켠 판 · 영역 하나씩 끈 판 · 메뉴 밖 페이지 판 · 빈 내비 판마다 — `regions` · `lnb` 로 갈라 그려도 판마다 한 번이어야
+  한다 · `lnb` 는 `null` 일 수 있다) · 선언한 끌 수 있는 영역이 `LayoutRegion` 으로 섰는지(다 켠 판에 있고 그 하나만 끈 판에 없다)를 오류로, 선언 밖
+  영역을 경고로 센다. `wb-theme dev` 의 «예제 페이지» 는 서브페이지 장이라 영역 켬/끔 체크로 끈 판을 본다.
 
 ## sdk 범위
 

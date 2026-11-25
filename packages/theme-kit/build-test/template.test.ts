@@ -176,6 +176,13 @@ describe('스타터 템플릿 zip', () => {
     expect(readWbtheme(new Uint8Array(readFileSync(r.file))).issues).toEqual([])
   })
 
+  /** 작성자가 받은 그대로 `wb-theme check` 를 지난다 — 안 쓰는 토큰 · 계약 오류가 있으면 첫 실행부터 «✗» 로 시작한다. */
+  it('템플릿이 그대로 wb-theme check 를 지난다', () => {
+    const run = spawnSync('node', [join(KIT, 'bin/wb-theme.js'), 'check'], { cwd: template, encoding: 'utf8', timeout: 180_000 })
+    expect(run.status, `${run.stdout}${run.stderr}`).toBe(0)
+    expect(run.stdout).toContain('✓ 오류 없음')
+  })
+
   /**
    * 스타터 테마가 자리표시자의 정한 그리기 값을 실 Chromium 에서 따른다 — 옮긴 기본 뷰가 `placeholderVars` 를 싣고 템플릿 CSS 가 변수를 덮지 않는다
    * (`wb-theme shots` 의 `placeholder` — 정한 값 표본의 계산된 바탕 · 테두리 · 글 색 · 모서리 · 글 크기 · 여백).

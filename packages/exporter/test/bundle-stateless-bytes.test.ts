@@ -45,6 +45,9 @@
  * 페이지 · 시트는 그대로다(다시 재는 법: `bundle/shell.tsx` 의 `CommentTab` 에서 `id` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-11-tk-report.md`).
  * 카탈로그에서 `Slot` 을 걷으며 «슬롯» 장을 뺐다 — 남은 장 HTML · `index.html` 은 목차(장 넷 → 셋)만 달라 다시 지었고 시트는 그대로다(다시 재는 법: 장 하나를
  * 더 넣고 해시하면 목차가 다시 늘어 값이 바뀐다 — `docs/superpowers/plans/2026-11-25-ly2-report.md`).
+ * 레이아웃 틀(SDK 1.10.0)을 들이며 `assets/views.css` 만 다시 지었다 — 내용 상자(`[data-wb-layout-content]`)와 팝업 레이아웃의 막(`[data-wb-layout="popup"]`)
+ * 규칙 둘이다. 번들이 아직 장을 틀로 감싸지 않아 페이지 HTML 은 그대로다(다시 재는 법: `packages/theme-sdk/src/default-views/layout.tsx` 의
+ * `layoutCssBlocks` 를 빈 목록으로 두고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-25-lt-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -88,14 +91,14 @@ const BEFORE = {
     'pages/넓은-표본.html': 'd3f9228e6ff2f166',
     'pages/글.html': '3c57529a0b5b606c',
     'pages/깨진-문서.html': 'c150d92dc536c2bf',
-    'assets/views.css': '556341d0b9e1bbc4',
+    'assets/views.css': '3620a5c4630e6ae4',
   },
   themed: {
     'index.html': '1c35814ab3bb58f4',
     'pages/넓은-표본.html': 'e7223e65a3f79f4e',
     'pages/글.html': 'eff974ff79c0fecc',
     'pages/깨진-문서.html': 'e8249eb7e8b5a746',
-    'assets/views.css': '556341d0b9e1bbc4',
+    'assets/views.css': '3620a5c4630e6ae4',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',

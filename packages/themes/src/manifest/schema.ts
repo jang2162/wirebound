@@ -1,4 +1,4 @@
-import { getComponent, getKoreanErrorMap, installCatalog } from '@wirebound/schema'
+import { getComponent, getKoreanErrorMap, installCatalog, PAGE_LAYOUTS } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { z } from 'zod'
 import { SDK_RANGE_PATTERN, VERSION_PATTERN } from './semver'
@@ -24,6 +24,14 @@ export type ManifestIssueCode =
   | 'unknown-token'
   /** 토큰 값(기본값 · 받은 값)에 C0 제어 글자 · U+007F · 짝 없는 서로게이트가 있다(`checkTokenValue`). */
   | 'token-value-char'
+  /** `layouts` 의 키가 페이지 레이아웃(`PAGE_LAYOUTS`)이 아니다. */
+  | 'unknown-layout'
+  /** 레이아웃 영역 id 가 꼴(`LAYOUT_REGION_ID`) 밖이다. */
+  | 'bad-region-id'
+  /** 한 레이아웃 안에서 영역 id 가 겹친다. */
+  | 'duplicate-region'
+  /** 한 레이아웃의 영역이 `LAYOUT_REGIONS_MAX` 를 넘는다. */
+  | 'too-many-regions'
 
 export interface ManifestIssue {
   code: ManifestIssueCode
@@ -42,6 +50,17 @@ const TokenDeclSchema = z.discriminatedUnion('type', [
   z.strictObject({ type: z.enum(['color', 'length', 'number', 'font', 'shadow']), ...tokenBase }),
   z.strictObject({ type: z.literal('select'), options: z.array(z.string().min(1)).min(1), ...tokenBase }),
 ])
+
+/** 레이아웃 영역 id 의 꼴 — 표시 옵션 저장의 열쇠(`<레이아웃>.<id>`)에 들어간다. */
+export const LAYOUT_REGION_ID = /^[a-z][A-Za-z0-9]{0,31}$/
+
+/** 한 레이아웃이 선언할 수 있는 영역 수 — «보기» 메뉴가 한 화면에 담는 항목 수다. */
+export const LAYOUT_REGIONS_MAX = 8
+
+/** 레이아웃 선언의 모양. 키 셋 · id 꼴 · 겹침 · 수는 `checkLayouts` 가 이슈로 모은다(한 번에 다 고치게). */
+const LayoutDeclSchema = z.strictObject({
+  regions: z.array(z.strictObject({ id: z.string(), label: z.string().min(1).max(20), toggle: z.boolean().optional() })),
+})
 
 const VariantDeclSchema = z.strictObject({
   id: z.string().min(1),
@@ -65,6 +84,7 @@ export const ManifestSchema = z.strictObject({
     items: z.record(z.string().regex(TOKEN_KEY), TokenDeclSchema),
   }),
   components: z.record(z.string(), z.strictObject({ variants: z.array(VariantDeclSchema).min(1), defaultVariant: z.string() })).optional(),
+  layouts: z.record(z.string(), LayoutDeclSchema).optional(),
 }) satisfies z.ZodType<ThemeManifest>
 
 /**
@@ -122,6 +142,7 @@ export function validateManifest(
   }
   issues.push(...checkTokens(manifest.tokens.items))
   issues.push(...checkComponents(manifest.components ?? {}).filter((issue) => options.stored !== true || !CATALOG_CODES.has(issue.code)))
+  issues.push(...checkLayouts(manifest.layouts ?? {}))
 
   return { manifest: issues.length === 0 ? manifest : null, issues }
 }
@@ -191,6 +212,45 @@ function checkComponents(components: NonNullable<ThemeManifest['components']>): 
         message: `defaultVariant ${decl.defaultVariant} 가 ${type} 의 variants 에 없습니다`,
       })
     }
+  }
+  return issues
+}
+
+const LAYOUT_KEYS: ReadonlySet<string> = new Set(PAGE_LAYOUTS)
+
+function checkLayouts(layouts: NonNullable<ThemeManifest['layouts']>): ManifestIssue[] {
+  const issues: ManifestIssue[] = []
+  for (const [layout, decl] of Object.entries(layouts)) {
+    const path = `layouts.${layout}`
+    if (!LAYOUT_KEYS.has(layout)) {
+      issues.push({
+        code: 'unknown-layout',
+        path,
+        message: `${layout} 은 페이지 레이아웃이 아닙니다 — ${PAGE_LAYOUTS.join(' · ')} 가운데 하나입니다`,
+      })
+      continue
+    }
+    if (decl === undefined) continue
+    if (decl.regions.length > LAYOUT_REGIONS_MAX) {
+      issues.push({
+        code: 'too-many-regions',
+        path: `${path}.regions`,
+        message: `${layout} 의 영역이 ${decl.regions.length} 개입니다 — ${LAYOUT_REGIONS_MAX} 개까지 선언합니다`,
+      })
+    }
+    const seen = new Set<string>()
+    decl.regions.forEach((region, index) => {
+      const at = `${path}.regions.${index}.id`
+      if (!LAYOUT_REGION_ID.test(region.id)) {
+        issues.push({
+          code: 'bad-region-id',
+          path: at,
+          message: `영역 id ${JSON.stringify(region.id)} 가 꼴(영문 소문자로 시작하는 영숫자 32 자 이내) 밖입니다`,
+        })
+      }
+      if (seen.has(region.id)) issues.push({ code: 'duplicate-region', path: at, message: `${layout} 의 영역 id ${region.id} 가 겹칩니다` })
+      seen.add(region.id)
+    })
   }
   return issues
 }

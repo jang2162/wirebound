@@ -4,13 +4,15 @@ import type { ThemeManifest } from '@wirebound/theme-sdk'
 /** 미리보기 보기 — 웹의 테마 미리보기(`apps/web/src/settings/theme-preview.tsx`)와 같은 둘. */
 export type PreviewView = 'components' | 'examples'
 
-/** 셸이 프레임에 보내는 지금의 값 — 토큰(기본값과 다른 것만) · 겹쳐 보기 · 보기 · 예제 장. */
+/** 셸이 프레임에 보내는 지금의 값 — 토큰(기본값과 다른 것만) · 겹쳐 보기 · 보기 · 예제 장 · 예제 틀에서 끈 영역. */
 export interface FrameState {
   type: 'wb-state'
   tokens: Record<string, string | number>
   overlay: boolean
   view: PreviewView
   page: ExamplePageId
+  /** 예제 장(서브페이지)의 틀에서 끈 영역 id — manifest `layouts.subpage.regions` 가운데 끌 수 있는 것. */
+  hiddenRegions: string[]
 }
 
 /** 예제 안의 이동이 장을 바꿨다 — 셸의 장 이름 줄이 따라간다. */

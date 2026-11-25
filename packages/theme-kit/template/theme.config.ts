@@ -22,7 +22,6 @@ export default defineManifest({
       'color.text': { type: 'color', label: '글자색', group: 'color', default: '#0f172a' },
       'font.body': { type: 'font', label: '본문 글꼴', group: 'type', default: 'Pretendard, system-ui, sans-serif' },
       'radius.card': { type: 'length', label: '카드 모서리', group: 'shape', default: '8px' },
-      density: { type: 'select', label: '밀도', options: ['compact', 'comfortable'], default: 'comfortable' },
     },
   },
   components: {
@@ -41,4 +40,16 @@ export default defineManifest({
       defaultVariant: 'default',
     },
   },
+  // 레이아웃 틀의 영역(SDK 1.10.0 — sdk 범위를 ^1.10.0 으로 올린다) — 끌 수 있는 영역은 에디터 «보기» 메뉴의 항목이 된다. 뷰는 src/index.tsx 의
+  // defineTheme({ layouts: { subpage: … } }) 로 내고, 영역은 LayoutRegion 으로 감싼다 — SKILL.md 「레이아웃 뷰」.
+  // layouts: {
+  //   subpage: {
+  //     regions: [
+  //       { id: 'gnb', label: 'GNB' },
+  //       { id: 'lnb', label: 'LNB' },
+  //       { id: 'breadcrumb', label: '브레드크럼브' },
+  //       { id: 'title', label: '페이지 제목' },
+  //     ],
+  //   },
+  // },
 })

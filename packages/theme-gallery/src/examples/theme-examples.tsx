@@ -1,6 +1,7 @@
-import { pageTargetKey } from '@wirebound/schema'
+import { buildLayoutNav, pageTargetKey } from '@wirebound/schema'
 import {
   EMPTY_OVERLAY,
+  LayoutFrame,
   NO_OPEN_POPUP,
   POPUP_DEPTH_NOTICE,
   PopupLayer,
@@ -15,7 +16,7 @@ import {
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement, type SyntheticEvent } from 'react'
 import { galleryAssetUrl } from '../samples'
-import { EXAMPLE_PAGES, EXAMPLE_POPUPS, type ExamplePageId } from './documents'
+import { EXAMPLE_MENU, EXAMPLE_PAGES, EXAMPLE_POPUPS, type ExamplePageId } from './documents'
 
 /** 이 예제에 없는 페이지를 가리킨 이음 — 문서가 검증을 지나면 안 생긴다(케이스가 죽은 이음 0 을 잰다). */
 export function missingExample(target: string): string {
@@ -41,7 +42,7 @@ interface PageRuntime {
 const NO_NOTICES: readonly string[] = []
 
 /**
- * 예제 페이지 하나를 그리고(`renderDocument` — 틀은 장 문서 안에 든다) 이음을 받아 장을 바꾼다. 장 이름 줄 · 보기 전환은 호스트가 그린다(웹 미리보기 머리 ·
+ * 예제 페이지 하나를 그리고(`renderDocument` 를 `LayoutFrame` 으로 감싼다 — 내비는 `EXAMPLE_MENU`) 이음 · 틀 링크를 받아 장을 바꾼다. 장 이름 줄 · 보기 전환은 호스트가 그린다(웹 미리보기 머리 ·
  * kit 셸) — `page` 는 호스트가 든다.
  *
  * **미리보기 안의 누름은 바깥 화면을 안 움직인다.** 이동은 `onPageChange` 로만 알리고, `Link` 기본 뷰의 `<a href="#…">` 와 폼 제출의 기본 동작은
@@ -56,6 +57,8 @@ export function ThemeExamples(props: {
   onPageChange: (page: ExamplePageId) => void
   /** 팝업을 세울 구간 — 없으면 창 전체(`PopupLayer` 의 `area`). */
   popupArea?: PopupArea
+  /** 끈 틀 영역(`LayoutFrame` 의 `hiddenRegions`) — `wb-theme dev` 가 작성자가 끄는 판을 보인다. 없으면 다 켬. */
+  hiddenRegions?: readonly string[]
 }): ReactElement {
   const shown = EXAMPLE_PAGES.find((one) => one.id === props.page) ?? EXAMPLE_PAGES[0]!
   const stack = usePopupStack()
@@ -109,6 +112,12 @@ export function ThemeExamples(props: {
     if (notices.length > 0) setRuntime((prev) => ({ ...prev, notices }))
   }
 
+  // 틀 링크(GNB · LNB · 브레드크럼브) — 장 id 가 메뉴 트리의 페이지 id 다. 장이 아닌 페이지(팝업)는 내비에 안 선다.
+  const navigateTo = (pageId: string): void => {
+    const next = EXAMPLE_PAGES.find((one) => one.id === pageId)
+    if (next !== undefined && next.id !== shown.id) props.onPageChange(next.id)
+  }
+
   const keepInside = (event: SyntheticEvent): void => {
     const target = event.target as Element | null
     if (event.type === 'submit' || target?.closest?.('a[href]') != null) event.preventDefault()
@@ -122,11 +131,20 @@ export function ThemeExamples(props: {
             {current.notices.join(' · ')}
           </div>
         )}
-        {renderDocument(shown.document, {
-          theme: props.theme,
-          assetUrl: galleryAssetUrl,
-          interaction: { overlay: current.overlay, onEvent },
-        })}
+        <LayoutFrame
+          theme={props.theme}
+          layout={shown.document.layout ?? 'blank'}
+          title={shown.title}
+          nav={buildLayoutNav(EXAMPLE_MENU, { id: shown.id, title: shown.title })}
+          navigate={navigateTo}
+          {...(props.hiddenRegions === undefined ? {} : { hiddenRegions: props.hiddenRegions })}
+        >
+          {renderDocument(shown.document, {
+            theme: props.theme,
+            assetUrl: galleryAssetUrl,
+            interaction: { overlay: current.overlay, onEvent },
+          })}
+        </LayoutFrame>
         <PopupLayer
           stack={stack}
           theme={props.theme}

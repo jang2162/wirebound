@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  buildLayoutNav,
   COMPONENT_GROUPS,
   getComponent,
   installCatalog,
@@ -11,8 +12,8 @@ import {
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
-import { defineTheme } from '@wirebound/theme-sdk'
-import { EXAMPLE_PAGES, EXAMPLE_POPUPS, ThemeExamples, type ExamplePageId } from '@wirebound/theme-gallery'
+import { defineTheme, LayoutLink, LayoutRegion, type LayoutNavItem, type LayoutView } from '@wirebound/theme-sdk'
+import { EXAMPLE_MENU, EXAMPLE_PAGES, EXAMPLE_POPUP_ID, EXAMPLE_POPUPS, ThemeExamples, type ExamplePageId } from '@wirebound/theme-gallery'
 
 beforeAll(() => installCatalog())
 afterEach(() => {
@@ -179,5 +180,74 @@ describe('ThemeExamples', () => {
     const main = container.querySelector('[data-wb-id="ex-o"] [data-wb-id="ex-l-main"]')!
     expect(main.querySelector('[data-wb-id^="ex-o-"]')).not.toBeNull()
     expect(container.querySelector('[data-wb-error]')).toBeNull()
+  })
+})
+
+/**
+ * **서브페이지 틀** — 장은 서브페이지 레이아웃이고 `EXAMPLE_MENU` 로 지은 내비와 함께 `LayoutFrame` 에 감긴다. 레이아웃 뷰를 낸 테마의 틀 링크가
+ * 장을 바꾸고, 끈 영역은 안 선다.
+ */
+describe('ThemeExamples — 서브페이지 틀', () => {
+  const flat = (items: readonly LayoutNavItem[]): LayoutNavItem[] => items.flatMap((item) => [item, ...flat(item.children)])
+  const Subpage: LayoutView = (props) => (
+    <div>
+      <LayoutRegion id="gnb" as="nav">
+        {flat(props.gnb).map((item) => (
+          <LayoutLink key={item.id} item={item} data-nav={item.id} />
+        ))}
+      </LayoutRegion>
+      <LayoutRegion id="title" as="h1">
+        {props.title}
+      </LayoutRegion>
+      {props.children}
+    </div>
+  )
+  const framed = defineTheme({
+    manifest: {
+      id: 't',
+      name: 't',
+      version: '1.0.0',
+      sdk: '^1.10.0',
+      tokens: { items: {} },
+      layouts: {
+        subpage: {
+          regions: [
+            { id: 'gnb', label: 'GNB' },
+            { id: 'title', label: '제목' },
+          ],
+        },
+      },
+    },
+    views: {},
+    layouts: { subpage: Subpage },
+  })
+
+  it('예제 메뉴 트리가 장 넷을 다 들고 팝업은 내비에 안 선다', () => {
+    const nav = buildLayoutNav(EXAMPLE_MENU, { id: 'orders', title: '주문 목록' })
+    const pages = flat(nav.gnb).filter((item) => item.kind === 'page')
+    expect(pages.map((item) => item.id)).toEqual(EXAMPLE_PAGES.map((page) => page.id))
+    expect(pages.some((item) => item.id === EXAMPLE_POPUP_ID)).toBe(false)
+    expect(nav.trail.map((item) => item.title)).toEqual(['주문 관리', '주문', '주문 목록'])
+    for (const page of EXAMPLE_PAGES) expect(page.document.layout, page.id).toBe('subpage')
+  })
+
+  it('틀 링크를 누르면 장이 바뀐다 · 지금 장은 aria-current · 제목 영역은 장 이름', () => {
+    const onChange = vi.fn()
+    const { container } = render(<ThemeExamples theme={framed} tokens={{}} page="orders" onPageChange={onChange} />)
+    expect(container.querySelector('[data-wb-layout="subpage"] h1')?.textContent).toBe('주문 목록')
+    expect(container.querySelector('[data-nav="orders"]')?.getAttribute('aria-current')).toBe('page')
+    fireEvent.click(container.querySelector('[data-nav="order-form"]')!)
+    fireEvent.click(container.querySelector('[data-nav="menu-orders"]')!)
+    fireEvent.click(container.querySelector('[data-nav="orders"]')!)
+    expect(onChange.mock.calls).toEqual([['order-form'], ['dashboard']])
+    expect(container.querySelector('[data-nav="menu-members"]')?.tagName).toBe('SPAN')
+  })
+
+  it('끈 영역은 안 선다 — 다른 영역은 그대로', () => {
+    const { container } = render(
+      <ThemeExamples theme={framed} tokens={{}} page="dashboard" onPageChange={() => {}} hiddenRegions={['gnb']} />,
+    )
+    expect(container.querySelector('[data-wb-layout-region="gnb"]')).toBeNull()
+    expect(container.querySelector('[data-wb-layout-region="title"]')).not.toBeNull()
   })
 })

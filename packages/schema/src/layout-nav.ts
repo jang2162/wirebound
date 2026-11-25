@@ -10,10 +10,12 @@
  * | `lnb` | 지금 페이지가 든 뿌리 메뉴. 트리에 없으면 `null` |
  * | `trail` | 뿌리 메뉴 → … → 페이지가 든 메뉴 → 지금 페이지. 트리에 없으면 지금 페이지 하나 |
  * | `current` | 지금 페이지와 그 조상 메뉴 |
+ * | `title` | 메뉴 · 페이지 이름을 `isolateBidi` 로 가둔 것 — 틀이 이름을 구분 글자 · 다음 항목과 이어 그려도 방향 제어 글자가 이름 밖을 안 뒤집는다(`<a>` · `<span>` 은 격리가 아니다). 제어 글자가 없으면 글자 그대로 |
  *
  * 화면 상태는 메뉴 항목이 아니다. 지금 페이지가 트리에 없는 판(막 만들어 트리가 아직 안 옴 · 조회 실패 · 지금 페이지가 팝업)은 `gnb` 를 받은
  * 트리 그대로 짓는다.
  */
+import { isolateBidi } from './bidi'
 import type { PageLayout } from './node'
 
 /** 입력 — 메뉴 트리 응답(`GET …/tree` 의 `menu`)과 같은 꼴에서 내비가 읽는 칸만. */
@@ -59,7 +61,7 @@ export function buildLayoutNav(menu: readonly LayoutNavMenu[], current: { id: st
     return {
       gnb,
       lnb: null,
-      trail: [{ id: current.id, kind: 'page', title: current.title, pageId: current.id, current: true, children: [] }],
+      trail: [{ id: current.id, kind: 'page', title: isolateBidi(current.title), pageId: current.id, current: true, children: [] }],
     }
   }
   return { gnb, lnb: path[0] ?? null, trail: path }
@@ -68,12 +70,19 @@ export function buildLayoutNav(menu: readonly LayoutNavMenu[], current: { id: st
 function menuItem(node: LayoutNavMenu, currentId: string): LayoutNavItem {
   const pages: LayoutNavItem[] = node.pages
     .filter((page) => page.layout !== 'popup')
-    .map((page) => ({ id: page.id, kind: 'page', title: page.title, pageId: page.id, current: page.id === currentId, children: [] }))
+    .map((page) => ({
+      id: page.id,
+      kind: 'page',
+      title: isolateBidi(page.title),
+      pageId: page.id,
+      current: page.id === currentId,
+      children: [],
+    }))
   const children = [...pages, ...node.children.map((child) => menuItem(child, currentId))]
   return {
     id: node.id,
     kind: 'menu',
-    title: node.title,
+    title: isolateBidi(node.title),
     pageId: children.find((child) => child.pageId !== null)?.pageId ?? null,
     current: children.some((child) => child.current),
     children,

@@ -25,6 +25,10 @@ export {
   usePopupStack,
 } from './popup-layer'
 
+// **레이아웃 틀**(설계 `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「테마 계약」) — 그린 문서를 테마의 레이아웃 뷰로 감싼다.
+export type { LayoutFrameProps } from './layout-frame'
+export { LayoutFrame, layoutRegions } from './layout-frame'
+
 export { resolveVariant } from './variant'
 
 export { NO_THEME } from './no-theme'

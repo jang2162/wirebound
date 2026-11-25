@@ -3,17 +3,32 @@ import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import {
   BODY_ZONE,
+  buildLayoutNav,
   childLists,
   getComponent,
   installCatalog,
+  PAGE_LAYOUTS,
   walkNodes,
   WEIGHT_MAX,
   WEIGHT_MIN,
   zoneList,
+  type LayoutNav,
+  type PageDocument,
+  type PageLayout,
   type WbNode,
 } from '@wirebound/schema'
-import { renderDocument, unusedViewKeys } from '@wirebound/renderer'
-import { galleryAssetUrl, galleryItemDocument, galleryItems, PLACEHOLDER_SET_PROPS, PLACEHOLDER_SET_SAMPLE } from '@wirebound/theme-gallery'
+import { LayoutFrame, renderDocument, unusedViewKeys } from '@wirebound/renderer'
+import {
+  EXAMPLE_MENU,
+  EXAMPLE_PAGES,
+  EXAMPLE_POPUP_ID,
+  EXAMPLE_POPUPS,
+  galleryAssetUrl,
+  galleryItemDocument,
+  galleryItems,
+  PLACEHOLDER_SET_PROPS,
+  PLACEHOLDER_SET_SAMPLE,
+} from '@wirebound/theme-gallery'
 import {
   defaultViewsCss,
   gridLayout,
@@ -38,9 +53,16 @@ export interface ThemeCheckError {
    * 뷰가 안 그렸다(`missingZones`). `placeholder` — 자리표시자 뷰가 사람이 정한 그리기 값을 뿌리의 변수로 안 실었다(`placeholderDrops`). `pairs` — 폼 표
    * 뷰가 쌍 격자 계약(`cells` 조각 · 그 직계 칸과 빈 쌍 · 두 조각 · 빈 쌍 수)을 어겼다(`pairGridProblems`). `grid` — 그리드의 표 계약(`dataGridProblems`).
    * `file` — 파일첨부 뷰가 목록 · 빈 목록 안내 · 한도 글 계약을 어겼다(`fileAttachProblems`). `popup` — 팝업 뷰가 덮개 층이 기대는
-   * 조각(`close` · `body`)이나 대화 상자 이름을 어겼다(`popupProblems`).
+   * 조각(`close` · `body`)이나 대화 상자 이름을 어겼다(`popupProblems`). `layout` — 레이아웃 뷰가 틀 계약(내용 한 번 · 선언한 끌 수 있는 영역을
+   * `LayoutRegion` 으로)을 어겼거나 던졌다(`layoutProblems`) — `type` 은 `layout:<레이아웃>` 이다.
    */
-  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'file' | 'popup'
+  source: 'fallback' | 'console' | 'bundle' | 'zone' | 'placeholder' | 'pairs' | 'grid' | 'file' | 'popup' | 'layout'
+}
+
+/** 레이아웃 뷰가 그린 영역 가운데 manifest 의 그 레이아웃 선언에 없는 것 — 호스트의 켬/끔 · «보기» 메뉴가 그 영역을 모른다. */
+export interface ThemeCheckUndeclaredRegion {
+  layout: PageLayout
+  id: string
 }
 
 export interface ThemeCheckFocusable {
@@ -64,6 +86,8 @@ export interface ThemeCheckReport {
    * (`apps/web/src/edit/editor-shortcuts.ts` 의 `shortcutsBlocked` · 테마 작성 안내 SKILL.md 「뷰 계약」). 닫힌 shadow 안은 못 본다.
    */
   focusables: ThemeCheckFocusable[]
+  /** **경고다 — `ok` 에 안 든다.** 선언 밖 영역(`ThemeCheckUndeclaredRegion`). */
+  undeclaredRegions: ThemeCheckUndeclaredRegion[]
 }
 
 /**
@@ -131,6 +155,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         errors: [{ type: '', variant: undefined, label: '', message, source: 'bundle' }],
         unusedTokens,
         focusables: [],
+        undeclaredRegions: [],
       }
     }
     const viewKeyErrors = findBadViewKeys(definition)
@@ -139,6 +164,7 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
     const items = galleryItems(theme)
     const errors: ThemeCheckError[] = [...viewKeyErrors]
     const focusables: ThemeCheckFocusable[] = []
+    const undeclaredRegions: ThemeCheckUndeclaredRegion[] = []
 
     // 붙잡은 동안 react 가 act 경고를 내지 않게 — vitest 의 testing-library 가 이 값을 켜 둔다.
     const flags = globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -183,12 +209,144 @@ export async function checkTheme(files: WbthemeFiles): Promise<ThemeCheckReport>
         // 언마운트가 남긴 스케줄러의 일을 여기서 끝낸다 — DOM 전역을 걷은 뒤에 돌면 react-dom 이 `window` 를 못 찾아 던진다.
         await settle()
       }
+      for (const layout of PAGE_LAYOUTS) {
+        if (theme.layouts?.[layout] === undefined && theme.manifest.layouts?.[layout] === undefined) continue
+        const at = { type: `layout:${layout}`, variant: undefined, label: '레이아웃' }
+        const doc = layoutSample(layout)
+        const draw = async (hidden: readonly string[], nav: LayoutNav) => {
+          const container = document.createElement('div')
+          document.body.append(container)
+          const root = createRoot(container)
+          logged = []
+          flushSync(() => {
+            root.render(
+              createElement(ThemeProvider, {
+                value: { tokens, window },
+                children: createElement(LayoutFrame, {
+                  theme,
+                  layout,
+                  title: doc.title,
+                  nav,
+                  hiddenRegions: hidden,
+                  children: renderDocument(doc.document, { theme, assetUrl: galleryAssetUrl }),
+                }),
+              }),
+            )
+          })
+          await settle()
+          const regions = [...container.querySelectorAll('[data-wb-layout-region]')].map((el) => el.getAttribute('data-wb-layout-region')!)
+          const contents = container.querySelectorAll('[data-wb-layout-content]').length
+          const roots = [...container.querySelectorAll('[data-wb-id]')].filter(
+            (el) => el.getAttribute('data-wb-id') === doc.document.root.id,
+          ).length
+          const fallback = container.querySelector('[data-wb-layout][data-wb-error]')?.getAttribute('data-wb-error') ?? null
+          const said = logged
+          root.unmount()
+          container.remove()
+          await settle()
+          return { regions, contents, roots, fallback, said }
+        }
+        const declared = theme.manifest.layouts?.[layout]?.regions ?? []
+        const menuNav = buildLayoutNav(EXAMPLE_MENU, { id: doc.id, title: doc.title })
+        const shown = await draw([], menuNav)
+        const allOn = layoutProblems(layout, declared, shown)
+        for (const message of allOn) errors.push({ ...at, message, source: 'layout' })
+        for (const message of shown.said) errors.push({ ...at, message, source: 'console' })
+        const known = new Set(declared.map((region) => region.id))
+        for (const id of new Set(shown.regions)) if (!known.has(id)) undeclaredRegions.push({ layout, id })
+        // 다 켠 판이 이미 내용 · 폴백으로 어겼으면 다른 판은 같은 말을 되풀이할 뿐이라 안 그린다.
+        const contentClean = shown.fallback === null && shown.contents === 1 && shown.roots === 1
+        for (const region of declared) {
+          if (region.toggle === false) continue
+          const off = await draw([region.id], menuNav)
+          if (shown.regions.includes(region.id) && off.regions.includes(region.id)) {
+            errors.push({
+              ...at,
+              message: `${layout} 레이아웃 뷰가 끈 영역 ${region.id} 을 그렸습니다 — 끌 수 있는 영역은 SDK 의 LayoutRegion 으로 감쌉니다`,
+              source: 'layout',
+            })
+          }
+          if (contentClean) pushPlate(`${region.id} 끈 판`, off)
+        }
+        if (contentClean) {
+          pushPlate('메뉴 밖 페이지 판', await draw([], buildLayoutNav(EXAMPLE_MENU, { id: OUTSIDE_MENU_PAGE_ID, title: doc.title })))
+          pushPlate('빈 내비 판', await draw([], buildLayoutNav([], { id: doc.id, title: doc.title })))
+        }
+        function pushPlate(plate: string, drawn: Awaited<ReturnType<typeof draw>>) {
+          for (const message of contentProblems(layout, drawn, plate)) errors.push({ ...at, message, source: 'layout' })
+          for (const message of drawn.said) errors.push({ ...at, message: `${plate}: ${message}`, source: 'console' })
+        }
+      }
     } finally {
       console.error = consoleError
       flags.IS_REACT_ACT_ENVIRONMENT = actBefore
     }
-    return { items: items.length, errors, unusedTokens, focusables }
+    return { items: items.length, errors, unusedTokens, focusables, undeclaredRegions }
   })
+}
+
+/** 레이아웃 뷰를 그려 볼 장 — 팝업은 예제 팝업, 그 밖은 예제의 첫 장(서브페이지)이다. 문서의 레이아웃 칸은 안 본다(틀이 레이아웃을 받는다). */
+function layoutSample(layout: PageLayout): { id: string; title: string; document: PageDocument } {
+  if (layout === 'popup') return { id: EXAMPLE_POPUP_ID, title: '주문 삭제', document: EXAMPLE_POPUPS[0]!.document }
+  const first = EXAMPLE_PAGES[0]!
+  return { id: first.id, title: first.title, document: first.document }
+}
+
+/**
+ * 메뉴 밖 페이지 판의 지금 페이지 id — `EXAMPLE_MENU` 에 안 든다. 막 만들어 트리가 아직 안 온 페이지 · 트리 조회가 실패한 판이 그 꼴이다
+ * (`buildLayoutNav` 의 «지금 페이지가 트리에 없음» — `lnb: null` · `trail` 은 지금 페이지 하나). 빈 내비 판(빈 메뉴 트리)도 같은 까닭으로 그린다.
+ */
+const OUTSIDE_MENU_PAGE_ID = 'wb-check-outside-menu'
+
+/**
+ * **레이아웃 틀의 계약** — 모두 켠 판에서 ① 뷰가 던지지 않았다(던지면 렌더러가 기본으로 대신 그리고 틀에 `data-wb-error` 를 단다) ② 내용을
+ * 정확히 한 번 그렸다(`contentProblems`) ③ 선언한 끌 수 있는 영역이 `LayoutRegion` 으로 섰다(`data-wb-layout-region` 이 없으면 호스트가 끄지
+ * 못한다). «하나만 끈 판에 없다» 와 ①② 를 다른 판(영역 하나씩 끔 · 메뉴 밖 페이지 · 빈 내비)에서 다시 보는 것은 `checkTheme` 가 따로 그려 본다
+ * — 뷰는 `regions` · `lnb` · `trail` 로 갈라 그릴 수 있어, 다 켠 판 하나만 세면 끈 판에서 내용이 사라지거나 두 번 서는 뷰가 지난다.
+ *
+ * **못 재는 것** — ① 빈 `LayoutRegion` 을 두고 진짜 GNB 는 그 밖에 그린 뷰(«끔» 이 아무것도 안 끈다)는 지난다 — 영역 속성이 서고 끄면 빠지는 것만
+ * 보므로 의도한 흉내는 못 가른다(`docs/superpowers/plans/2026-11-25-rv-lt-report.md` F3). ② 그린 판 밖의 갈래(예제 메뉴에 없는 꼴의 내비 · 다른
+ * 제목)는 안 그린다. ③ jsdom 이라 DOM 꼴만 본다 — 틀의 배치 규칙이 형제 구조로 가르는지(정본 「테마의 범위」)는 안 본다.
+ */
+function layoutProblems(
+  layout: PageLayout,
+  declared: readonly { id: string; toggle?: boolean }[],
+  shown: { regions: string[]; contents: number; roots: number; fallback: string | null },
+): string[] {
+  if (shown.fallback !== null) return [shown.fallback]
+  const out = contentProblems(layout, shown)
+  for (const region of declared) {
+    if (region.toggle === false || shown.regions.includes(region.id)) continue
+    out.push(`${layout} 레이아웃 뷰가 선언한 영역 ${region.id} 을 LayoutRegion 으로 그리지 않았습니다 — 호스트가 그 영역을 끄지 못합니다`)
+  }
+  return out
+}
+
+/**
+ * 한 판에서 내용을 정확히 한 번 그렸는가 — 내용 상자(`data-wb-layout-content`)와 **문서 뿌리 노드**(`data-wb-id="<뿌리 id>"`)가 각각 정확히
+ * 하나다. 안 두면 페이지가 안 보이고, 두 번 두면 노드 id 가 겹쳐 캔버스가 노드를 못 가른다. 내용 상자만 세면 그 속성을 흉내 낸 빈 요소가
+ * 지나므로 뿌리 노드를 함께 센다. `plate` 는 다 켠 판 밖의 판 이름이다(문장에 싣는다).
+ */
+function contentProblems(
+  layout: PageLayout,
+  shown: { contents: number; roots: number; fallback: string | null },
+  plate?: string,
+): string[] {
+  if (shown.fallback !== null) return plate === undefined ? [shown.fallback] : [`${plate}: ${shown.fallback}`]
+  const where = plate === undefined ? '' : `${plate}에서 `
+  if (shown.contents !== 1) {
+    return [
+      shown.contents === 0
+        ? `${layout} 레이아웃 뷰가 ${where}페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다`
+        : `${layout} 레이아웃 뷰가 ${where}페이지 내용(children)을 ${shown.contents} 번 두었습니다 — 정확히 한 번 둡니다`,
+    ]
+  }
+  if (shown.roots !== 1) {
+    return [
+      `${layout} 레이아웃 뷰가 ${where}페이지 문서를 ${shown.roots === 0 ? '그리지 않았습니다' : `${shown.roots} 번 그렸습니다`}(뿌리 노드 ${shown.roots} 개) — 내용 상자는 children 으로만 둡니다`,
+    ]
+  }
+  return []
 }
 
 /**
@@ -763,8 +921,8 @@ function findUnusedTokens(files: WbthemeFiles): string[] {
 }
 
 /**
- * 보고를 사람이 읽을 줄로 — `wb-theme check` 가 찍는다. `ok` 는 둘(오류 · 안 쓰는 토큰)이 다 비었을 때만 참이다. **포커스 받는 요소는
- * 경고 줄(`⚠`)이라 `ok` 에 안 든다** — 같은 컴포넌트 · variant · 요소는 한 줄로 묶고 칸 수를 적는다.
+ * 보고를 사람이 읽을 줄로 — `wb-theme check` 가 찍는다. `ok` 는 둘(오류 · 안 쓰는 토큰)이 다 비었을 때만 참이다. **포커스 받는 요소 · 선언 밖
+ * 레이아웃 영역은 경고 줄(`⚠`)이라 `ok` 에 안 든다** — 같은 컴포넌트 · variant · 요소는 한 줄로 묶고 칸 수를 적는다.
  */
 export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; lines: string[] } {
   const lines: string[] = [`갤러리 칸 ${report.items} 개`]
@@ -782,6 +940,11 @@ export function formatCheckReport(report: ThemeCheckReport): { ok: boolean; line
   }
   for (const [key, cells] of warned) {
     lines.push(`⚠ 포커스 받는 요소 ${key} (${cells} 칸) — 캔버스에서 누른 뒤 단축키 · 노드 복사가 안 섭니다. 단추 · 링크만 쓰세요`)
+  }
+  for (const found of report.undeclaredRegions) {
+    lines.push(
+      `⚠ 선언 밖 영역 ${found.layout} · ${found.id} — manifest 의 layouts.${found.layout}.regions 에 없어 «보기» 메뉴가 끄지 못합니다`,
+    )
   }
   const ok = report.errors.length === 0 && report.unusedTokens.length === 0
   lines.push(ok ? '✓ 오류 없음' : `✗ 오류 ${report.errors.length} · 안 쓰는 토큰 ${report.unusedTokens.length}`)

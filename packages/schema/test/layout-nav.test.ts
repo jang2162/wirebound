@@ -1,5 +1,6 @@
 /** 메뉴 트리 → 서브페이지 내비(`layout-nav.ts` 의 `buildLayoutNav`). */
 import { describe, expect, it } from 'vitest'
+import { isolateBidi } from '../src/bidi'
 import { buildLayoutNav, type LayoutNavItem, type LayoutNavMenu } from '../src/layout-nav'
 
 const page = (id: string, layout: 'blank' | 'popup' | 'subpage' = 'subpage') => ({ id, title: `페이지 ${id}`, layout })
@@ -62,6 +63,23 @@ describe('buildLayoutNav', () => {
     const nav = buildLayoutNav(TREE, { id: 'p_pop', title: '팝업' })
     expect(nav.lnb).toBeNull()
     expect(ids(nav.trail)).toEqual(['p_pop'])
+  })
+
+  it('메뉴 · 페이지 이름은 방향을 가둔다 — 제어 글자가 없는 이름은 그대로', () => {
+    const rlo = String.fromCharCode(0x202e)
+    const tree: LayoutNavMenu[] = [
+      { id: 'm', title: `주문${rlo}AB`, pages: [{ id: 'p', title: `목록${rlo}XY`, layout: 'subpage' }], children: [] },
+    ]
+    const nav = buildLayoutNav(tree, { id: 'p', title: `목록${rlo}XY` })
+    expect(nav.trail.map((item) => item.title)).toEqual([isolateBidi(`주문${rlo}AB`), isolateBidi(`목록${rlo}XY`)])
+    expect(nav.trail[0]!.title).not.toBe(`주문${rlo}AB`)
+    const outside = buildLayoutNav(tree, { id: 'q', title: `새${rlo}CD` })
+    expect(outside.trail[0]!.title).toBe(isolateBidi(`새${rlo}CD`))
+    expect(outside.trail[0]!.title).not.toBe(`새${rlo}CD`)
+    expect(buildLayoutNav(TREE, { id: 'p_list', title: '목록' }).trail.map((item) => item.title)).toEqual([
+      '메뉴 m_member',
+      '페이지 p_list',
+    ])
   })
 
   it('빈 트리', () => {
