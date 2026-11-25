@@ -112,3 +112,20 @@ g1 의 빨강 가르기:
 ## 지침
 
 - `.ruler/30-delegation.md` 「워커에게 맡길 때 — wirebound」 의 «시스템 테마의 노드 높이(카드 머리줄 · 여백 · 글 줄)를 바꾸는 변경도 같다» 문장 뒤에 한 줄: «**테마의 쌓임 규칙(자기 아래 여백 · 위 0)을 새 그릇(페이지 뿌리 등)에 넓히면 그 그릇에 곧바로 든 `Text`(`<p>` · 제목)의 문단 여백이 걷히는지 센다** — 뿌리에 글만 쌓은 긴 문서(실브라우저 판의 «채우는 글» 스물 · 마흔)가 짧아져 굴림 · 페이지 끝 · 사각형 판이 한꺼번에 빨강이다(`docs/superpowers/plans/2026-11-25-skt-report.md` «게이트»).»
+
+## 합친 판 게이트
+
+`git merge --no-ff main`(main 머리 `5f5a7889` — rp 병합 24 커밋) → 병합 커밋 `0ddb8b6b`. 충돌 0 · `pnpm-lock.yaml` 바뀜 0(설치 안 다시 함).
+
+- **체크섬** — 합친 판 `pnpm build` 의 `system-admin-2.1.0.wbtheme` sha256 `f2da81ae…a1b0199f` = `checksums.json` 의 `system-admin@2.1.0` 줄. 고칠 것 없음.
+- **조용히 합친 파일** — 합친 직후 `pnpm typecheck` 0. `pnpm fmt` 뒤 `git status` 빈 채 · `pnpm lint` 0(경고만).
+- 체인 스크립트 하나(`nohup nice -n 10 caffeinate -i`) · 슬롯 `gate-slots/mg-skt`(띄울 때 슬롯 1 개 · 끝에 지움) · Node v24.21.0 · load 5.50 → 17.62. `pmset -g log` 의 마지막 ` Sleep ` 줄이 09:34 — 게이트(15:20 – 16:05) 동안 잠듦 없음.
+
+| 단계 | rc | 실행 수 |
+|---|---|---|
+| lint · typecheck · build | 0 · 0 · 0 | — |
+| `pnpm test --maxWorkers=25%` | 0 | 636 파일(api 193 · unit 192 · web 251) · 9613 = 통과 9610 + 건너뜀 3(api 2 · web 1) · 실패 0 |
+| `test:build` build 갈래 | 0 | 18 파일 · 179 = 통과 178 + 건너뜀 1 · 실패 0 |
+| `test:build` 실브라우저 | 0 | 141 파일 · 878 = 통과 876 + 건너뜀 2 · 실패 0 |
+
+빨강 0 — 가를 판이 없다. rp 가 바꾼 우측 패널 · 단추 높이와 겹칠 자리로 본 `admin-list-skala`(6/6) · 끌기 판(`canvas-drop-review` 등)이 모두 초록이다. 앞 «게이트» 의 `layout-guides` 흔들림도 이 판에서는 안 섰다.
