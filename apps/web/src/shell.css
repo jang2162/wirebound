@@ -5346,10 +5346,11 @@
   gap: 8px;
 }
 
-/* 확정은 묻던 자리에서 **단추 한 높이(24px) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
-   내려가도 확정에 닿는다. 줄 하나의 확정(아래 `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
+/* 확정은 묻던 자리에서 **단추 한 높이(`--wb-shell-button-sm`) 이상** 떨어진다 — 겹치지만 않는 거리(`gap` 8px)면 두 번 누르는 사이 손이 조금만
+   내려가도 확정에 닿는다. 여백은 그 토큰에서 짓는다 — 단추 높이가 바뀌면 거리도 따라간다(여백 + `gap` = 단추 높이). 줄 하나의 확정(아래
+   `-tokens-confirm`)과 같은 하한이다(재는 자: `build-test/tokens-confirm.test.ts` 의 «거리»). */
 .wb-shell-tokens-bulk-confirm {
-  margin-top: 16px;
+  margin-top: calc(var(--wb-shell-button-sm) - 8px);
 }
 
 .wb-shell-tokens-name {
@@ -5380,7 +5381,7 @@
 .wb-shell-tokens-confirm {
   order: 2;
   margin-left: auto;
-  margin-top: 18px;
+  margin-top: calc(var(--wb-shell-button-sm) - 6px);
 }
 
 /* ── 프로젝트 설정(`routes/settings.tsx`) ─────────────────────────────────────────────────
@@ -5573,7 +5574,7 @@
   display: flex;
   flex: 1 1 100%;
   justify-content: flex-end;
-  margin-top: 18px;
+  margin-top: calc(var(--wb-shell-button-sm) - 6px);
 }
 
 /* 계정 설정 «내 정보»(`<dl>`) — 줄(라벨 | 값)을 세로로 쌓고 줄 사이를 16px 연다. 재는 자: `build-test/v4-settings-ui.test.ts` 의 «간격». */
