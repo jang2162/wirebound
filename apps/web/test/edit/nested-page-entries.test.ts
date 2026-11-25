@@ -44,7 +44,7 @@ describe('새 중첩 Page 를 넣는 입구', () => {
     const file = (children: WbNode[]) => ({
       wireboundVersion: WIREBOUND_PAGE_VERSION,
       page: { title: '가져온 페이지', description: null },
-      schema: { version: CURRENT_DOCUMENT_VERSION, layout: 'blank', root: { id: 'n_file_root01', type: 'Page', children } },
+      schema: { version: CURRENT_DOCUMENT_VERSION, layout: 'blank' as const, root: { id: 'n_file_root01', type: 'Page', children } },
       comments: [],
     })
     const refused = gatePageImport(file([{ id: 'n_file_page01', type: 'Page' }]))

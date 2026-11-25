@@ -9,14 +9,17 @@
  * repo 조율이 여기 산다.
  */
 
+import { PAGE_LAYOUTS, type PageLayout } from '@wirebound/schema'
+
 /**
  * 통합 트리(`routes/tree.ts`, 설계서 「설계서 화면 구조」)의 페이지 노드. `repos/pages.ts`의
- * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` · `viewStates` · `kind` 다섯만 담는다 — 트리 응답에
+ * 전체 `PageRecord`와 달리 `id`·`title`·`sortOrder` · `viewStates` · `layout` · `kind` 여섯만 담는다 — 트리 응답에
  * `schema`가 실리면 프로젝트가 커질수록 응답이 무거워진다. `repos/pages.ts`의
- * `listPageRows` 는 문서에서 상태 목록(`schema->'viewStates'`)과 뿌리 타입(`schema->'root'->>'type'`)만 고른다.
+ * `listPageRows` 는 문서에서 상태 목록(`schema->'viewStates'`)과 레이아웃(`schema->>'layout'`)만 고른다.
  *
- * `kind` 는 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`, 그 밖은 `page`. 메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서
- * 쓴다(열린 페이지는 열린 문서의 뿌리에서 읽는다).
+ * `layout` 은 페이지 레이아웃(`@wirebound/schema` 의 `PageLayout`) — 서브페이지 틀의 내비(`buildLayoutNav`)가 팝업을 거른다. `kind` 는 그것에서
+ * 짓는다(팝업 레이아웃이면 `popup`, 그 밖은 `page`) — 메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 쓴다(열린 페이지는
+ * 열린 문서에서 읽는다).
  *
  * `viewStates` 는 메뉴 트리의 상태 줄이 쓴다(설계 spec `2026-10-18-modules-states-layout-design.md` 「C3」 — 열린 페이지는 열린 문서에서, 다른
  * 페이지는 이것으로). 상태가 없는 페이지는 `[]`. 모양이 틀린 항목(손으로 넣은 행)은 뺀다.
@@ -26,10 +29,11 @@ export interface TreePage {
   title: string
   sortOrder: number
   viewStates: TreeViewState[]
+  layout: PageLayout
   kind: TreePageKind
 }
 
-/** 페이지의 종류 — 문서 뿌리 타입(`Page` · `Popup`)에서 읽는다. */
+/** 페이지의 종류 — 레이아웃에서 짓는다(`pageKindOf` 와 같은 값). */
 export type TreePageKind = 'page' | 'popup'
 
 /** 트리 응답의 상태 하나 — 문서의 `ViewState` 와 같은 모양. */
@@ -71,8 +75,17 @@ export interface PageRow {
   sort_order: number
   /** 문서의 상태 목록(`schema->'viewStates'` — jsonb 그대로). 없으면 상태가 없는 페이지다. */
   view_states?: unknown
-  /** 문서 뿌리 타입(`schema->'root'->>'type'`). 없으면 화면 페이지다. */
-  root_type?: string | null
+  /**
+   * 문서의 레이아웃(`schema->>'layout'`). 판 7 문서는 늘 든다(DB 마이그레이션 `0037-page-layout` 이 저장된 문서를 옮겼다) — 없거나 모르는 값이면
+   * 빈 레이아웃으로 읽는다.
+   */
+  layout?: string | null
+}
+
+/** 행의 레이아웃 글자를 트리 응답의 `layout` · `kind` 로 — 모르는 값은 빈 레이아웃이다. */
+function layoutEntries(value: string | null | undefined): { layout: PageLayout; kind: TreePageKind } {
+  const layout: PageLayout = PAGE_LAYOUTS.includes(value as PageLayout) ? (value as PageLayout) : 'blank'
+  return { layout, kind: layout === 'popup' ? 'popup' : 'page' }
 }
 
 /** 문서에서 읽은 상태 목록을 트리 응답의 모양으로 — 배열이 아니면 `[]`, 모양이 틀린 항목은 뺀다. */
@@ -132,7 +145,7 @@ export function buildMenuTree(nodes: MenuRow[], pages: PageRow[]): TreeMenuNode[
         title: row.title,
         sortOrder: row.sort_order,
         viewStates: treeViewStates(row.view_states),
-        kind: row.root_type === 'Popup' ? 'popup' : 'page',
+        ...layoutEntries(row.layout),
       })
     }
   }

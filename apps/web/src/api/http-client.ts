@@ -56,7 +56,7 @@ import type {
   TreeRead,
 } from './types'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
-import type { CodeGroup, CodeItem, UsageHit } from '@wirebound/schema'
+import { PAGE_LAYOUTS, type CodeGroup, type CodeItem, type PageLayout, type UsageHit } from '@wirebound/schema'
 
 const API_PREFIX = '/api'
 
@@ -279,7 +279,8 @@ function isTreeMenuNode(value: unknown): boolean {
 
 /**
  * 트리의 페이지 항목. **`id`가 빈 문자열이면 막는다** — `panels/menu-tree.tsx`의 `PageLink`가
- * 그 값을 주소에 그대로 넣는다(아래 `SHAPES`의 "주소가 되는 값" 표). `kind` 는 있으면 둘 가운데 하나다.
+ * 그 값을 주소에 그대로 넣는다(아래 `SHAPES`의 "주소가 되는 값" 표). `kind` 는 있으면 둘 가운데 하나다. `layout` 은 있으면 셋 가운데 하나이고
+ * `kind` 와 짝이다(팝업 ⇔ `popup`) — 없으면 트리 읽기가 `kind` 에서 짓는다(`withLayouts`).
  */
 function isTreePage(value: unknown): boolean {
   return (
@@ -289,8 +290,23 @@ function isTreePage(value: unknown): boolean {
     typeof value['title'] === 'string' &&
     typeof value['sortOrder'] === 'number' &&
     // 종류는 표지 · 고르개의 갈래다 — 모르는 값이 «화면» 으로 조용히 읽히지 않게(없으면 화면 — 옛 서버).
-    (value['kind'] === undefined || value['kind'] === 'page' || value['kind'] === 'popup')
+    (value['kind'] === undefined || value['kind'] === 'page' || value['kind'] === 'popup') &&
+    (value['layout'] === undefined ||
+      (PAGE_LAYOUTS.includes(value['layout'] as PageLayout) &&
+        (value['kind'] === undefined || (value['kind'] === 'popup') === (value['layout'] === 'popup'))))
   )
+}
+
+/**
+ * **트리의 페이지마다 `layout` 을 채운다** — 레이아웃을 모르는 서버의 응답(`kind` 만 든다)은 `kind` 에서 짓는다(팝업이면 `popup`, 그 밖은 `blank` —
+ * 그 서버의 화면 페이지는 틀이 없다). 입력을 고치지 않는다.
+ */
+function withLayouts(menu: readonly TreeMenuNode[]): TreeMenuNode[] {
+  return menu.map((node) => ({
+    ...node,
+    pages: node.pages.map((page) => (page.layout !== undefined ? page : { ...page, layout: page.kind === 'popup' ? 'popup' : 'blank' })),
+    children: withLayouts(node.children),
+  }))
 }
 
 /**
@@ -1568,10 +1584,13 @@ export function createHttpClient(
     // `TypeError`가 나고, 그것은 `ApiError`가 아니라 호출자의 분기를 빗나간다.
     getTree: async (projectId, options) => {
       const body = await request<{ menu: TreeMenuNode[] }>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeEnvelope, undefined, options)
-      return body.menu
+      return withLayouts(body.menu)
     },
     // **봉투를 벗기지 않는다** — 판 번호가 트리와 함께 가야 받는 쪽이 낡은 답을 가른다(`TreeRead`).
-    readTree: (projectId, options) => request<TreeRead>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeRead, undefined, options),
+    readTree: async (projectId, options) => {
+      const read = await request<TreeRead>('GET', `${projectPath(projectId)}/tree`, SHAPES.treeRead, undefined, options)
+      return { ...read, menu: withLayouts(read.menu) }
+    },
     // 아래 여섯이 트리의 CRUD다. **생성·갱신 응답을 트리에 꽂지 않는다** — `MenuNode`에는
     // `pages`·`children`이 없고(`api/types.ts`), 서버가 `sort_order`를 재번호하므로
     // 부르는 쪽은 성공하면 `getTree`를 다시 부른다. 그래서 여기서 응답을 가공하지 않는다.

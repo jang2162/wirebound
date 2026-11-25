@@ -295,8 +295,8 @@ function PreviewCard(props: { preview: Preview; warningsOpen: boolean; onToggleW
       {/* **쓰지 않는다고 미리 말한다.** 서버도 응답에서 같은 것을 말하지만, 누르기 전에 아는 편이 낫다. */}
       {preview.file.page.layoutRef !== undefined && (
         <p className="wb-shell-pagejson-card-line">
-          이 파일은 레이아웃 <code>{preview.file.page.layoutRef}</code>을 가리키지만, 페이지는 프로젝트의 기본 레이아웃을 쓰고 따로 고를 수
-          없어 <strong>쓰지 않습니다.</strong>
+          이 파일은 레이아웃 <code>{preview.file.page.layoutRef}</code>을 가리키지만, 레이아웃은 파일의 문서(<code>schema.layout</code>)에서
+          옵니다 — <code>layoutRef</code> 는 <strong>쓰지 않습니다.</strong>
         </p>
       )}
       {/* **미리보기가 다 걸러 준다고 말하지 않는다.** `previewPageJson`의 표가 무엇을 못 보는지 적어 뒀고, 이 줄이 그것을 사용자에게

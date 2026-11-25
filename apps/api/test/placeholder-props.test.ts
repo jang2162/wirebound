@@ -18,7 +18,11 @@ async function fixture(ctx: TestContext): Promise<{ owner: SignedUpUser; project
 }
 
 function docWith(props: Record<string, unknown>, type = 'Placeholder') {
-  return { version: CURRENT_DOCUMENT_VERSION, root: { id: 'n_root', type: 'Page', children: [{ id: 'n_ph', type, props }] } }
+  return {
+    version: CURRENT_DOCUMENT_VERSION,
+    layout: 'blank',
+    root: { id: 'n_root', type: 'Page', children: [{ id: 'n_ph', type, props }] },
+  }
 }
 
 describe('자리표시자 그리기 값 — 서버가 꼴 밖을 거절한다', () => {

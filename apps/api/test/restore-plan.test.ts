@@ -29,6 +29,8 @@ const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 function doc(text: string, version = CURRENT_DOCUMENT_VERSION): PageDocument {
   return {
     version,
+    // 판 7 부터 레이아웃이 문서에 있다(봉투가 묻는다) — 옛 판 문서는 키가 없다.
+    ...(version >= 7 ? { layout: 'blank' } : {}),
     root: { id: 'n_root', type: 'Page', children: [{ id: nodeIdFor(text), type: 'Section', props: {} }] },
   } as PageDocument
 }

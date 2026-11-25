@@ -19,8 +19,11 @@ import { MAX_OPS_PER_EDIT } from '@wirebound/schema'
 import { z } from 'zod'
 
 /**
- * ops의 경로 제약. `/root`이거나 `/root/`로 시작하거나, `/viewStates`이거나 `/viewStates/`로 시작하거나, 정확히 `/version`이어야
+ * ops의 경로 제약. `/root`이거나 `/root/`로 시작하거나, `/viewStates`이거나 `/viewStates/`로 시작하거나, 정확히 `/layout` · `/version`이어야
  * 한다. `move`의 `from`도 같은 술어를 쓴다.
+ *
+ * **`/layout`(페이지 레이아웃 — `PageDocument.layout`)도 노드 밖의 문서 경로다** — 값은 봉투 검증이, 뿌리와의 짝은 `layout-root-mismatch` 가
+ * 본다. 레이아웃 바꾸기와 `PUT .../schema` · 가져오기 · 복원의 통째 교체(`replaceDocumentOps`)가 이 경로를 낸다.
  *
  * **`/viewStates`(페이지의 화면 상태 목록 — `@wirebound/schema`의 `PageDocument.viewStates`)는 노드 밖의 문서 경로다.** 목록의 모양은
  * 파이프라인 6단계의 봉투 검증(`PageEnvelopeSchema`)이 보고, 잠금 판정은 `/root` 아래 경로끼리만 겹친다(`lockConflictOfOps`) —
@@ -29,7 +32,7 @@ import { z } from 'zod'
  *
  * **`/version`을 여는 이유.** 막아 두면 `PUT .../schema`가 만든 revision을 문서화된
  * undo 경로로 되돌릴 수 없다 — 그 경로가 파이프라인에 넘기는 ops는
- * `[replace /root, replace /version]`이고 `invertOps`가 만드는 inverse에도 `/version`이
+ * `[replace /root, add /layout, …, replace /version]`이고 `invertOps`가 만드는 inverse에도 `/version`이
  * 그대로 남으므로, `apps/api/README.md` 「편집 파이프라인」 절(4·5단계)이 정의한 대로 그
  * inverse를 `PATCH .../ops`로 되보내면 여기서 400으로 튕긴다. 되돌릴 수 없는 revision이 `GET .../revisions` 응답에 섞이는데
  * 응답만 봐서는 그것을 구분할 수 없다(`actorType`도 op 종류도 같다).
@@ -59,8 +62,13 @@ export const PatchPath = z
   .max(2000, '경로가 너무 깁니다')
   .refine(
     (path) =>
-      path === '/root' || path.startsWith('/root/') || path === '/viewStates' || path.startsWith('/viewStates/') || path === '/version',
-    { message: '경로는 /root · /viewStates 아래이거나 /version이어야 합니다' },
+      path === '/root' ||
+      path.startsWith('/root/') ||
+      path === '/viewStates' ||
+      path.startsWith('/viewStates/') ||
+      path === '/layout' ||
+      path === '/version',
+    { message: '경로는 /root · /viewStates 아래이거나 /layout · /version이어야 합니다' },
   )
 
 /**

@@ -24,13 +24,8 @@ const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 const TOPS = ['packages', 'apps', 'system-themes']
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'migrations'])
 
-/**
- * 파일마다 센 수. 갈래: 짝 검사(`validate.ts`) · 판 6 규칙(`migrate-page-layout.ts`) · 메뉴 트리 응답(`repos/pages.ts` 의 SQL 고르기 ·
- * `services/menu-tree.ts` 의 `kind` — 문서를 통째로 싣지 않는 자리라 뿌리 타입 하나를 고른다).
- */
+/** 파일마다 센 수. 갈래: 짝 검사(`validate.ts`) · 판 6 규칙(`migrate-page-layout.ts`). */
 const ROOT_TYPE_READS: Record<string, number> = {
-  'apps/api/src/repos/pages.ts': 1,
-  'apps/api/src/services/menu-tree.ts': 1,
   'packages/schema/src/migrate-page-layout.ts': 1,
   'packages/schema/src/validate.ts': 1,
 }

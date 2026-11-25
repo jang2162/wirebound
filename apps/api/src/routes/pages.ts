@@ -55,6 +55,7 @@ import {
   CURRENT_DOCUMENT_VERSION,
   PageEnvelopeSchema,
   PAGE_KINDS,
+  PAGE_LAYOUTS,
   migrateDocument,
   newPageDocument,
   parsePageJson,
@@ -62,6 +63,7 @@ import {
   PageDescriptionSchema,
   partitionIssues,
   validatePage,
+  type PageLayout,
   type PatchOp,
 } from '@wirebound/schema'
 import { requestActor } from '../auth/actor'
@@ -110,13 +112,26 @@ const Description = PageDescriptionSchema
 const SortOrder = z.int().min(0)
 
 /** `z.strictObject`라 선언되지 않은 키가 오면 그 자체로 400이다(`routes/menu.ts`와 같은 관례). */
-const CreatePageBody = z.strictObject({
-  menuNodeId: z.uuid(),
-  title: Title,
-  description: Description.optional(),
-  /** 페이지의 종류(`@wirebound/schema` 의 `newPageDocument`) — 팝업은 뿌리 `Popup`(제목 = 페이지 이름 · 바닥 `[취소][저장]`). 없으면 화면이다. */
-  kind: z.enum(PAGE_KINDS).optional(),
-})
+const CreatePageBody = z
+  .strictObject({
+    menuNodeId: z.uuid(),
+    title: Title,
+    description: Description.optional(),
+    /**
+     * 페이지 레이아웃(`@wirebound/schema` 의 `newPageDocument`) — 팝업은 뿌리 `Popup`(제목 = 페이지 이름 · 바닥 `[취소][저장]`). 없으면 `kind` 에서
+     * 짓는다 — `kind: 'popup'` 이면 팝업, 그 밖은 빈 레이아웃. **기본값이 `blank` 인 까닭:** API · MCP · 케이스 픽스처가 만든 페이지가 테마의 틀을
+     * 얻으면 노드 좌표 · 그림 크기가 테마마다 바뀐다 — 사람의 기본값(`subpage`)은 에디터가 실어 보낸다.
+     */
+    layout: z.enum(PAGE_LAYOUTS as [PageLayout, ...PageLayout[]]).optional(),
+    /** 페이지의 종류 — `kind: 'popup'` 은 `layout: 'popup'` 과 같다. 둘이 어긋나면 400. */
+    kind: z.enum(PAGE_KINDS).optional(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.kind === undefined || body.layout === undefined) return
+    if ((body.kind === 'popup') !== (body.layout === 'popup')) {
+      ctx.addIssue({ code: 'custom', path: ['layout'], message: `kind(${body.kind})와 layout(${body.layout})이 어긋납니다` })
+    }
+  })
 
 /**
  * **고치기 전 값**(아래 `PATCH` 핸들러의 머리말). 칸마다 선택이고, 준 칸만 견준다.
@@ -307,7 +322,7 @@ export function pageRoutes() {
               menuNodeId: body.menuNodeId,
               title: body.title,
               description: body.description ?? null,
-              schema: newPageDocument(body.kind === 'popup' ? 'popup' : 'blank', body.title),
+              schema: newPageDocument(body.layout ?? (body.kind === 'popup' ? 'popup' : 'blank'), body.title),
               schemaVersion: CURRENT_DOCUMENT_VERSION,
             })
           } catch (error) {

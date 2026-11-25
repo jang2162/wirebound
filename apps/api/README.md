@@ -387,7 +387,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder?, base? }`(`base` 밖 하나 이상) — **`base`는 고치기 전 제목**(`{ title }` — 규칙은 페이지의 바탕과 같다, 아래 «페이지 메타의 충돌 모델». 자리 옮기기와 한 본문이면 400) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) · **409** `menu-title-changed`(바탕이 지금 제목과 다르다) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — 또는 `{ cascade: true, expect: { menuIds, pageIds } }` | 본문 없음: 204(자식 메뉴·페이지가 있으면 409). 연쇄: 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` · id 집합이 다르면 **409** `menu-subtree-changed`(아래 «메뉴 연쇄 삭제») |
-| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description?, kind? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다. `kind: 'popup'` 이면 뿌리 `Popup`(제목 = `title` · 바닥 `[취소][저장]` — «취소» 는 «팝업 닫기» 를 든다 · `@wirebound/schema` 의 `newPageDocument`) |
+| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description?, layout?, kind? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 문서는 `layout`(`blank` · `popup` · `subpage`)으로 짓는다 — 없으면 `kind` 에서(`kind: 'popup'` 이면 `popup`, 그 밖은 `blank`). 빈 · 서브페이지는 빈 `Page`, `popup` 은 뿌리 `Popup`(제목 = `title` · 바닥 `[취소][저장]` — «취소» 는 «팝업 닫기» 를 든다 · `@wirebound/schema` 의 `newPageDocument`). `kind: 'popup'` 과 팝업 아닌 `layout`(또는 그 반대)을 함께 보내면 400 |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **페이지 JSON(설계서 「페이지 JSON」)으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder?, base? }`(하나 이상, `schema`는 여기서 못 바꾼다) — **`base`는 고치기 전 값**(아래 «페이지 메타의 충돌 모델») | 200 **페이지 여덟 키**(POST·GET과 같다) · **409** `page-meta-changed`(바탕이 지금 값과 다르다) |
@@ -1183,7 +1183,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
   "menu": [
     {
       "id": "…", "title": "회원관리", "sortOrder": 0,
-      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ], "kind": "page" } ],
+      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ], "layout": "subpage", "kind": "page" } ],
       "children": [
         { "id": "…", "title": "권한", "sortOrder": 0, "pages": [], "children": [] }
       ]
@@ -1195,10 +1195,11 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 `rev`는 메뉴 트리 판 번호다(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 아무도 트리를 안 바꾼 프로젝트는 0 이다. 번호와 행은
 한 스냅숏에서 읽는다.
 
-페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`·`kind`만 있다 — `schema`는 실리지 않는다(트리는
+페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`·`layout`·`kind`만 있다 — `schema`는 실리지 않는다(트리는
 목록을 훑는 용도이고, 스키마를 포함하면 프로젝트가 커질수록 응답이 무거워진다). `viewStates` 는 문서의 화면 상태 목록(`parent` 포함 —
-메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다. `kind` 는
-페이지의 종류다 — 문서 뿌리가 `Popup` 이면 `popup`, 그 밖은 `page`(메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 읽는다).
+메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다. `layout` 은
+페이지 레이아웃(`blank` · `popup` · `subpage` — 문서의 `layout`)이다(서브페이지 틀의 GNB · LNB · 브레드크럼브가 팝업을 거른다). `kind` 는 그것에서 짓는
+페이지의 종류다 — 팝업 레이아웃이면 `popup`, 그 밖은 `page`(메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 읽는다).
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
 
@@ -1546,7 +1547,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
    `ops` · `inverse`가 둘 다 문서 통째라 한 조회가 수백 MB 일 수 있다. 되돌리기의 두 조회는
    `fields=inverse`로 `ops`를 빼 그 반만 받는다.
 
-**ops 의 경로는 `/root` · `/viewStates`(화면 상태 목록 — 노드 밖의 문서 경로) 아래이거나 정확히 `/version`이다** — 그 밖은
+**ops 의 경로는 `/root` · `/viewStates`(화면 상태 목록 — 노드 밖의 문서 경로) 아래이거나 정확히 `/layout`(페이지 레이아웃) · `/version`이다** — 그 밖은
 400 이다(`http/patch-ops.ts`의 `PatchPath`). `/viewStates/…` 편집의 모양은 6단계의 봉투 검증이 본다.
 
 **연산은 `add` · `remove` · `replace` · `move` · `test` 다섯이다.** `test`는 문서를 안 바꾸고 그 자리의 값이 같은지만 잰다 — 다르거나
@@ -1561,7 +1562,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 판정을 탄다. 6단계가 편집 전후 문서로 보므로 `PUT …/schema` · 스냅샷 복원도 같다. 편집 전부터 목록 밖이던 보임은 막지 않는다(lint 의 몫).
 
 **`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
-revision의 `ops`는 문서의 필드마다 하나씩이다 — `[replace /root, (add | remove /viewStates), replace /version]`
+revision의 `ops`는 문서의 필드마다 하나씩이다 — `[replace /root, (add | remove /layout), (add | remove /viewStates), replace /version]`
 (`@wirebound/schema`의 `replaceDocumentOps` — 가져오기 · 스냅샷 복원과 `PUT`의 방송도 같은 함수다. 받은 문서에 상태 목록이
 있으면 `add`, 없는데 저장된 문서에 있으면 `remove`). `inverse`에도 `/version`이
 남지만, 그것을 그대로 `PATCH .../ops`로 되보내면 200이다. undo가 싣는 `/version`은
