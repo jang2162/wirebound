@@ -6,7 +6,7 @@
  * | 판 | 세우는 법 |
  * |---|---|
  * | 한 줄 | 창 1280 · 패널 기본 폭 — 글꼴 그대로 |
- * | 여러 줄 | 탭 줄에 큰 글자를 주입(`.wb-shell-tabs { font-size }` — 탭은 `font: inherit`) · 18px · 32px |
+ * | 여러 줄 | 탭 줄에 큰 글자를 주입(`.wb-shell-tabs { font-size }` — 탭은 `font: inherit`) · 18px · 36px |
  *
  * 구분선 · 밑줄은 상자가 아니라 테두리 · 그림자라 **찍은 그림의 픽셀로** 잰다 — 탭 줄을 찍어 페이지 안에서 풀고(`Image` → `canvas`), 줄마다 그
  * 줄 밑 1px 띠가 탭 줄 폭 전부 구분선 색인지, 고른 탭 밑 2px 띠가 그 탭 폭 전부 강조색인지 센다. 상자 좌표(탭 · 줄 · 탭 줄)는 값으로 함께 단언한다.
@@ -17,7 +17,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { PANEL_WIDTH_DEFAULT } from '../src/shell/sidebar-layout'
+import { panelWidthDefault } from '../src/shell/sidebar-layout'
 import { canvasFrame, editorStackPrerequisite, poll, startEditorStack, type EditorStack, type Session } from './editor-stack'
 
 const 전제 = await editorStackPrerequisite()
@@ -210,7 +210,7 @@ describe.skipIf(!전제.ok)('우측 탭 머리 줄 — 실브라우저', () => {
           밑줄: head.underline.map((band) => band.hits === band.width),
         }).toEqual({
           줄: 1,
-          탭줄폭: PANEL_WIDTH_DEFAULT - 24,
+          탭줄폭: panelWidthDefault(1280) - 24,
           탭줄높이_탭높이: 1,
           탭줄위_탭위: 0,
           줄좌우: [0, 0],
@@ -224,12 +224,12 @@ describe.skipIf(!전제.ok)('우측 탭 머리 줄 — 실브라우저', () => {
     }
   })
 
-  // 18px 은 두 줄 · 32px 은 세 줄(가운데 줄에서 고른 판이 선다) — 한 케이스로 둔다(같은 성질이라 따로 두면 늘 함께 죽는다).
-  it('탭 줄 글자 18px · 32px — 여러 줄로 놓여도 줄마다 그 밑에 구분선 · 고른 탭의 밑줄은 제 줄의 구분선 바로 위', async () => {
+  // 18px 은 두 줄 · 36px 은 세 줄(가운데 줄에서 고른 판이 선다) — 한 케이스로 둔다(같은 성질이라 따로 두면 늘 함께 죽는다).
+  it('탭 줄 글자 18px · 36px — 여러 줄로 놓여도 줄마다 그 밑에 구분선 · 고른 탭의 밑줄은 제 줄의 구분선 바로 위', async () => {
     const seen: Record<string, unknown> = {}
     // 고른 탭은 굵은 글이라 넓어져 줄 수가 판마다 다를 수 있다 — 기대는 그 판의 줄 수로 짓는다.
     const wanted: Record<string, unknown> = {}
-    for (const fontSize of [18, 32]) {
+    for (const fontSize of [18, 36]) {
       const opened = await open(fontSize)
       const { page } = opened
       try {

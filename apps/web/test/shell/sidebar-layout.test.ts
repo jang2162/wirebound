@@ -22,7 +22,8 @@ import {
   PALETTE_HEIGHT_DEFAULT,
   PALETTE_HEIGHT_FLOOR,
   PALETTE_HEIGHT_MIN,
-  PANEL_WIDTH_DEFAULT,
+  PANEL_WIDTH_DEFAULT_MAX,
+  panelWidthDefault,
   PANEL_WIDTH_MIN,
   REGION_MIN_HEIGHT,
   REGION_RATIO_DEFAULT,
@@ -61,22 +62,22 @@ describe('사이드바 폭의 한계', () => {
   it('최대는 창에서 손잡이 둘 · 여백 넷 · 캔버스 몫과 **우측의 지금 폭**을 뺀 것이다', () => {
     // 1440 − 16 − 480 − 300 = 644. 브라우저에서 이 폭까지 끌었을 때 캔버스가 480px 이상이고 셸의 가로 넘침이 0이다
     // (`build-test/editor-shell-layout.test.ts`).
-    expect(sideWidthMax(MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)).toBe(644)
+    expect(sideWidthMax(MEASURED.shellWidth, PANEL_WIDTH_MIN)).toBe(644)
     // 우측을 넓히면 좌측의 최대가 그만큼 준다 — 옛 «우측 300 고정» 가정이면 644 그대로라 캔버스가 120px 준다.
     expect(sideWidthMax(MEASURED.shellWidth, 420)).toBe(524)
   })
 
   it('창이 아주 좁으면 최대가 최소로 주저앉는다 — 뒤집히지 않는다', () => {
     // 640 − 16 − 480 − 300 = −156. 그대로 두면 `clamp(min=200, max=−156)`이 되어 결과가 튄다.
-    expect(sideWidthMax(640, PANEL_WIDTH_DEFAULT)).toBe(SIDE_WIDTH_MIN)
-    expect(clampSideWidth(SIDE_WIDTH_DEFAULT, 640, PANEL_WIDTH_DEFAULT)).toBe(SIDE_WIDTH_MIN)
+    expect(sideWidthMax(640, PANEL_WIDTH_MIN)).toBe(SIDE_WIDTH_MIN)
+    expect(clampSideWidth(SIDE_WIDTH_DEFAULT, 640, PANEL_WIDTH_MIN)).toBe(SIDE_WIDTH_MIN)
   })
 
   it('최소·최대 밖의 값은 잘린다', () => {
     // 브라우저에서 손잡이를 창 밖으로 밀었을 때 나온 두 값이다(-201 · 2196).
-    expect(clampSideWidth(-201, MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)).toBe(SIDE_WIDTH_MIN)
-    expect(clampSideWidth(2196, MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)).toBe(644)
-    expect(clampSideWidth(420, MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)).toBe(420)
+    expect(clampSideWidth(-201, MEASURED.shellWidth, PANEL_WIDTH_MIN)).toBe(SIDE_WIDTH_MIN)
+    expect(clampSideWidth(2196, MEASURED.shellWidth, PANEL_WIDTH_MIN)).toBe(644)
+    expect(clampSideWidth(420, MEASURED.shellWidth, PANEL_WIDTH_MIN)).toBe(420)
   })
 })
 
@@ -95,7 +96,7 @@ describe('우측 패널 폭의 한계', () => {
   })
 
   it('둘 다 최대로 밀어도 캔버스 몫이 남는다 — 두 최대가 서로를 본다', () => {
-    const side = clampSideWidth(5000, MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)
+    const side = clampSideWidth(5000, MEASURED.shellWidth, PANEL_WIDTH_MIN)
     const panel = clampPanelWidth(5000, MEASURED.shellWidth, side)
     expect(MEASURED.shellWidth - HANDLES_WIDTH - side - panel).toBe(CANVAS_MIN_WIDTH)
   })
@@ -140,9 +141,9 @@ describe('접힌 쪽', () => {
   it('남은 쪽의 최대는 창에서 손잡이 하나 · 여백 둘 · 캔버스 몫만 뺀다', () => {
     // 900 − 8 − 480 = 412 — 상대의 폭(300 · 264)을 안 뺀다.
     expect(panelWidthMax(900, SIDE_WIDTH_DEFAULT, SIDE)).toBe(412)
-    expect(sideWidthMax(900, PANEL_WIDTH_DEFAULT, PANEL)).toBe(412)
+    expect(sideWidthMax(900, PANEL_WIDTH_MIN, PANEL)).toBe(412)
     // 펼친 판은 둘 다 뺀다 — 900 − 16 − 480 − 300 = 104 → 최소.
-    expect(sideWidthMax(900, PANEL_WIDTH_DEFAULT)).toBe(SIDE_WIDTH_MIN)
+    expect(sideWidthMax(900, PANEL_WIDTH_MIN)).toBe(SIDE_WIDTH_MIN)
   })
 
   it('접힌 쪽은 조이지 않고 남은 쪽만 조인다', () => {
@@ -272,14 +273,14 @@ describe('보존', () => {
     expect(readLayout(storage)).toEqual({ sideFolded: true, sideWidth: 300 })
   })
 
-  it('`panelWidth`가 없는 옛 저장값은 우측 기본 300 으로 그린다', () => {
+  it('`panelWidth`가 없는 옛 저장값은 우측 기본(창에 따른 값)으로 그린다', () => {
     localStorage.clear()
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sideWidth: 420, regionRatio: 0.31 }))
     const stored = readLayout(localStorage)
     expect(stored).toEqual({ sideWidth: 420, regionRatio: 0.31 })
-    expect(fitWidths(stored.sideWidth ?? SIDE_WIDTH_DEFAULT, stored.panelWidth ?? PANEL_WIDTH_DEFAULT, 1440)).toEqual({
+    expect(fitWidths(stored.sideWidth ?? SIDE_WIDTH_DEFAULT, stored.panelWidth ?? panelWidthDefault(1440), 1440)).toEqual({
       side: 420,
-      panel: PANEL_WIDTH_DEFAULT,
+      panel: 346,
     })
   })
 
@@ -472,8 +473,9 @@ describe('기본값', () => {
     expect(SIDE_WIDTH_DEFAULT).toBe(264)
   })
 
-  it('우측 폭은 300px 이다 — 격자의 넷째 칸이 고정이던 때의 값이다', () => {
-    expect(PANEL_WIDTH_DEFAULT).toBe(300)
+  it('우측 폭은 창의 24% 를 300 ~ 380px 로 자른 값이다', () => {
+    expect([996, 1280, 1440, 1920].map(panelWidthDefault)).toEqual([PANEL_WIDTH_MIN, 307, 346, PANEL_WIDTH_DEFAULT_MAX])
+    expect(PANEL_WIDTH_DEFAULT_MAX).toBe(380)
   })
 
   it('배분은 반반이다 — 지금 `flex: 1` 둘이 내던 값이다', () => {
@@ -481,8 +483,8 @@ describe('기본값', () => {
   })
 
   it('기본값이 최소·최대 안에 있다', () => {
-    expect(clampSideWidth(SIDE_WIDTH_DEFAULT, MEASURED.shellWidth, PANEL_WIDTH_DEFAULT)).toBe(SIDE_WIDTH_DEFAULT)
-    expect(clampPanelWidth(PANEL_WIDTH_DEFAULT, MEASURED.shellWidth, SIDE_WIDTH_DEFAULT)).toBe(PANEL_WIDTH_DEFAULT)
+    expect(clampSideWidth(SIDE_WIDTH_DEFAULT, MEASURED.shellWidth, PANEL_WIDTH_MIN)).toBe(SIDE_WIDTH_DEFAULT)
+    expect(clampPanelWidth(PANEL_WIDTH_MIN, MEASURED.shellWidth, SIDE_WIDTH_DEFAULT)).toBe(PANEL_WIDTH_MIN)
     expect(clampRegionRatio(REGION_RATIO_DEFAULT, MEASURED.shared)).toBe(REGION_RATIO_DEFAULT)
   })
 
