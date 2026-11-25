@@ -363,7 +363,7 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 - 남겨 두면 «레이아웃» 이 두 뜻이 된다(문서 필드 `layout` 과 `layouts` 표의 행). 표는 편집 화면도 고르는 길도 없어 아무 화면에도 안 보이는데, 스냅샷 복원은 그 개수로 409 를 낸다.
 - `Slot` 은 레이아웃 문서 전용 타입이라 표를 걷으면 쓰는 자리가 없다.
 
-걷는 차례 — DB 마이그레이션 하나가 `projects.default_layout_id` → `layouts` 를 걷고 스냅샷 payload 를 판 5 로 올린다(`layouts` 키를 뺀다 — `packages/themes/src/snapshot/payload.ts` 의 `SNAPSHOT_PAYLOAD_VERSION`). `down` 은 표 · 칼럼을 빈 채로 다시 세운다(payload 는 `layouts: []` 로 내린다 — 레이아웃 행은 다시 짓지 않는다: 옛 판의 복원이 빈 집합끼리 견줘 맞고, 행을 지으면 그 복원이 409 · 그 아래 `down` 들이 레이아웃 수로 멈춘다). 카탈로그에서 `Slot` 을 걷으면 저장된 테마 manifest 가 `Slot` 을 선언했어도 내보내기는 `stored` 읽기(`readWbtheme`)로 그 선언을 빼고 읽는다(정본 「테마의 범위」 의 걷힌 타입 문장 — 기본테마 manifest 는 `Slot` 을 선언하지 않는다).
+걷는 차례 — DB 마이그레이션 하나가 `projects.default_layout_id` → `layouts` 를 걷고 판 4 이하 스냅샷 payload 의 `layouts` 키를 뺀다(판 숫자는 그대로 — 복원이 판 숫자로 테마 · 공통코드의 갈래를 가른다. 새 캡처는 판 5 — `packages/themes/src/snapshot/payload.ts` 의 `SNAPSHOT_PAYLOAD_VERSION`). `down` 은 표 · 칼럼을 빈 채로 다시 세운다(판 5 payload 는 판 4 로 내리고 모든 payload 에 `layouts: []` 를 싣는다 — 레이아웃 행은 다시 짓지 않는다: 옛 판의 복원이 빈 집합끼리 견줘 맞고, 행을 지으면 그 복원이 409 · 그 아래 `down` 들이 레이아웃 수로 멈춘다). 카탈로그에서 `Slot` 을 걷으면 저장된 테마 manifest 가 `Slot` 을 선언했어도 내보내기는 `stored` 읽기(`readWbtheme`)로 그 선언을 빼고 읽는다(정본 「테마의 범위」 의 걷힌 타입 문장 — 기본테마 manifest 는 `Slot` 을 선언하지 않는다).
 
 ### `layoutRef` — 받되 쓰지 않는 채로 남긴다
 

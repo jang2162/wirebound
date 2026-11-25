@@ -99,8 +99,9 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 화면 그대로). 규칙은 `@wirebound/schema` 의 `migrate-page-layout.ts` 가 갖고 런타임 사슬에도 있다. 옮기는 자리는 `pages` 와 `snapshots.payload` 의
 `pages[]` 다. 있던 경로가 안 바뀌어 `head_seq` 를 안 올린다. 내리기는 `layout` 을 지우고 판 6 으로 — 빈 · 서브페이지의 구별을 잃는다.
 
-**`0038-drop-layouts` 는 레이아웃 표를 걷는다.** `projects.default_layout_id` 와 `layouts` 를 걷고 스냅샷 payload 를 판 5 로(`layouts` 키를 뺀다).
-내리기는 표 · 칼럼을 빈 채로 다시 세우고 판 5 payload 를 판 4 · `layouts: []` 로 내린다 — 레이아웃 행은 다시 짓지 않는다(옛 판의 복원은 빈 집합끼리
+**`0038-drop-layouts` 는 레이아웃 표를 걷는다.** `projects.default_layout_id` 와 `layouts` 를 걷고 판 4 이하 스냅샷 payload 의 `layouts` 키를 뺀다 — 판 숫자는 그대로다(복원이 판 숫자로
+테마 바인딩 · 공통코드 표의 갈래를 가른다 — `services/restore-plan.ts` 11 · 12단계). 내리기는 표 · 칼럼을 빈 채로 다시 세우고 판 5 payload 를 판 4 로
+내리며 모든 payload 에 `layouts: []` 를 싣는다 — 레이아웃 행은 다시 짓지 않는다(옛 판의 복원은 빈 집합끼리
 견줘 맞는다. 행을 지으면 그 복원이 409 로 막히고 그 아래 `down` 들이 레이아웃 수로 멈춘다).
 
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
@@ -1251,7 +1252,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 판 1 payload(`themes` 절 · `layouts[].themeId`가 있다)는 마이그레이션 0018 이 판 2 로 옮긴다 — 규격이 `z.strictObject`라 옮기지 않으면 못 읽는다.
 캡처의 지문은 바인딩 칸(토큰은 해시)과 `theme_rev` 도 덮는다 — 수집 도중 바인딩을 저장하면 409 다.
 
-**레이아웃 표는 싣지 않는다 — 판 5.** 판 4 이하 payload 의 `layouts`(프로젝트마다의 `Page > Slot` 문서)는 마이그레이션 `0038-drop-layouts` 가 걷어 판 5 로 고친다. 페이지 레이아웃은 `pages[].schema.layout` 으로 실린다.
+**레이아웃 표는 싣지 않는다 — 판 5.** 판 4 이하 payload 의 `layouts`(프로젝트마다의 `Page > Slot` 문서)는 마이그레이션 `0038-drop-layouts` 가 걷는다(판 숫자는 그대로 — 지금 규격은 `layouts` 없는 판 4 이하를 읽는다). 페이지 레이아웃은 `pages[].schema.layout` 으로 실린다.
 
 **`payloadBytes`는 `octet_length(payload::text)`다** — DB가 들고 있는 문서의 옥텟 수이고,
 생성·목록·상세 셋이 같은 식을 쓴다. 설계서 「열린 질문」의 스냅샷 보관 정책을 닫을 관측이라 **크기 상한은

@@ -80,7 +80,7 @@
  * # 레이아웃 표를 담지 않는다 — 판 5
  *
  * 판 4 이하 payload 에는 프로젝트의 레이아웃 문서 목록(`layouts` — `Page > Slot`)이 있었다. 페이지 레이아웃은 문서의 필드(`schema.layout`)로
- * 옮겼고 레이아웃 표는 없다 — 판 5 에는 키가 없다. 저장된 판 4 이하는 마이그레이션(`apps/api`의 `0038-drop-layouts.ts`)이 판 5 로 고친다.
+ * 옮겼고 레이아웃 표는 없다 — 판 5 에는 키가 없다. 저장된 판 4 이하는 마이그레이션(`apps/api`의 `0038-drop-layouts.ts`)이 `layouts` 키만 걷는다 — 판 숫자는 그대로다(복원이 판 숫자로 갈래를 가른다).
  * 판 5 를 이 판보다 앞선 `wireb` 는 못 읽는다(그쪽 규격이 `layouts` 를 묻는다).
  *
  * **판 4 이하 payload 의 `layouts` 는 받고 걷는다**(아래 `dropRetiredLayouts`) — 이 판의 `wireb` 가 옛 서버의 덤프(`GET …/snapshot`)를

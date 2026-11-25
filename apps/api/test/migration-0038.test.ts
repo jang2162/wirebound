@@ -3,9 +3,10 @@
  *
  * **이 파일은 제 DB 를 만든다** — `migration-0037.test.ts` 와 같은 까닭.
  *
- * 잰 성질: 올린 뒤 표 · 칼럼이 없다 · 판 4 payload(`layouts[]` 든) 스냅샷이 판 5 로 읽히고(키 없음) 지금 코드로 복원된다 · 판 5 payload 는
- * 그대로다 · 올린 뒤 만든 프로젝트에 레이아웃 행이 없다(표가 없다) · `down` 은 표 · 칼럼을 빈 채로 다시 세우고 payload 를 판 4 · `layouts: []` 로
- * 내린다.
+ * 잰 성질: 올린 뒤 표 · 칼럼이 없다 · 판 2 · 3 · 4 payload(`layouts[]` 든) 스냅샷이 제 판 숫자 그대로 `layouts` 만 걷혀 지금 규격으로 읽히고
+ * 지금 코드로 복원된다 · 판 숫자를 지키므로 복원이 판으로 가르는 갈래(판 3 이하는 공통코드 표를 안 건드린다)가 안 바뀐다 · 판 5 payload 는
+ * 그대로다 · 올린 뒤 만든 프로젝트에 레이아웃 행이 없다(표가 없다) · `down` 은 표 · 칼럼을 빈 채로 다시 세우고 판 5 payload 를 판 4 로 내리며 모든
+ * payload 에 `layouts: []` 를 싣는다.
  */
 import { randomUUID } from 'node:crypto'
 import { CURRENT_DOCUMENT_VERSION, installCatalog } from '@wirebound/schema'
@@ -64,6 +65,8 @@ interface Seeded {
   projectId: string
   pageId: string
   layoutId: string
+  v2: string
+  v3: string
   v4: string
   v5: string
 }
@@ -72,7 +75,7 @@ async function seed(): Promise<Seeded> {
   const userId = randomUUID()
   const projectId = randomUUID()
   const menuId = randomUUID()
-  const [pageId, layoutId, v4, v5] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()]
+  const [pageId, layoutId, v2, v3, v4, v5] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()]
   await sql`insert into users (id, email, name, password_hash) values (${userId}, ${`u-${userId}@example.com`}, '앨리스', 'x')`.execute(db)
   await sql`insert into projects (id, name, slug) values (${projectId}, '프로젝트', ${`p-${projectId.slice(0, 8)}`})`.execute(db)
   await sql`insert into project_members (project_id, user_id, role) values (${projectId}, ${userId}, 'owner')`.execute(db)
@@ -105,13 +108,23 @@ async function seed(): Promise<Seeded> {
     codes: [],
     ...extra,
   })
+  const layouts = [{ id: layoutId, name: '기본 레이아웃', schema: layoutDoc }]
   await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${v4}, ${projectId}, '판4', ${JSON.stringify(
-    payload(4, { layouts: [{ id: layoutId, name: '기본 레이아웃', schema: layoutDoc }] }),
+    payload(4, { layouts }),
+  )}::jsonb, ${userId})`.execute(db)
+  // 판 2 — `theme` · `codes` 가 없다.
+  const { theme: _theme, codes: _codes, ...v2Payload } = payload(2, { layouts })
+  await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${v2}, ${projectId}, '판2', ${JSON.stringify(v2Payload)}::jsonb, ${userId})`.execute(
+    db,
+  )
+  // 판 3 — 손댄 payload: 판 3 은 `codes` 를 안 실었는데 든다. 복원은 판 4 이상의 `codes` 로만 표를 덮는다(`restore-plan.ts` 12단계).
+  await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${v3}, ${projectId}, '판3', ${JSON.stringify(
+    payload(3, { layouts, codes: [{ key: 'TAMPERED', name: '손댄 그룹', items: [] }] }),
   )}::jsonb, ${userId})`.execute(db)
   await sql`insert into snapshots (id, project_id, tag, payload, created_by) values (${v5}, ${projectId}, '판5', ${JSON.stringify(payload(5, {}))}::jsonb, ${userId})`.execute(
     db,
   )
-  return { userId, projectId, pageId, layoutId, v4, v5 }
+  return { userId, projectId, pageId, layoutId, v2, v3, v4, v5 }
 }
 
 async function payloadOf(id: string): Promise<Record<string, unknown>> {
@@ -133,7 +146,7 @@ async function hasColumn(table: string, column: string): Promise<boolean> {
 describe('0038 — 레이아웃 표 걷기 · payload 판 5', () => {
   let seeded: Seeded
 
-  it('표 · 칼럼을 걷고 판 4 payload 를 판 5 로 — layouts 키가 없고 지금 규격으로 읽힌다', async () => {
+  it('표 · 칼럼을 걷고 판 4 이하 payload 의 layouts 만 걷는다 — 판 숫자 그대로 지금 규격으로 읽힌다', async () => {
     await must(NO_MIGRATIONS)
     await must('0037-page-layout')
     seeded = await seed()
@@ -145,9 +158,14 @@ describe('0038 — 레이아웃 표 걷기 · payload 판 5', () => {
     ]).toEqual([true, true, true])
     await must('0038-drop-layouts')
     expect([await hasTable('layouts'), await hasColumn('projects', 'default_layout_id')]).toEqual([false, false])
-    const v4 = await payloadOf(seeded.v4)
-    expect([v4.payloadVersion, 'layouts' in v4]).toEqual([5, false])
-    expect(SnapshotPayloadSchema.safeParse(v4).success).toBe(true)
+    for (const [id, version] of [
+      [seeded.v2, 2],
+      [seeded.v3, 3],
+      [seeded.v4, 4],
+    ] as const) {
+      const moved = await payloadOf(id)
+      expect([moved.payloadVersion, 'layouts' in moved, SnapshotPayloadSchema.safeParse(moved).success]).toEqual([version, false, true])
+    }
   })
 
   it('판 5 payload 는 그대로다', async () => {
@@ -155,8 +173,15 @@ describe('0038 — 레이아웃 표 걷기 · payload 판 5', () => {
     expect([v5.payloadVersion, 'layouts' in v5, SnapshotPayloadSchema.safeParse(v5).success]).toEqual([5, false, true])
   })
 
-  it('옮긴 판 4 스냅샷이 지금 코드로 복원된다 — 레이아웃 개수와 무관하다', async () => {
+  it('손댄 판 3 payload 의 codes 로 표를 덮지 않는다 — 판 숫자가 복원의 갈래를 지킨다', async () => {
     await latest()
+    const outcome = await restoreSnapshot(db, { projectId: seeded.projectId, snapshotId: seeded.v3, actorId: seeded.userId })
+    expect(outcome.kind, JSON.stringify(outcome)).toBe('restored')
+    const groups = (await sql<{ key: string }>`select key from code_groups where project_id = ${seeded.projectId}`.execute(db)).rows
+    expect(groups).toEqual([])
+  })
+
+  it('옮긴 판 4 스냅샷이 지금 코드로 복원된다 — 레이아웃 개수와 무관하다', async () => {
     const outcome = await restoreSnapshot(db, { projectId: seeded.projectId, snapshotId: seeded.v4, actorId: seeded.userId })
     expect(outcome.kind, JSON.stringify(outcome)).toBe('restored')
     const page = (
@@ -173,13 +198,18 @@ describe('0038 — 레이아웃 표 걷기 · payload 판 5', () => {
     expect(await hasTable('layouts')).toBe(false)
   })
 
-  it('down — 표 · 칼럼을 빈 채로 다시 세우고(행은 안 짓는다) payload 는 판 4 · layouts: []', async () => {
+  it('down — 표 · 칼럼을 빈 채로 다시 세우고(행은 안 짓는다) 판 5 는 판 4 로 · 모두 layouts: []', async () => {
     await must('0037-page-layout')
     expect([await hasTable('layouts'), await hasColumn('projects', 'default_layout_id')]).toEqual([true, true])
     expect((await sql<{ n: number }>`select count(*)::int as n from layouts`.execute(db)).rows[0]!.n).toBe(0)
-    for (const id of [seeded.v4, seeded.v5]) {
+    for (const [id, version] of [
+      [seeded.v2, 2],
+      [seeded.v3, 3],
+      [seeded.v4, 4],
+      [seeded.v5, 4],
+    ] as const) {
       const payload = await payloadOf(id)
-      expect([payload.payloadVersion, payload.layouts]).toEqual([4, []])
+      expect([payload.payloadVersion, payload.layouts]).toEqual([version, []])
     }
   })
 })
