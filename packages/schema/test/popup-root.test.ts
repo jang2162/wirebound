@@ -7,8 +7,8 @@ import { assertZoneReferences, CATALOG_DEFS, installCatalog } from '../src/compo
 import { PopupDef } from '../src/component/catalog/structure'
 import { WbNodeSchema } from '../src/envelope'
 import { moduleNodesForSave } from '../src/module/save'
-import type { LayoutDocument, PageDocument, WbNode } from '../src/node'
-import { isRootType, nestedPagesUnderRoot, validateLayout, validatePage } from '../src/validate'
+import type { PageDocument, WbNode } from '../src/node'
+import { isRootType, nestedPagesUnderRoot, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -41,13 +41,6 @@ describe('뿌리 타입 — Page · Popup', () => {
     expect(codes(inPopup)).toEqual(['nested-page n_page'])
     // 프리셋 저장의 탐침도 같은 판정이다.
     expect(nestedPagesUnderRoot([{ id: 'n_pop', type: 'Popup' }]).map((issue) => issue.nodeId)).toEqual(['n_pop'])
-  })
-
-  it('레이아웃 뿌리는 Page 뿐이다 — Popup 뿌리는 bad-root', () => {
-    const layout: LayoutDocument = { version: 5, root: { id: 'n_pop', type: 'Popup', children: [{ id: 'n_slot', type: 'Slot' }] } }
-    expect(validateLayout(layout).map((issue) => `${issue.code} ${issue.message}`)).toEqual([
-      'bad-root 루트는 Page여야 합니다 (현재: Popup)',
-    ])
   })
 
   it('다른 뿌리 타입은 bad-root — 문장이 받는 둘을 말한다', () => {

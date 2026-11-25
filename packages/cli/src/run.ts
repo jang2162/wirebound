@@ -130,7 +130,7 @@ export const COMMANDS: CommandSpec[] = [
   },
   {
     words: ['codes', 'usage'],
-    summary: 'wireb codes usage <키> [코드값] [--json]      그 그룹 · 항목을 쓰는 페이지 · 레이아웃 · 모듈의 노드',
+    summary: 'wireb codes usage <키> [코드값] [--json]      그 그룹 · 항목을 쓰는 페이지 · 모듈의 노드',
     options: { json: { type: 'boolean', default: false } },
     run: (io, values, positionals) => runCodesUsage(io, positionals[0], positionals[1], { json: values.json === true }),
   },

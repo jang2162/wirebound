@@ -150,7 +150,6 @@ export type RestoreOutcome =
   | { kind: 'payload-version'; payloadVersion: number; supported: number }
   | { kind: 'fingerprint-mismatch' }
   | { kind: 'safety-tag-taken'; tag: string }
-  | { kind: 'layout-mismatch'; snapshot: string[]; current: string[] }
   | { kind: 'unsupported-version'; pages: UnsupportedVersionPage[] }
   | { kind: 'invalid-document'; pageId: string; title: string; issues: ValidationIssue[] }
   | { kind: 'dangling-reference'; references: string[] }
@@ -259,9 +258,6 @@ async function runRestore(trx: DbHandle, input: RestoreInput): Promise<RestoreRe
 
   // 5단계.
   const planned = planRestore(currentVersionPages(target.payload), now)
-  if (planned.kind === 'layout-mismatch') {
-    throw new RestoreAbort({ kind: 'layout-mismatch', snapshot: planned.snapshot, current: planned.current })
-  }
   if (planned.kind === 'unsupported-version') {
     throw new RestoreAbort({ kind: 'unsupported-version', pages: planned.pages })
   }

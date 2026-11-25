@@ -8,7 +8,7 @@
  *
  * | 후보 | 왜 아닌가 / 왜인가 |
  * |---|---|
- * | `packages/schema` | 스냅샷은 문서 하나가 아니라 프로젝트 전체(메뉴 · 페이지 · 레이아웃 · 코멘트)의 기록이다 — `schema` 는 노드 · 문서 규격만 든다 |
+ * | `packages/schema` | 스냅샷은 문서 하나가 아니라 프로젝트 전체(메뉴 · 페이지 · 코멘트 · 테마 바인딩 · 공통코드)의 기록이다 — `schema` 는 노드 · 문서 규격만 든다 |
  * | **`packages/themes`** | **골랐다.** `themes → schema`가 이미 의존 방향이라 payload가 나르는 것을 다 볼 수 있다. **`lintProject`가 여기 사는 것과 같은 근거다** |
  * | `apps/api` | CLI·MCP가 못 본다 |
  *
@@ -49,9 +49,8 @@
  * 읽으면 **400 `지원하지 않는 문서 버전: 999`**다. 즉 마이그레이션을 하는 것은 라우트이지
  * repo가 아니고, 캡처가 repo를 지나는 한 그 실패는 캡처에 옮겨붙지 않는다.
  *
- * **그런데 아래 스키마는 `DocumentEnvelopeSchema`로 문서를 검사한다 — 모순이 아니다.**
- * 그 스키마는 `{ version: z.int().positive(), root: WbNodeSchema }`이고 **버전 값의
- * *의미*를 보지 않는다.** 999도 통과한다. 막히는 것은 봉투 자체가 깨진 문서뿐이고, 그런
+ * **그런데 아래 스키마는 `PageEnvelopeSchema`로 문서를 검사한다 — 모순이 아니다.**
+ * 그 스키마는 버전 값을 양의 정수로만 보고 **그 *의미*를 보지 않는다**(판 7 ~ 지금 판에서 `layout` 을 묻는 것뿐이다). 999도 통과한다. 막히는 것은 봉투 자체가 깨진 문서뿐이고, 그런
  * 문서는 쓰기 경로가 이미 거부하므로 DB에 없다. 즉 이 절이 피하려는 실패(버전 때문에 캡처
  * 전체가 죽는 것)는 일어나지 않으면서, payload가 무엇을 담는지는 규격에 남는다.
  *
@@ -60,16 +59,13 @@
  * # 테마는 참조로 얼린다 — 판 3
  *
  * 테마는 코드 패키지이고 지우지 않는다(spec `docs/superpowers/specs/2026-09-27-code-themes-design.md` 「스냅샷」). 그래서 테마 내용
- * 대신 프로젝트의 바인딩 `{ themeId, version, tokens }` 를 싣는다(`theme`). 캡처 때 바인딩이 비어 있었으면 `null` 이다. 레이아웃은
- * 테마를 가리키지 않는다(테마는 프로젝트당 하나다).
+ * 대신 프로젝트의 바인딩 `{ themeId, version, tokens }` 를 싣는다(`theme`). 캡처 때 바인딩이 비어 있었으면 `null` 이다(테마는 프로젝트당
+ * 하나다).
  *
  * **판 2 payload 에는 `theme` 가 없다** — 그래서 규격에서 선택이다. 판 2 를 복원하면 바인딩을 건드리지 않는다(`apps/api`의
  * `services/restore-plan.ts`). 판 1 에는 `themes`(레이아웃마다 병합된 옛 JSON 테마)와 `layouts[].themeId` 가 있었다 — 저장된 판 1 은
  * 마이그레이션(`apps/api`의 `0018-drop-json-themes.ts`)이 판 2 로 고친다. 판 3 을 이 판보다 앞선 `wireb` 는 못 읽는다(`z.strictObject`) —
  * 저장소 안의 소비자는 같이 바뀐다.
- *
- * **레이아웃이 배열인 것은 그대로다** — `layouts`에는 `project_id` 유니크가 없고(`apps/api`의 `0007-layouts.ts`), 같은
- * 프로젝트에 두 번째 레이아웃을 넣으면 들어간다. 설계서 「레이아웃」의 레이아웃 에디터가 붙어도 규격이 바뀌지 않는다.
  *
  * ---
  *
@@ -81,29 +77,30 @@
  *
  * ---
  *
+ * # 레이아웃 표를 담지 않는다 — 판 5
+ *
+ * 판 4 이하 payload 에는 프로젝트의 레이아웃 문서 목록(`layouts` — `Page > Slot`)이 있었다. 페이지 레이아웃은 문서의 필드(`schema.layout`)로
+ * 옮겼고 레이아웃 표는 없다 — 판 5 에는 키가 없다. 저장된 판 4 이하는 마이그레이션(`apps/api`의 `0038-drop-layouts.ts`)이 판 5 로 고친다.
+ * 판 5 를 이 판보다 앞선 `wireb` 는 못 읽는다(그쪽 규격이 `layouts` 를 묻는다).
+ *
+ * ---
+ *
  * # 겹layer(런타임 상태)를 담지 않는다
  *
- * payload 가 담는 것은 메뉴·페이지·레이아웃·코멘트와 테마 바인딩 · 공통코드 표이고 그 밖은 없다. 겹layer를
+ * payload 가 담는 것은 메뉴·페이지·코멘트와 테마 바인딩 · 공통코드 표이고 그 밖은 없다. 겹layer를
  * 넣으면 *"버튼을 눌러 둔 상태"*가 복원되어 **문서에 없는 것이 문서에서 온 것처럼 보인다.**
  * 아래 `SnapshotPayloadSchema`가 `z.strictObject`인 것이 그 규칙을 실행으로 지키는 자리다 —
  * 선언되지 않은 절이 payload에 실리면 그 자리에서 파싱이 죽는다.
  */
 import { z } from 'zod'
-import {
-  CodeTableSchema,
-  DocumentEnvelopeSchema,
-  PageEnvelopeSchema,
-  type CodeTable,
-  type LayoutDocument,
-  type PageDocument,
-} from '@wirebound/schema'
+import { CodeTableSchema, PageEnvelopeSchema, type CodeTable, type PageDocument } from '@wirebound/schema'
 
 /**
  * 이 코드가 만드는 payload의 형식 버전. **올리는 것은 payload의 모양이 바뀔 때뿐이다** —
  * 자원이 늘거나, 필드의 뜻이 바뀌거나, 절이 사라질 때. 값이 늘어나는 것(예: 페이지가 하나
  * 더 생기는 것)은 형식 변경이 아니다.
  */
-export const SNAPSHOT_PAYLOAD_VERSION = 4
+export const SNAPSHOT_PAYLOAD_VERSION = 5
 
 /** 메뉴 트리 노드 하나. 트리로 접지 않고 **평평하게** 담는다 — `parentId`가 구조를 나른다. */
 export interface SnapshotMenuNode {
@@ -128,13 +125,6 @@ export interface SnapshotPage {
   schemaVersion: number
   schema: PageDocument
   headSeq: number
-}
-
-/** 레이아웃 하나. */
-export interface SnapshotLayout {
-  id: string
-  name: string
-  schema: LayoutDocument
 }
 
 /** 코멘트 하나. `authorName`은 **그 시점의 이름**이다 — 스냅샷은 그때의 사실을 보여야 한다. */
@@ -173,7 +163,6 @@ export interface SnapshotPayload {
   capturedAt: string
   menu: SnapshotMenuNode[]
   pages: SnapshotPage[]
-  layouts: SnapshotLayout[]
   comments: SnapshotComment[]
   /** 판 3 부터. 판 2 이하에는 키가 없다. 캡처 때 바인딩이 비어 있었으면 `null`. */
   theme?: SnapshotTheme | null
@@ -199,12 +188,6 @@ const PageSchema = z.strictObject({
   schema: PageEnvelopeSchema,
   headSeq: z.int().nonnegative(),
 }) as z.ZodType<SnapshotPage>
-
-const LayoutSchema = z.strictObject({
-  id: z.uuid(),
-  name: z.string(),
-  schema: DocumentEnvelopeSchema,
-}) as z.ZodType<SnapshotLayout>
 
 const CommentSchema = z.strictObject({
   id: z.uuid(),
@@ -236,7 +219,6 @@ export const SnapshotPayloadSchema: z.ZodType<SnapshotPayload> = z.strictObject(
   capturedAt: z.iso.datetime(),
   menu: z.array(MenuNodeSchema),
   pages: z.array(PageSchema),
-  layouts: z.array(LayoutSchema),
   comments: z.array(CommentSchema),
   // 판 2 이하 payload 에는 없다 — 선택이다(위 「테마는 참조로 얼린다」 절).
   theme: ThemeSchema.nullable().optional(),

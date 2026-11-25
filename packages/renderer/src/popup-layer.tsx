@@ -15,7 +15,7 @@
  *
  * 문서 · 테마 · 상태를 바꾸지 않는다 — 열린 목록은 부른 쪽이 들고(`usePopupStack`), 이 층은 그린다.
  */
-import { DEFAULT_VIEW_STATE, pageKindOf, type AnyDocument, type CodeIndex } from '@wirebound/schema'
+import { DEFAULT_VIEW_STATE, pageKindOf, type PageDocument, type CodeIndex } from '@wirebound/schema'
 import type { ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { EMPTY_OVERLAY, type InteractionOverlay } from './interaction/runtime'
@@ -25,7 +25,7 @@ import { renderDocument, type InteractionEvent, type NodeRenderError } from './r
 export interface OpenPopup {
   /** 열 때마다 새로 짓는 열쇠 — 같은 팝업을 두 번 열어도 갈린다(겹layer 가 처음 판에서 선다). */
   key: string
-  document: AnyDocument
+  document: PageDocument
   /** 닫으면 포커스를 돌려줄 요소(연 단추). 그 사이 사라졌으면 안 돌려준다. */
   opener: Element | null
   /** 그 문서의 그림 주소(`RenderOptions.assetUrl`). */
@@ -42,7 +42,7 @@ export const NO_OPEN_POPUP = '열린 팝업이 없습니다'
 export const NO_OPEN_POPUP_DIRECT = '열린 팝업이 없습니다 — 이 팝업 페이지를 바로 열었습니다'
 
 /** 팝업 레이아웃 페이지의 문서인가 — 판정은 `@wirebound/schema` 의 `pageKindOf` 하나다(검증 전 문서도 같은 꼴로 견딘다). */
-export function isPopupDocument(doc: AnyDocument | null | undefined): boolean {
+export function isPopupDocument(doc: PageDocument | null | undefined): boolean {
   return pageKindOf(doc as { layout?: unknown; root?: { type?: unknown } } | null | undefined) === 'popup'
 }
 

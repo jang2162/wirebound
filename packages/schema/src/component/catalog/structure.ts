@@ -46,17 +46,6 @@ export const PopupDef = defineComponent({
   ],
 })
 
-export const SlotDef = defineComponent({
-  type: 'Slot',
-  label: '슬롯',
-  description: '레이아웃이 페이지 내용을 끼우는 자리. 레이아웃 문서 전용이다.',
-  group: 'structure',
-  props: z.strictObject({}),
-  editor: [],
-  states: [],
-  zones: [],
-})
-
 export const SectionDef = defineComponent({
   type: 'Section',
   label: '영역',

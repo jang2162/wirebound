@@ -153,7 +153,6 @@ const 스냅샷하나 = async (
         capturedAt: '2026-08-12T00:00:00.000Z',
         menu: [],
         pages: [],
-        layouts: [],
         comments: [],
       },
       createdBy: actorUserId,

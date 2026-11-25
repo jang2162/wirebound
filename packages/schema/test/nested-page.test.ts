@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
-import type { LayoutDocument, PageDocument, WbNode } from '../src/node'
-import { ISSUE_SEVERITY, excuseStandingNestedPages, validateLayout, validatePage } from '../src/validate'
+import type { PageDocument, WbNode } from '../src/node'
+import { ISSUE_SEVERITY, excuseStandingNestedPages, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -41,21 +41,6 @@ describe('nested-page — 뿌리 밖의 Page', () => {
   it('뿌리 Page 하나는 이슈가 아니다', () => {
     expect(validatePage(page([]))).toEqual([])
     expect(validatePage(page([{ id: 'n_000000000002', type: 'Flex', children: [{ id: 'n_000000000003', type: 'Text' }] }]))).toEqual([])
-  })
-
-  it('레이아웃도 같은 판정이다', () => {
-    const layout: LayoutDocument = {
-      version: 1,
-      root: {
-        id: 'n_000000000001',
-        type: 'Page',
-        children: [
-          { id: 'n_000000000002', type: 'Slot' },
-          { id: 'n_000000000003', type: 'Page' },
-        ],
-      },
-    }
-    expect(validateLayout(layout)).toEqual([expect.objectContaining({ code: 'nested-page', nodeId: 'n_000000000003' })])
   })
 
   it('저장을 막는 오류다', () => {

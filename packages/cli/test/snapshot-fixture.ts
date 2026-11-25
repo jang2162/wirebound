@@ -21,7 +21,6 @@ export const PAGE_LIST = '20000000-0000-4000-8000-000000000001'
 export const PAGE_DETAIL = '20000000-0000-4000-8000-000000000002'
 export const PAGE_LANDING = '20000000-0000-4000-8000-000000000003'
 
-export const LAYOUT = '30000000-0000-4000-8000-000000000001'
 const COMMENT = '50000000-0000-4000-8000-000000000001'
 const AUTHOR = '60000000-0000-4000-8000-000000000001'
 
@@ -78,7 +77,6 @@ export function snapshotPayload(over: Partial<SnapshotPayload> = {}): SnapshotPa
       page(PAGE_DETAIL, MENU_MEMBER, '상세', 1, 빈문서(), null),
       page(PAGE_LANDING, MENU_MARKETING, '랜딩', 0, 빈문서(), null),
     ],
-    layouts: [{ id: LAYOUT, name: '기본', schema: 빈문서() as never }],
     comments: [
       {
         id: COMMENT,

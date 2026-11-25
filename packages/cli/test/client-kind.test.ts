@@ -156,7 +156,6 @@ function pullIo(): FakeIo {
       capturedAt: '2026-08-16T00:00:00.000Z',
       menu: [],
       pages: [],
-      layouts: [],
       comments: [],
     },
   })

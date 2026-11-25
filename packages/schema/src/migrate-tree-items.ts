@@ -29,7 +29,7 @@
  * `items` 가 배열이 아니면(판 5 검증이 거절한 꼴) 그 값은 그대로 두고 `depth` 만 걷는다 — 검증의 `invalid-props` 가 그 자리를 말한다. `setProp`
  * 액션이 `items` · `depth` 를 바꾸던 것은 옮기지 않는다 — 검증 경고 `invalid-interaction-prop` 이 그 자리를 말한다(`0032` 의 옛 prop 과 같다).
  */
-import type { AnyDocument, WbNode } from './node'
+import type { PageDocument, WbNode } from './node'
 
 /** 판 6 의 항목 상한(`TREE_ITEMS_MAX`)의 사본 — 이 단계가 얼어 있어 카탈로그 값을 읽지 않는다. */
 const ITEMS_MAX = 100
@@ -144,14 +144,14 @@ export function liftTreeNodes(nodes: readonly unknown[], options: { keepLifted?:
 }
 
 /** 판 5 → 6 의 결과 — 옮긴 문서(`version` 은 부르는 쪽이 올린다) · 옮긴 `Tree` 수 · 상한에서 버린 항목 수. */
-export interface LiftTreeDocumentResult<T extends AnyDocument> {
+export interface LiftTreeDocumentResult<T extends PageDocument> {
   doc: T
   moved: number
   dropped: number
 }
 
 /** 문서 하나를 판 6 꼴로(입력을 고치지 않는다). 뿌리부터 걷는다. 런타임 사슬의 단계라 판 6 꼴 항목을 남긴다(머리말). */
-export function liftTreeItems<T extends AnyDocument>(doc: T): LiftTreeDocumentResult<T> {
+export function liftTreeItems<T extends PageDocument>(doc: T): LiftTreeDocumentResult<T> {
   const result = liftTreeNodes([doc.root], { keepLifted: true })
   return { doc: { ...doc, root: result.nodes[0] as WbNode }, moved: result.moved, dropped: result.dropped }
 }

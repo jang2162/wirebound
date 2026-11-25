@@ -172,7 +172,7 @@ export const TOOLS: readonly ToolSpec[] = [
   {
     name: 'code_usage',
     description:
-      '공통코드 그룹(· 항목)을 가리키는 노드를 페이지 · 레이아웃 · 모듈마다 돌려줍니다. 항목을 지우거나 바꾸기 전에 고칠 곳을 셉니다. ' +
+      '공통코드 그룹(· 항목)을 가리키는 노드를 페이지 · 모듈마다 돌려줍니다. 항목을 지우거나 바꾸기 전에 고칠 곳을 셉니다. ' +
       '화면 상태로 숨은 노드 · 구역 안 노드도 셉니다.',
     inputSchema: {
       type: 'object',

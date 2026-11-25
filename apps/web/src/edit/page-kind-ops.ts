@@ -9,6 +9,9 @@
  *
  * **첫 연산은 뿌리 타입의 `test` 다** — 남이 먼저 종류를 바꿨으면 리베이스가 이 묶음을 버린다(바뀐 뿌리 위에 옛 판단으로 바꾸지 않는다). 뿌리를
  * 고치는 편집이라 남이 뿌리를 쥐었으면 잠금이 막는다(`EditorStore.editBlockedBy`).
+ *
+ * **레이아웃(`/layout`)도 같은 묶음에서 바꾼다** — 판 7 에서 «팝업인가» 는 `layout` 이고 뿌리 `Popup` 은 그 짝이라(`layout-root-mismatch`) 뿌리만
+ * 바꾸면 저장 경계가 거절한다. 화면 → 팝업은 `popup`, 팝업 → 화면은 `blank` 다(지금 레이아웃의 `test` 를 앞에 둔다).
  */
 import { BODY_ZONE, pageKindOf, zoneList, type PageDocument, type PageKind, type PatchOp } from '@wirebound/schema'
 
@@ -17,6 +20,8 @@ export function pageKindOps(document: PageDocument, kind: PageKind, title: strin
   const root = document.root
   if (pageKindOf(document) === kind) return null
   const ops: PatchOp[] = [{ op: 'test', path: '/root/type', value: root.type }]
+  if (document.layout !== undefined) ops.push({ op: 'test', path: '/layout', value: document.layout })
+  ops.push({ op: 'add', path: '/layout', value: kind === 'popup' ? 'popup' : 'blank' })
   if (kind === 'popup') {
     ops.push({ op: 'replace', path: '/root/type', value: 'Popup' })
     ops.push({ op: root.props === undefined ? 'add' : 'replace', path: '/root/props', value: { title } })

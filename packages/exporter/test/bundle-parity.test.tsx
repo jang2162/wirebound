@@ -25,7 +25,7 @@ import { NO_THEME, renderDocument } from '@wirebound/renderer'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { ThemeProvider } from '@wirebound/theme-sdk'
 import { installRuntime, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
-import { broadFixture, describeTree, slotFixture } from '@wirebound/exporter/test-support'
+import { broadFixture, describeTree, SAMPLE_PAGE } from '@wirebound/exporter/test-support'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -80,14 +80,14 @@ async function bootedTree(bundle: ReturnType<typeof exportBundle>, path: string)
 
 const MANY: [title: string, make: () => PageDocument][] = [
   ['넓게 덮는 문서', broadFixture],
-  ['Slot을 든 문서', slotFixture],
+  ['글 하나', () => SAMPLE_PAGE],
   [
     '버튼 하나',
     () => ({ version: 1, root: { id: 'n_p', type: 'Page', children: [{ id: 'n_b', type: 'Button', props: { label: '저장' } }] } }),
   ],
 ]
 
-const PATHS = ['pages/넓게-덮는-문서.html', 'pages/Slot을-든-문서.html', 'pages/버튼-하나.html']
+const PATHS = ['pages/넓게-덮는-문서.html', 'pages/글-하나.html', 'pages/버튼-하나.html']
 
 function manyPages(documents: PageDocument[]): ReturnType<typeof exportBundle> {
   return exportBundle({ pages: MANY.map(([title], index) => ({ title, document: documents[index]! })), runtimeJs: '/* runtime */' })

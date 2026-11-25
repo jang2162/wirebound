@@ -65,7 +65,7 @@ export async function runCodesUsage(
   return EXIT.ok
 }
 
-const KIND_NAMES = { page: '페이지', layout: '레이아웃', module: '모듈' } as const
+const KIND_NAMES = { page: '페이지', module: '모듈' } as const
 
 export interface SetOptions {
   name: string | undefined

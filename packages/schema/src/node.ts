@@ -20,7 +20,7 @@ export interface Interaction {
 }
 
 /**
- * 페이지·레이아웃 스키마의 노드.
+ * 페이지 스키마의 노드.
  * id는 생성 후 바뀌지 않으며 코멘트·상호작용·잠금·패치 경로의 공통 앵커다.
  */
 export interface WbNode {
@@ -86,15 +86,7 @@ export const NODE_ALIAS_MAX = 60
 export const WEIGHT_MIN = 1
 export const WEIGHT_MAX = 12
 
-declare const documentKind: unique symbol
-
-/**
- * 페이지 문서. 렌더링 시 레이아웃의 Slot 자리에 주입된다.
- *
- * `documentKind`는 컴파일 타임 전용 팬텀 프로퍼티다. 런타임 값이 없고
- * JSON 직렬화에도 나타나지 않는다. LayoutDocument와 뒤바뀌는 것을
- * 컴파일러가 잡게 하려고 존재한다.
- */
+/** 페이지 문서 — 저장 · 편집 · 렌더 · 내보내기가 주고받는 문서의 꼴은 이것 하나다. */
 export interface PageDocument {
   version: number
   /**
@@ -113,7 +105,6 @@ export interface PageDocument {
    * 아래 경로끼리만 선다). 모양은 봉투(`envelope.ts`의 `ViewStatesSchema`)가 본다.
    */
   viewStates?: ViewState[]
-  readonly [documentKind]?: 'page'
 }
 
 /** 페이지 레이아웃 — 페이지 내용을 감싸는 틀. 셋으로 고정이다. */
@@ -152,16 +143,6 @@ export const VIEW_STATES_MAX = 20
  * (`page-json/envelope.ts`의 `PAGE_DESCRIPTION_MAX_LENGTH`).
  */
 export const VIEW_STATE_DESCRIPTION_MAX = 2000
-
-/** 레이아웃 문서. Slot 노드를 정확히 하나 품는다 (설계서 「레이아웃」). */
-export interface LayoutDocument {
-  version: number
-  root: WbNode
-  readonly [documentKind]?: 'layout'
-}
-
-/** 페이지와 레이아웃 양쪽을 받는 함수의 파라미터 타입. */
-export type AnyDocument = PageDocument | LayoutDocument
 
 const HEX = '0123456789abcdef'
 

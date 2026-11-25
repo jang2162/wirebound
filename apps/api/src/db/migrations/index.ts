@@ -36,6 +36,7 @@ import { migration as m0034 } from './0034-accounts'
 import { migration as m0035 } from './0035-tree-items'
 import { migration as m0036 } from './0036-common-codes'
 import { migration as m0037 } from './0037-page-layout'
+import { migration as m0038 } from './0038-drop-layouts'
 
 /**
  * 정적 마이그레이션 레지스트리.
@@ -87,6 +88,7 @@ export const MIGRATIONS: Record<string, Migration> = {
   '0035-tree-items': m0035,
   '0036-common-codes': m0036,
   '0037-page-layout': m0037,
+  '0038-drop-layouts': m0038,
 }
 
 export const migrationProvider: MigrationProvider = {

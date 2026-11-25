@@ -680,27 +680,6 @@ describe('막는 갈래 — 오류 표', () => {
     })
   })
 
-  it('레이아웃 개수가 다르면 409다 — 조용히 맞추지 않는다', async () => {
-    await withApi(async (ctx) => {
-      const fx = await fixture(ctx)
-      const id = await snapshot(ctx, fx, 'v1')
-      // `layouts`에 `project_id` 유니크가 없어 두 번째가 실제로 들어간다.
-      await ctx.db
-        .insertInto('layouts')
-        .values({
-          project_id: fx.project.id,
-          name: '두 번째 레이아웃',
-          schema: JSON.stringify({ version: 5, root: { id: 'n_l', type: 'Page', children: [] } }),
-        })
-        .execute()
-
-      const res = await restore(ctx, fx, id)
-
-      expect(res.statusCode).toBe(409)
-      expect(res.body).toContain('레이아웃')
-    })
-  })
-
   /** 미지원 버전의 두 방향. **설계서 「스키마 마이그레이션」의 탈출구를 만들지 않는다.** */
   it('저장된 문서가 미지원 버전이면 400이고 어느 페이지인지 말한다', async () => {
     await withApi(async (ctx) => {
@@ -974,33 +953,6 @@ describe('부분 성공을 만들지 않는다', () => {
       // 문서도 그대로다.
       const page = await readPage(ctx, fx.page.id)
       expect((page?.schema as PageDocument).root.children?.[0]?.id).toBe('n_sec2')
-    })
-  })
-
-  it('막힌 복원은 아무것도 바꾸지 않는다 — 레이아웃 불일치 판', async () => {
-    await withApi(async (ctx) => {
-      const fx = await fixture(ctx)
-      const id = await snapshot(ctx, fx, 'v1')
-      await ctx.app.inject({
-        method: 'PATCH',
-        url: `/api/projects/${fx.project.id}/menu/${fx.menu.id}`,
-        cookies: fx.owner.cookie,
-        payload: { title: '바뀐 제목' },
-      })
-      await ctx.db
-        .insertInto('layouts')
-        .values({
-          project_id: fx.project.id,
-          name: '두 번째 레이아웃',
-          schema: JSON.stringify({ version: 5, root: { id: 'n_l', type: 'Page', children: [] } }),
-        })
-        .execute()
-
-      expect((await restore(ctx, fx, id)).statusCode).toBe(409)
-
-      const row = await ctx.db.selectFrom('menu_nodes').select('title').where('id', '=', fx.menu.id).executeTakeFirst()
-      expect(row?.title).toBe('바뀐 제목')
-      expect(await listSnapshots(ctx.db, fx.project.id)).toHaveLength(1)
     })
   })
 })

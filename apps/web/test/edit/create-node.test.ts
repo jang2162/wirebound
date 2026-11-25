@@ -55,12 +55,10 @@ function placedPage(node: WbNode): PageDocument {
 const seeded = (type: string): boolean => (getComponent(type)?.zones ?? []).some((zone) => zone.initial !== undefined)
 
 /**
- * 노드 자체의 검증 이슈만. `slot-count`는 **노드가 아니라 문서 종류의 제약**이라
- * 가른다 — 페이지에는 `Slot`을 둘 수 없다(설계서 「레이아웃」). 그것은 `createNode`가 무엇을
- * 만드느냐의 문제가 아니고, 타입 목록이 무엇을 보이느냐의 문제다.
+ * 노드 자체의 검증 이슈.
  */
 function nodeIssues(document: PageDocument): ValidationIssue[] {
-  return validatePage(document).filter((issue) => issue.code !== 'slot-count')
+  return validatePage(document)
 }
 
 /** 결정적인 id 생성기. 스토어의 `nextOpId`를 주입하는 것과 같은 이유다. */
@@ -286,10 +284,9 @@ describe('createNode', () => {
     expect(createNode('Card', countingIds())).toEqual({ id: expect.any(String), type: 'Card' })
   })
 
-  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Popup · Slot · 탭 안의 TabPanel · 그리드의 부품 넷이다', () => {
+  it('페이지에 바로 둘 수 없는 타입은 뿌리 Page · Popup · 탭 안의 TabPanel · 그리드의 부품 넷이다', () => {
     // `createNode`의 계약이 아니라 **카탈로그의 성질**이다. 타입 목록이 무엇을
-    // 걸러야 하는지가 여기서 나온다 — 설계서 「레이아웃」이 Slot을 레이아웃 전용으로 두고,
-    // `validatePage`가 `slot-count`로 거절한다(실측). `Page` 는 뿌리에만 서고 안에 두면 `nested-page` 다. `TabPanel` 은 탭 안에만 서고
+    // 걸러야 하는지가 여기서 나온다. `Page` · `Popup` 은 뿌리에만 서고 안에 두면 `nested-page` 다. `TabPanel` 은 탭 안에만 서고
     // 페이지에 바로 두면 `misplaced-component` 다(설 자리가 정해진 타입 — 하단 판은 그 자리에 놓아 잰다 · `palette/placeable.ts`). 그리드의 열 묶음 ·
     // 열 · 행 · 칸도 그렇다(그리드 · 열 묶음 · 행 안에만 선다).
     // 카탈로그에 그런 타입이 더 생기면 여기서 죽어야 한다.
@@ -300,6 +297,6 @@ describe('createNode', () => {
       })
       .map((def) => def.type)
 
-    expect(blocked).toEqual(['Page', 'Popup', 'Slot', 'TabPanel', 'GridColumnGroup', 'GridColumn', 'GridRow', 'GridCell'])
+    expect(blocked).toEqual(['Page', 'Popup', 'TabPanel', 'GridColumnGroup', 'GridColumn', 'GridRow', 'GridCell'])
   })
 })

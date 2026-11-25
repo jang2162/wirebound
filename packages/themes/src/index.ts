@@ -6,7 +6,7 @@ export { lintProject } from './lint/index'
 
 // 스냅샷 payload 규격과 lint 입력 변환. **패키지에 두는 이유:** api·CLI(`wireb pull`·
 // `wireb lint`)·MCP가 같은 모양을 읽는다 — 패키지에 없으면 셋이 모양을 각자 선언한다.
-export type { SnapshotComment, SnapshotLayout, SnapshotMenuNode, SnapshotPage, SnapshotPayload, SnapshotTheme } from './snapshot/payload'
+export type { SnapshotComment, SnapshotMenuNode, SnapshotPage, SnapshotPayload, SnapshotTheme } from './snapshot/payload'
 export { SNAPSHOT_PAYLOAD_VERSION, SNAPSHOT_RESOURCES, SnapshotPayloadSchema } from './snapshot/payload'
 export type { SnapshotLintNote, SnapshotLintNoteKind, SnapshotLintPlan } from './snapshot/lint-input'
 export { snapshotToLintInput } from './snapshot/lint-input'

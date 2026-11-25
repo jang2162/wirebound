@@ -822,7 +822,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       })
     })
 
-    it('Slot을 포함하면 422', async () => {
+    it('걷힌 Slot 을 포함하면 422 unknown-type', async () => {
       await withApi(async (ctx) => {
         const owner = await signup(ctx)
         const { project, page } = await createProjectWithPage(ctx, owner)
@@ -839,7 +839,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           },
         })
         expect(res.statusCode).toBe(422)
-        expect(res.json().error.issues[0].code).toBe('slot-count')
+        expect(res.json().error.issues[0].code).toBe('unknown-type')
       })
     })
 

@@ -60,7 +60,7 @@ export const LLMS_REST_ROUTES: readonly LlmsRestRoute[] = [
     method: 'GET',
     path: '/api/projects/:projectId/snapshot',
     min: 'viewer',
-    summary: 'Read-only dump of the whole project: menu, pages with their stored documents, layouts, comments, theme binding.',
+    summary: 'Read-only dump of the whole project: menu, pages with their stored documents, comments, theme binding, common codes.',
   },
   {
     method: 'GET',

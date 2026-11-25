@@ -777,7 +777,7 @@ const SHAPES = {
       value['usage'],
       (hit) =>
         isRecord(hit) &&
-        (hit['kind'] === 'page' || hit['kind'] === 'layout' || hit['kind'] === 'module') &&
+        (hit['kind'] === 'page' || hit['kind'] === 'module') &&
         typeof hit['id'] === 'string' &&
         typeof hit['title'] === 'string' &&
         isArrayOf(hit['nodes'], (node) => isRecord(node) && typeof node['nodeId'] === 'string' && typeof node['name'] === 'string'),

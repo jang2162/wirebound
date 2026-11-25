@@ -1,12 +1,10 @@
 export const PACKAGE_NAME = '@wirebound/schema'
 
 export type {
-  AnyDocument,
   CodeRef,
   Interaction,
   InteractionAction,
   InteractionTrigger,
-  LayoutDocument,
   NodeVisibility,
   PageDocument,
   PageLayout,
@@ -75,7 +73,6 @@ export { MODULE_NAME_MAX, countModuleNodes, moduleNodesForSave } from './module/
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, partitionIssues } from './validate'
 export {
-  assertValidLayout,
   assertValidPage,
   checkViewStateRemoval,
   unknownVisibilityStates,
@@ -83,7 +80,6 @@ export {
   isRootType,
   nestedPagesUnderRoot,
   ROOT_TYPES,
-  validateLayout,
   validatePage,
 } from './validate'
 

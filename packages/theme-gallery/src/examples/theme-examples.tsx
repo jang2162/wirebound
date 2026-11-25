@@ -5,7 +5,7 @@ import {
   POPUP_DEPTH_NOTICE,
   PopupLayer,
   popupOpener,
-  renderComposed,
+  renderDocument,
   usePopupStack,
   type InteractionEvent,
   type InteractionOverlay,
@@ -15,7 +15,7 @@ import {
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactElement, type SyntheticEvent } from 'react'
 import { galleryAssetUrl } from '../samples'
-import { EXAMPLE_LAYOUT, EXAMPLE_PAGES, EXAMPLE_POPUPS, type ExamplePageId } from './documents'
+import { EXAMPLE_PAGES, EXAMPLE_POPUPS, type ExamplePageId } from './documents'
 
 /** 이 예제에 없는 페이지를 가리킨 이음 — 문서가 검증을 지나면 안 생긴다(케이스가 죽은 이음 0 을 잰다). */
 export function missingExample(target: string): string {
@@ -41,7 +41,7 @@ interface PageRuntime {
 const NO_NOTICES: readonly string[] = []
 
 /**
- * 예제 페이지 하나를 레이아웃과 합쳐 그리고(`renderComposed`) 이음을 받아 장을 바꾼다. 장 이름 줄 · 보기 전환은 호스트가 그린다(웹 미리보기 머리 ·
+ * 예제 페이지 하나를 그리고(`renderDocument` — 틀은 장 문서 안에 든다) 이음을 받아 장을 바꾼다. 장 이름 줄 · 보기 전환은 호스트가 그린다(웹 미리보기 머리 ·
  * kit 셸) — `page` 는 호스트가 든다.
  *
  * **미리보기 안의 누름은 바깥 화면을 안 움직인다.** 이동은 `onPageChange` 로만 알리고, `Link` 기본 뷰의 `<a href="#…">` 와 폼 제출의 기본 동작은
@@ -122,7 +122,7 @@ export function ThemeExamples(props: {
             {current.notices.join(' · ')}
           </div>
         )}
-        {renderComposed(EXAMPLE_LAYOUT, shown.document, {
+        {renderDocument(shown.document, {
           theme: props.theme,
           assetUrl: galleryAssetUrl,
           interaction: { overlay: current.overlay, onEvent },

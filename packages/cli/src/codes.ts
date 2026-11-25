@@ -21,7 +21,7 @@ export interface CodeTableListing {
 }
 
 export interface CodeUsageHit {
-  kind: 'page' | 'layout' | 'module'
+  kind: 'page' | 'module'
   id: string
   title: string
   nodes: { nodeId: string; name: string }[]

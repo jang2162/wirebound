@@ -374,10 +374,10 @@ export function PropertyPanel(props: {
     <>
       <h2 className="wb-shell-panel-title">{nodeHeading(node)}</h2>
       {/* **꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다.** 별칭 칸은 어느 컴포넌트에나 서므로 위젯이 없는 판이 없다 —
-          편집할 속성이 없는 컴포넌트(`Page`·`Slot`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
+          편집할 속성이 없는 컴포넌트(`Page`)도 꺼진 별칭 칸의 이유를 여기서 말한다. */}
       {notice !== null && <p className="wb-shell-panel-notice">{notice}</p>}
       {fields.length === 0 && variantField === null ? (
-        // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
+        // `Page`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (

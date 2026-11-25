@@ -43,7 +43,7 @@ const DIRECT_READS: Record<string, number> = {
   'apps/api/src/lock/structure.ts': 2,
   'apps/api/src/repos/menu.ts': 1,
   'apps/api/src/services/menu-tree.ts': 1,
-  'apps/web/src/api/http-client.ts': 1,
+  'apps/web/src/api/http-client.ts': 2,
   'apps/web/src/canvas/canvas-drop.ts': 2,
   'apps/web/src/canvas/canvas-iframe.tsx': 1,
   'apps/web/src/canvas/canvas-preview.ts': 4,

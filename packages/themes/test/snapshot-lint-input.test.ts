@@ -10,18 +10,12 @@
 import { describe, expect, it } from 'vitest'
 import { installCatalog, type PageDocument } from '@wirebound/schema'
 import { snapshotToLintInput } from '../src/snapshot/lint-input'
-import type { SnapshotLayout, SnapshotPayload } from '../src/snapshot/payload'
+import type { SnapshotPayload } from '../src/snapshot/payload'
 
 installCatalog()
 
-const LAYOUT_A = '11111111-1111-4111-8111-111111111111'
-
 function 문서(nodes: unknown[] = []): PageDocument {
   return { version: 5, root: { id: 'root', type: 'Page', children: nodes } } as PageDocument
-}
-
-function layout(id: string): SnapshotLayout {
-  return { id, name: '기본', schema: { version: 5, root: { id: 'l', type: 'Slot' } } as never }
 }
 
 /**
@@ -41,7 +35,6 @@ function payload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
       { id: 'p1', menuNodeId: 'm2', title: '목록', sortOrder: 0, description: null, schemaVersion: 4, schema: 문서(), headSeq: 0 },
       { id: 'p3', menuNodeId: 'm1', title: '대시보드', sortOrder: 0, description: null, schemaVersion: 4, schema: 문서(), headSeq: 0 },
     ],
-    layouts: [layout(LAYOUT_A)],
     comments: [
       {
         id: 'c1',

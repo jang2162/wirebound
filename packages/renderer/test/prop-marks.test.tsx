@@ -43,7 +43,6 @@ interface Cell {
 const CENSUS: Record<string, Record<string, Cell>> = {
   Page: {},
   Popup: { title: { route: 'text', alt: '사용자 검색' }, size: { route: 'mark', alt: 'large' } },
-  Slot: {},
   Section: { compact: { route: 'mark', alt: true } },
   Flex: {
     direction: { route: 'mark', alt: 'column' },

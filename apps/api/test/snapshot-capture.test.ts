@@ -47,8 +47,8 @@ function captured(outcome: Awaited<ReturnType<typeof captureSnapshot>>) {
   return outcome.payload
 }
 
-describe('네 자원을 담는다', () => {
-  it('메뉴·페이지·레이아웃·코멘트가 전부 실린다', async () => {
+describe('자원을 담는다', () => {
+  it('메뉴·페이지·코멘트가 전부 실린다', async () => {
     await withApi(async (ctx) => {
       const fx = await realisticProject(ctx)
 
@@ -57,7 +57,6 @@ describe('네 자원을 담는다', () => {
       expect(payload.payloadVersion).toBe(SNAPSHOT_PAYLOAD_VERSION)
       expect(payload.menu.map((node) => node.title)).toEqual(['설정', '사용자 관리'])
       expect(payload.pages.map((page) => page.title)).toEqual(['사용자 목록', '사용자 상세'])
-      expect(payload.layouts).toHaveLength(1)
       expect(payload.comments.map((comment) => comment.body)).toEqual(['이 목록은 페이지네이션이 필요하다'])
     })
   })
@@ -112,8 +111,6 @@ describe('네 자원을 담는다', () => {
       expect(payload.menu).toEqual([])
       expect(payload.pages).toEqual([])
       expect(payload.comments).toEqual([])
-      // 빈 프로젝트에도 기본 레이아웃은 있다(`insertProject`가 만든다).
-      expect(payload.layouts).toHaveLength(1)
     })
   })
 })

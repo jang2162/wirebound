@@ -33,7 +33,7 @@ export const NO_USAGE = '이 코드를 쓰는 노드가 없습니다'
 export const DELETE_PREVIEW = 5
 export const BREAKS_REFERENCES = '참조가 끊깁니다 — 그 노드는 묶을 때의 글과 끊김 표지로 남습니다.'
 
-const KIND_TEXT: Record<UsageHit['kind'], string> = { page: '페이지', layout: '레이아웃', module: '모듈' }
+const KIND_TEXT: Record<UsageHit['kind'], string> = { page: '페이지', module: '모듈' }
 
 interface Table {
   groups: CodeGroup[]
@@ -55,7 +55,7 @@ type NameTarget =
   | { kind: 'rename-group'; group: CodeGroup }
   | { kind: 'rename-item'; group: CodeGroup; item: CodeItem }
 
-/** 사용처 줄 — 페이지면 에디터로 가는 주소, 레이아웃 · 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
+/** 사용처 줄 — 페이지면 에디터로 가는 주소, 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
 export function usageHref(projectId: string, hit: UsageHit, nodeId: string): string | null {
   return hit.kind === 'page' ? `/projects/${projectId}/pages/${hit.id}?node=${encodeURIComponent(nodeId)}` : null
 }

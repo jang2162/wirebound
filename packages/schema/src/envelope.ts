@@ -187,8 +187,8 @@ export const WbNodeSchema: z.ZodType<WbNode> = z.strictObject({
 })
 
 /**
- * 문서 봉투. `version`은 1부터 시작하는 정수다. **레이아웃 문서의 봉투다** — 페이지는 상태 목록을 더한 `PageEnvelopeSchema`를
- * 쓴다. 레이아웃에는 화면 상태가 없어 `viewStates`를 든 레이아웃은 여기서 모르는 키로 거절된다.
+ * 판 · 뿌리만 든 봉투. `version`은 1부터 시작하는 정수다. **노드 묶음을 감싼 임시 문서(클립보드 봉투 읽기)가 쓴다** — 저장 경계의 페이지
+ * 문서는 상태 목록 · 레이아웃을 더한 `PageEnvelopeSchema`를 쓴다.
  */
 export const DocumentEnvelopeSchema: z.ZodType<{ version: number; root: WbNode }> = z.strictObject({
   version: z.int().positive(),

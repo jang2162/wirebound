@@ -25,17 +25,6 @@ describe('공통코드 사용처', () => {
         baseSeq: 0,
         ops: [{ op: 'add', path: '/root/children/-', value: bound('n_done', 'DONE') }],
       })
-      await ctx.db
-        .insertInto('layouts')
-        .values({
-          project_id: project.id,
-          name: '기본 틀',
-          schema: JSON.stringify({
-            version: 1,
-            root: { id: 'n_lr', type: 'Page', children: [bound('n_lay', 'WAIT'), { id: 'n_slot', type: 'Slot' }] },
-          }),
-        })
-        .execute()
       const module = await send('POST', `/api/projects/${project.id}/modules`, { name: '상태 칩', nodes: [bound('n_mod', 'WAIT')] })
       expect(module.statusCode, module.body).toBe(201)
       const personal = await send('POST', '/api/me/modules', { name: '내 칩', nodes: [bound('n_mine', 'WAIT')] })
@@ -47,14 +36,13 @@ describe('공통코드 사용처', () => {
       expect(hits.map((hit) => [hit.kind, hit.nodes.map((node) => node.nodeId)])).toEqual([
         ['page', ['n_p0']],
         ['page', ['n_p1']],
-        ['layout', ['n_lay']],
         ['module', ['n_mod']],
       ])
       expect(hits[0]!.id).toBe(pages[0]!.id)
-      expect(hits[3]!.title).toBe('상태 칩')
+      expect(hits[2]!.title).toBe('상태 칩')
 
       const counts = await send('GET', `/api/projects/${project.id}/codes/usage-counts`)
-      expect(counts.json()).toEqual({ counts: { ORDER_STATUS: { group: 5, items: { WAIT: 4, DONE: 1 } } } })
+      expect(counts.json()).toEqual({ counts: { ORDER_STATUS: { group: 4, items: { WAIT: 3, DONE: 1 } } } })
     })
   })
 

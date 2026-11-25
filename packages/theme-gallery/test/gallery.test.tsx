@@ -1,15 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import {
-  COMPONENT_GROUP_LABELS,
-  COMPONENT_GROUPS,
-  getComponent,
-  installCatalog,
-  listComponents,
-  validateLayout,
-  validatePage,
-} from '@wirebound/schema'
+import { COMPONENT_GROUP_LABELS, COMPONENT_GROUPS, getComponent, installCatalog, listComponents, validatePage } from '@wirebound/schema'
 import { defineTheme, Root, useToken, view } from '@wirebound/theme-sdk'
 import { GALLERY_SAMPLES, galleryGroups, galleryItemDocument, galleryItems, ThemeGallery, type GalleryItem } from '@wirebound/theme-gallery'
 
@@ -49,12 +41,10 @@ describe('갤러리', () => {
   it('표본이 스키마 검증을 지난다 — 갤러리가 폴백을 그리지 않게', () => {
     for (const [type, samples] of Object.entries(GALLERY_SAMPLES)) {
       for (const sample of samples) {
-        const { label, node } = sample
+        const { label } = sample
         // 칸이 그리는 문서 그대로 — 뿌리 타입(Page · Popup)은 감싸지 않는다(`galleryItemDocument`).
         const doc = galleryItemDocument({ type, variant: undefined, sample })
-        // Slot 은 레이아웃에만 선다. 칸의 문서는 둘 다 Page 뿌리라 렌더러에는 같다. 레이아웃 문서에는 페이지 레이아웃(`layout`) 칸이 없다.
-        const issues = node.type === 'Slot' ? validateLayout({ version: doc.version, root: doc.root }) : validatePage(doc as never)
-        const errors = issues.filter((i) => i.severity === 'error')
+        const errors = validatePage(doc).filter((i) => i.severity === 'error')
         expect(errors, `${type} / ${label}`).toEqual([])
       }
     }

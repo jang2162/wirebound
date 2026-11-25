@@ -112,7 +112,9 @@ describe('0018 — 옛 JSON 테마 걷기', () => {
     expect('themes' in payload).toBe(false)
     // 레이아웃의 테마 참조도 걷힌다 — 칸이 사라졌고 규격이 `z.strictObject`다.
     expect((payload.layouts as Record<string, unknown>[]).map((layout) => 'themeId' in layout)).toEqual([false])
-    expect(SnapshotPayloadSchema.safeParse(payload).success).toBe(true)
+    // 그 판 payload 의 `layouts` 는 지금 규격(판 5)에 없다 — 걷고 읽는다(레이아웃 문서는 아래에서 날것으로 본다).
+    const { layouts: _layouts, ...rest } = payload as Record<string, unknown>
+    expect(SnapshotPayloadSchema.safeParse(rest).success).toBe(true)
   })
 
   it('0018 은 테마 표와 레이아웃의 테마 칸을 지운다', async () => {

@@ -9,9 +9,9 @@ import { actionTarget, checkViewStateAction } from '../src/interaction/check'
 import { describeInteraction, listInteractionSentences } from '../src/interaction/describe'
 import { lintDesign } from '../src/lint/design'
 import { moduleNodesForSave } from '../src/module/save'
-import type { Interaction, LayoutDocument, PageDocument, ViewState, WbNode } from '../src/node'
+import type { Interaction, PageDocument, ViewState, WbNode } from '../src/node'
 import { remapNodeIds } from '../src/tree'
-import { partitionIssues, validateLayout, validatePage } from '../src/validate'
+import { partitionIssues, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -62,19 +62,6 @@ describe('검증 — 대상은 그 문서의 상태 id 또는 default', () => {
 
   it('아직 안 고른 대상은 «사라졌다» 가 아니라 «아직 고르지 않았다» 로 말한다', () => {
     expect(validatePage(pageWith('')).map((issue) => issue.message)).toEqual(['setViewState의 대상 상태를 아직 고르지 않았습니다'])
-  })
-
-  it('레이아웃 문서는 상태가 없어 기본만 맞다', () => {
-    const layout = (target: string): LayoutDocument => ({
-      version: 1,
-      root: {
-        id: 'n_000000000001',
-        type: 'Page',
-        children: [button({ on: 'click', actions: [{ type: 'setViewState', target }] }), { id: 'n_000000000009', type: 'Slot' }],
-      },
-    })
-    expect(validateLayout(layout('default'))).toEqual([])
-    expect(validateLayout(layout('s_detail')).map((issue) => issue.code)).toEqual(['view-state-missing'])
   })
 
   it('봉투는 대상 밖의 키를 받지 않는다', () => {

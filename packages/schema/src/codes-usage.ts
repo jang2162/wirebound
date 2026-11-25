@@ -10,10 +10,10 @@ import type { WbNode } from './node'
 import { walkNodes } from './tree'
 
 export interface UsageSource {
-  kind: 'page' | 'layout' | 'module'
+  kind: 'page' | 'module'
   id: string
   title: string
-  /** 뿌리들 — 페이지 · 레이아웃은 `[root]`, 모듈은 저장된 노드 묶음. */
+  /** 뿌리들 — 페이지는 `[root]`, 모듈은 저장된 노드 묶음. */
   nodes: readonly WbNode[]
 }
 

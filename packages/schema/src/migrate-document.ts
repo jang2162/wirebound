@@ -24,7 +24,7 @@
  * 노드는 옮기기만 한다 — id 를 새로 짓지 않는다(판 1 의 가지 복사가 이미 새 id 였다). 그래도 상태 영역을 푼 문서에 같은 id 가 둘이면
  * `MigrationError` — 두 노드를 한 보임으로 합칠 수 없다. 상태 영역이 없는 문서는 옮길 것이 없어 겹침을 보지 않는다(검증의 `duplicate-id` 몫이다).
  */
-import { DEFAULT_VIEW_STATE, type AnyDocument, type NodeVisibility, type WbNode } from './node'
+import { DEFAULT_VIEW_STATE, type PageDocument, type NodeVisibility, type WbNode } from './node'
 
 const STATE_SWITCH = 'StateSwitch'
 const STATE_CASE = 'StateCase'
@@ -57,7 +57,7 @@ function caseState(node: Raw): unknown {
 }
 
 /** 판 1 → 2 의 결과 — 옮긴 문서와 버린 노드 id(버린 가지 안의 노드 전부 · 문서 차례 · 영역 · 가지 노드 자신은 빼고). */
-export interface LiftResult<T extends AnyDocument> {
+export interface LiftResult<T extends PageDocument> {
   doc: T
   dropped: string[]
 }
@@ -66,7 +66,7 @@ export interface LiftResult<T extends AnyDocument> {
  * 판 1 문서를 판 2 로(`version` 은 부르는 쪽 — `migrateDocument` — 이 올린다). 입력을 고치지 않는다. 레이아웃 · 목록 없는 문서는 상태가 없으므로
  * 기본 가지만 남는다(모든 상태의 가지가 목록 밖이다).
  */
-export function liftStateRegions<T extends AnyDocument>(doc: T): LiftResult<T> {
+export function liftStateRegions<T extends PageDocument>(doc: T): LiftResult<T> {
   const listed: unknown = (doc as { viewStates?: unknown }).viewStates
   const universe = [
     DEFAULT_VIEW_STATE,

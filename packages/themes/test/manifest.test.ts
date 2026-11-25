@@ -207,6 +207,13 @@ describe('validateManifest — 저장된 패키지(stored)', () => {
     expect(stored.manifest).not.toBeNull()
   })
 
+  it('걷힌 Slot 을 선언한 저장된 manifest 도 받는다 — 올리기 판은 거절한다', () => {
+    const withSlot = { ...structuredClone(OK), components: { Slot: { variants: [{ id: 'wide', label: '넓게' }], defaultVariant: 'wide' } } }
+    expect(validateManifest(withSlot).issues.map((i) => i.code)).toEqual(['unknown-component'])
+    const stored = validateManifest(withSlot, { stored: true })
+    expect([stored.issues, stored.manifest !== null]).toEqual([[], true])
+  })
+
   it('저장 판도 카탈로그와 무관한 검사는 그대로다 — 판 · 기본 변형', () => {
     const broken = { ...legacy(), version: '1.0' }
     broken.components.DataGrid.defaultVariant = '없는'

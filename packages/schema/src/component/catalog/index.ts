@@ -21,7 +21,7 @@ import {
   TextAreaDef,
   TimeInputDef,
 } from './input'
-import { CardDef, FlexDef, GridDef, PageDef, PopupDef, SectionDef, SlotDef, TabPanelDef, TabsDef } from './structure'
+import { CardDef, FlexDef, GridDef, PageDef, PopupDef, SectionDef, TabPanelDef, TabsDef } from './structure'
 
 export * from './action'
 export * from './data'
@@ -37,7 +37,6 @@ export * from './structure'
 export const CATALOG_DEFS: readonly ComponentDef[] = [
   PageDef,
   PopupDef,
-  SlotDef,
   SectionDef,
   FlexDef,
   GridDef,

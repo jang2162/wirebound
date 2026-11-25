@@ -20,10 +20,6 @@ function id(): string {
 /**
  * **카탈로그의 컴포넌트를 넓게 쓰는 문서**(*"문서 하나로 재지 마라"*).
  *
- * **`Slot`만 빠져 있고 그것은 강제된 것이다** — 설계서 「레이아웃」이 `Slot`을 레이아웃의
- * 것으로 두었고 `validatePage`가 페이지에 있는 `Slot`을 `error`로 막는다. 그래서
- * `slotFixture()`가 따로 있다.
- *
  * props를 기본값으로 두지 않는 것은 「노드 속성」의 여섯 속성 중 `data-wb-variant`·`data-wb-state`가
  * **기본 props에서는 안 나오기** 때문이다.
  */
@@ -232,21 +228,6 @@ export function broadFixture(): PageDocument {
         },
       ],
     },
-  }
-}
-
-/**
- * `Slot` 하나만 든 문서. **유효한 페이지가 아니다** — `validatePage`가 `slot-count`
- * `error`를 낸다(케이스가 그 문장을 값으로 든다).
- *
- * 그래도 견주는 이유: 렌더 경로는 검증을 지나지 않으므로 이 노드를 그리고, **레이아웃을
- * 번들에 넣게 되면**(지금 번들은 페이지 문서만 받는다 — `BundlePage.document`) 이것이 첫 손님이 된다.
- */
-export function slotFixture(): PageDocument {
-  nextId = 900
-  return {
-    version: 6,
-    root: { id: id(), type: 'Page', children: [{ id: id(), type: 'Slot' }] },
   }
 }
 

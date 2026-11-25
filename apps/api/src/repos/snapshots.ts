@@ -68,7 +68,6 @@ import { assertLocking } from '../db/locking'
 import { containsNulByte } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import { lockProjectComments } from './comments'
-import { lockProjectLayouts } from './layouts'
 import { lockProjectMenuNodes } from './menu'
 import { lockProjectPages } from './pages'
 import { lockProjectRow } from './projects'
@@ -340,15 +339,14 @@ function assertNoNulByte(input: { tag: string; description: string | null; paylo
  * |---|---|---|---|
  * | 1 | `menu_nodes` | `(id, parent_id, title, sort_order)` 목록 | `menu[]` 전부 |
  * | 2 | `pages` | `(id, menu_node_id, title, description, sort_order, schema_version, head_seq, md5(schema))` 목록 | `pages[]` 전부 |
- * | 3 | `layouts` | `(id, name, md5(schema))` 목록 | `layouts[]` 전부 |
- * | 4 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
+ * | 3 | `comments` | `(id, md5(행 전체), 작성자 이름)` 목록 | `comments[]` 전부 |
  *
- * **4가 `users.name`을 조인해 넣는 이유:** payload의 `comments[].authorName`이 코멘트 행이
+ * **3이 `users.name`을 조인해 넣는 이유:** payload의 `comments[].authorName`이 코멘트 행이
  * 아니라 **`users` 행**에서 온다(`repos/comments.ts` — *"조인해서 낸다, 스냅샷이 아니다"*).
  * 넣지 않으면 이름을 바꾸는 경로가 생기는 날 payload는 달라지는데 지문은 그대로다.
  *
  * **`md5`를 쓰는 자리와 안 쓰는 자리가 갈린다.** 값이 짧고 개수가 적은 컬럼은 그대로 담고,
- * 문서(`pages.schema`·`layouts.schema`)와 행 전체(`comments`)는 해시로 접는다 —
+ * 문서(`pages.schema`)와 행 전체(`comments`)는 해시로 접는다 —
  * 지문 문자열이 payload만큼 커지면 지문을 두 번 읽는 비용이 캡처 자체와 같아진다.
  * `pages.schema`를 **해시로라도 담는 것**은, 담지 않으면 *"`schema`는 `head_seq` 없이 바뀔
  * 수 없다"*는 다른 파일의 불변식(`repos/pages.ts`의 머리말)에 기대게 되기 때문이다 —
@@ -410,13 +408,6 @@ export async function readCaptureFingerprint(db: DbHandle, projectId: string): P
         )
         from pages p where p.project_id = ${projectId}
       ),
-      'layouts', (
-        select coalesce(
-          json_agg(json_build_array(l.id, l.name, md5(l.schema::text)) order by l.id),
-          '[]'::json
-        )
-        from layouts l where l.project_id = ${projectId}
-      ),
       'comments', (
         select coalesce(json_agg(json_build_array(c.id, md5(c::text), u.name) order by c.id), '[]'::json)
         from comments c
@@ -477,14 +468,14 @@ export async function readCaptureFingerprint(db: DbHandle, projectId: string): P
  * 자식 행을 넣으면 Postgres가 **참조되는 부모 행에 `FOR KEY SHARE`를 건다.**
  * `FOR UPDATE`는 그것과 충돌한다.
  *
- * 그러므로 남는 구멍은 **잠긴 어떤 행도 참조하지 않는 삽입**이다 — 네 표(메뉴·페이지·
- * 레이아웃·코멘트)만 잠그면 `parent_id`가 `NULL`인 메뉴 노드 삽입이 그 모양이다.
+ * 그러므로 남는 구멍은 **잠긴 어떤 행도 참조하지 않는 삽입**이다 — 세 표(메뉴·페이지·
+ * 코멘트)만 잠그면 `parent_id`가 `NULL`인 메뉴 노드 삽입이 그 모양이다.
  * `projects` 행을 잠그면 그것도 막힌다 — `menu_nodes.project_id`가 `projects(id)`를
  * 참조하므로 그 삽입도 `projects` 행에 `FOR KEY SHARE`를 걸기 때문이다.
- * `pages`·`layouts`·`snapshots`도 같은 컬럼을 갖는다.
+ * `pages`·`snapshots`도 같은 컬럼을 갖는다.
  *
- * **그러니 "네 표를 잠근다"가 아니라 "프로젝트를 잠근다"가 이 함수의 뜻이다.**
- * 네 표의 행 잠금은 여전히 필요하다 — `projects` 행 잠금은 **UPDATE·DELETE를 막지
+ * **그러니 "세 표를 잠근다"가 아니라 "프로젝트를 잠근다"가 이 함수의 뜻이다.**
+ * 세 표의 행 잠금은 여전히 필요하다 — `projects` 행 잠금은 **UPDATE·DELETE를 막지
  * 못한다**(그 문장들은 `project_id`를 건드리지 않으므로 부모 행에 잠금을 걸지 않는다).
  * 둘이 서로 다른 절반을 막는다.
  *
@@ -506,6 +497,5 @@ export async function lockProjectForRestore(trx: DbHandle, projectId: string): P
   await lockProjectRow(trx, projectId)
   await lockProjectMenuNodes(trx, projectId)
   await lockProjectPages(trx, projectId)
-  await lockProjectLayouts(trx, projectId)
   await lockProjectComments(trx, projectId)
 }

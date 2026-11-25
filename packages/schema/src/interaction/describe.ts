@@ -60,7 +60,7 @@ import { isolateBidi } from '../bidi'
 import { nodeAlias, viewStateName } from '../display'
 import {
   DEFAULT_VIEW_STATE,
-  type AnyDocument,
+  type PageDocument,
   type Interaction,
   type InteractionAction,
   type InteractionTrigger,
@@ -182,7 +182,7 @@ export interface InteractionSentence {
  * `source`는 그 상호작용이 걸린 노드다. `document`는 **타겟을 찾기 위해** 받는다 —
  * 타겟의 타입을 알아야 이름과 prop 라벨이 나온다. `codes` 를 주면 묶인 노드를 표의 이름으로 부른다(`nodeDisplayName`).
  */
-export function describeInteraction(document: AnyDocument, source: WbNode, interaction: Interaction, codes?: CodeIndex): string {
+export function describeInteraction(document: PageDocument, source: WbNode, interaction: Interaction, codes?: CodeIndex): string {
   return sentenceOf(nodeIndex(document, codes), source, interaction)
 }
 
@@ -198,7 +198,7 @@ export interface NamingContext {
  * 문서 전체의 상호작용을 노드 순서대로 낸다. **우측 패널과 내보내기가 이것을 쓴다** —
  * 둘이 각자 순회하면 순서가 갈릴 수 있다. `codes` 를 주면 묶인 노드를 표의 이름으로 부른다 — 캔버스 · 번들의 그림과 같은 이름이다.
  */
-export function listInteractionSentences(document: AnyDocument, codes?: CodeIndex): InteractionSentence[] {
+export function listInteractionSentences(document: PageDocument, codes?: CodeIndex): InteractionSentence[] {
   const index = nodeIndex(document, codes)
   const out: InteractionSentence[] = []
 
@@ -227,7 +227,7 @@ interface NodeIndex {
   codes: CodeIndex | undefined
 }
 
-function nodeIndex(document: AnyDocument, codes: CodeIndex | undefined): NodeIndex {
+function nodeIndex(document: PageDocument, codes: CodeIndex | undefined): NodeIndex {
   const nodes = new Map<string, WbNode>()
   const parents = new Map<string, { parent: WbNode; index: number }>()
   for (const { node, parent, index } of walkNodes(document.root)) {
@@ -243,7 +243,7 @@ function nodeIndex(document: AnyDocument, codes: CodeIndex | undefined): NodeInd
  * 바뀐다). **노드를 이름으로 부르는 자리(문장 · 읽기 `pageView` · 화면의 패널 머리 · 대상 고르개 · 번들 코멘트)가 이것을 넘긴다** — 한 자리가
  * 안 넘기면 같은 노드가 자리마다 다른 이름으로 불린다(K1 리뷰 R4).
  */
-export function namingContexts(document: AnyDocument): Map<string, NamingContext> {
+export function namingContexts(document: PageDocument): Map<string, NamingContext> {
   const states = (document as { viewStates?: ViewState[] }).viewStates
   const naming = new Map<string, NamingContext>()
   // 가장 가까운 보임이 그 노드의 이름을 정한다 — `only [관리자]` 카드 안의 버튼도 관리자 화면에만 있다.

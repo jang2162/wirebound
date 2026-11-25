@@ -27,7 +27,7 @@
  */
 import { useCallback, useLayoutEffect, useMemo, useState, type ReactElement } from 'react'
 import { NO_THEME, renderDocument } from '@wirebound/renderer'
-import type { AnyDocument, WbNode } from '@wirebound/schema'
+import type { PageDocument, WbNode } from '@wirebound/schema'
 import { GALLERY_SAMPLES, galleryItemDocument } from '@wirebound/theme-gallery'
 import { ThemeProvider } from '@wirebound/theme-sdk'
 import { tokenValues } from '@wirebound/themes'
@@ -54,7 +54,7 @@ export interface ThumbSlot {
 }
 
 interface Sample {
-  doc: AnyDocument
+  doc: PageDocument
   /** 잘라 보일 노드의 id — 표본 노드(표본이 Page 면 그 Page). */
   nodeId: string
 }
@@ -72,7 +72,7 @@ export function thumbSample(key: string): Sample | null {
   let made = 0
   const node: WbNode | null = createNode(type, () => `thumb-${key.replace(':', '-')}${made++ === 0 ? '' : `-${made - 1}`}`, preset)
   if (node === null) return null
-  return { doc: { version: 1, root: { id: 'thumb-page', type: 'Page', children: [node] } } as AnyDocument, nodeId: node.id }
+  return { doc: { version: 1, root: { id: 'thumb-page', type: 'Page', children: [node] } } as PageDocument, nodeId: node.id }
 }
 
 export function PaletteThumbs(props: {

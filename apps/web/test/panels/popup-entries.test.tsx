@@ -121,7 +121,7 @@ describe('상호작용 탭 — 팝업 열기 · 닫기', () => {
 })
 
 describe('페이지 정보 «종류»', () => {
-  it('화면 → 팝업: 뿌리 타입 · 제목(페이지 이름)을 바꾸는 묶음 하나 — 앞에 뿌리 타입의 test', async () => {
+  it('화면 → 팝업: 레이아웃 · 뿌리 타입 · 제목(페이지 이름)을 바꾸는 묶음 하나 — 앞에 뿌리 타입 · 레이아웃의 test', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
     await openTab('페이지 정보')
@@ -133,6 +133,8 @@ describe('페이지 정보 «종류»', () => {
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]!.ops).toEqual([
       { op: 'test', path: '/root/type', value: 'Page' },
+      { op: 'test', path: '/layout', value: 'blank' },
+      { op: 'add', path: '/layout', value: 'popup' },
       { op: 'replace', path: '/root/type', value: 'Popup' },
       { op: 'add', path: '/root/props', value: { title: '회원 목록' } },
     ])
@@ -161,6 +163,8 @@ describe('페이지 정보 «종류»', () => {
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]!.ops).toEqual([
       { op: 'test', path: '/root/type', value: 'Popup' },
+      { op: 'test', path: '/layout', value: 'popup' },
+      { op: 'add', path: '/layout', value: 'blank' },
       { op: 'move', from: '/root/zones/footer/0', path: '/root/children/-' },
       { op: 'move', from: '/root/zones/footer/0', path: '/root/children/-' },
       { op: 'remove', path: '/root/zones' },

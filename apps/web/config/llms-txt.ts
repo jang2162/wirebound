@@ -64,7 +64,6 @@ const COMPONENT_SUMMARIES: Record<string, string> = {
   Page: 'Root of one design page (a screen); everything on the page sits inside it. Only valid as the document root.',
   Popup:
     'Root of a popup page — a box with a title bar (`title`, a close button), a body and a `footer` of buttons; `size` small 480px · medium 720px · large 960px. Only valid as the document root.',
-  Slot: 'Where a layout inserts the page content. Layout documents only.',
   Section: 'A large band of the screen with its own background and spacing.',
   Flex: 'Lays children out in one row or one column.',
   Grid: 'Lays children out on a fixed number of columns. A layout tool — the data table is `DataGrid`.',
@@ -190,7 +189,7 @@ const TOOL_TEXT: Record<string, ToolText> = {
     args: {},
   },
   code_usage: {
-    summary: 'Nodes in pages, layouts and modules that point at a common code group (or one item). Count before deleting.',
+    summary: 'Nodes in pages and modules that point at a common code group (or one item). Count before deleting.',
     args: { group: 'Group key from `list_codes`, e.g. `ORDER_STATUS`.', item: 'Optional code value; only nodes pointing at that item.' },
   },
   edit_codes: {

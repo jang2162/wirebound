@@ -17,7 +17,7 @@ import { z } from 'zod'
 import { CATALOG_DEFS, installCatalog } from '../../src/component/catalog/index'
 import { defineComponent } from '../../src/component/define'
 import { COMPONENT_NOUNS } from '../../src/interaction/describe'
-import { getComponent, registerComponent, resetRegistry } from '../../src/component/registry'
+import { registerComponent, resetRegistry } from '../../src/component/registry'
 
 const base = {
   type: 'T',
@@ -143,12 +143,5 @@ describe('COMPONENT_NOUNS는 카탈로그에서 유도된다', () => {
     expect(COMPONENT_NOUNS['DataGrid']?.name).toBe('그리드')
     expect(Object.keys(COMPONENT_NOUNS)).toHaveLength(CATALOG_DEFS.length)
     installCatalog()
-  })
-
-  it('Slot은 표에 있지만 고르개에는 없다 — 다른 질문이다', () => {
-    // 문장은 **레이아웃 문서**의 노드도 부른다(설계서 「레이아웃」의 `Slot`). 고르개가 답하는 것은
-    // *"페이지에 무엇을 둘 수 있는가"*이고 `validatePage`가 `Slot`을 거른다. 두 집합이
-    // 다른 것이 정상이고, 같아야 한다고 착각하면 둘 중 하나가 틀린 답을 내게 된다.
-    expect(COMPONENT_NOUNS['Slot']?.name).toBe('슬롯')
   })
 })
