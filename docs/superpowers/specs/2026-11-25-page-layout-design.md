@@ -330,7 +330,7 @@ project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
 ### HTML 번들(`packages/exporter` · `apps/api/src/services/export-bundle.ts`)
 
 - 장마다 `LayoutFrame` 으로 그린다 — **영역은 늘 다 켠다**(정해진 것 3 · `hidden_regions` 는 내보내기에 안 들어간다).
-- 내비는 **번들에 한 벌** 싣는다(메뉴 트리 + 페이지 경로) — 장마다 트리를 싣지 않는다(장 수 × 트리 크기로 자란다). 장의 데이터는 제 페이지 id 만 든다. `LayoutLink` 는 그 장 파일로 가는 상대 경로를 `href` 로 단다.
+- 내비는 **번들에 한 벌** 싣는다(`assets/nav.js` — 메뉴 트리 + 페이지 id → 장 경로. `file://` 로도 열리게 전역을 세우는 일반 스크립트다) — 장마다 트리를 싣지 않는다(장 수 × 트리 크기로 자란다). 장의 데이터는 제 페이지 id · 페이지 제목 · 제 자리(번들 안 경로)만 든다. `LayoutLink` 는 그 장 파일로 가는 상대 경로를 `href` 로 단다. 메뉴 트리는 api 가 트리 응답과 같은 조립(`buildMenuTree`)에 올린 문서의 `layout` 을 실어 짓는다 — 내보내기 행(`ExportRows`)과 워커로 가는 메시지는 그대로다.
 - 팝업 레이아웃 장은 캔버스와 같다(흐린 막 + 가운데 상자). 덮개 위 팝업은 틀 없이 상자만이다.
 - 뷰어 셸의 목차와 장 안의 GNB · LNB 가 함께 선다 — 목차는 번들의 길잡이, GNB · LNB 는 설계 내용이다. 화면 모드(`#wb-screen`)는 장만 그린다.
 

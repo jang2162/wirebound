@@ -7,6 +7,6 @@
     "jsx": "react-jsx",
     "composite": true
   },
-  "include": ["src/browser", "src/page-data.ts"],
+  "include": ["src/browser", "src/page-data.ts", "src/bundle/filename.ts"],
   "references": [{ "path": "../schema" }, { "path": "../renderer" }, { "path": "../theme-sdk" }, { "path": "../themes" }]
 }

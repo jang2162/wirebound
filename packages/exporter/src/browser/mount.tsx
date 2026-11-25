@@ -1,6 +1,10 @@
 /**
  * **목업을 브라우저에서 그린다** — 번들 페이지의 `.wb-export-canvas` 에 캔버스 미리보기와 같은 렌더러로.
  *
+ * 문서는 레이아웃 틀(`LayoutFrame` — 문서의 `layout` · 테마의 레이아웃 뷰)로 감싸 그린다. **영역은 늘 다 켠다**(표시 옵션은 편집 모드의 것이다 — 설계
+ * `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「HTML 번들」). 틀의 내비는 번들 한 벌(`ExportNav`)에서 `buildLayoutNav` 로 짓고, 틀 링크는 그
+ * 장 파일의 상대 경로(`href`)라 누르면 브라우저가 옮긴다. 덮개 위 팝업(`PopupLayer`)은 틀 없이 상자만이다.
+ *
  * 캔버스(`apps/web/src/canvas/canvas.tsx`)와 같은 넷을 쓴다: `renderDocument`(테마 뷰 → 기본 뷰) · 상호작용 런타임(`interaction` —
  * 겹layer를 상태로 두고 `onEvent` 로 받은 것을 다시 그린다) · 마커 자리(`markerPoint`) · 덮개 층(`PopupLayer` — «팝업 열기» 가 연 팝업을
  * 덮개 위 상자로 쌓는다). 다른 것은 셸의 말과 팝업 문서를 얻는 곳뿐이다 — 캔버스는 이동 요청을 알리기만 하지만 번들은 그 페이지 파일로
@@ -12,6 +16,7 @@ import {
   EMPTY_OVERLAY,
   isPopupClose,
   isPopupDocument,
+  LayoutFrame,
   markerPoint,
   NO_OPEN_POPUP,
   NO_OPEN_POPUP_DIRECT,
@@ -25,12 +30,21 @@ import {
   type InteractionRequest,
   type NodeRenderError,
 } from '@wirebound/renderer'
-import { childLists, DEFAULT_VIEW_STATE, type CodeIndex, type PageDocument, type WbNode } from '@wirebound/schema'
+import {
+  buildLayoutNav,
+  childLists,
+  DEFAULT_VIEW_STATE,
+  pageLayoutOf,
+  type CodeIndex,
+  type PageDocument,
+  type WbNode,
+} from '@wirebound/schema'
 import { ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
-import type { ExportMarker, ExportPopup } from '../page-data'
+import { bundleHref } from '../bundle/filename'
+import type { ExportMarker, ExportNav, ExportPopup } from '../page-data'
 
 export interface ExportMountInput {
   document: PageDocument
@@ -40,6 +54,14 @@ export interface ExportMountInput {
   tokens: Record<string, string | number>
   /** 문서가 그려지는 창(`useWindow()`). */
   window: Window
+  /** 번들 한 벌의 내비(`assets/nav.js`). 없으면 빈 트리다. */
+  nav?: ExportNav
+  /** 이 장의 페이지 id(`ExportPageData.pageId`) — 내비에서 지금 페이지를 찾는다. */
+  pageId?: string | null
+  /** 페이지 제목 그대로(`ExportPageData.pageTitle`) — 틀의 제목 영역. 없으면 빈 글. */
+  pageTitle?: string
+  /** 이 파일의 번들 안 경로(`ExportPageData.path`) — 틀 링크를 여기서 본 상대 경로로 짓는다. */
+  path?: string
   /** 타겟 → 이 파일에서 본 상대 경로(`ExportPageData.hrefs`). */
   hrefs: Readonly<Record<string, string | null>>
   markers: readonly ExportMarker[]
@@ -69,6 +91,8 @@ export interface ExportMount {
   thrown: string[]
   /** 구조 오류(`onNodeError`) — 기본 뷰로도 못 그린 노드. */
   errors: NodeRenderError[]
+  /** 첫 커밋에서 테마 레이아웃 뷰가 던졌으면 그 말(틀의 `data-wb-error`) — 틀은 기본(내용만)으로 섰다. 아니면 `null`. */
+  layoutError: string | null
   /** 마커 자리를 다시 잰다(시트 · 글꼴이 실린 뒤). */
   remeasure(): void
   /** 늘 머리에 서는 줄을 바꾼다(`ExportMountInput.standing`). */
@@ -107,13 +131,17 @@ export function mountExportDocument(container: Element, input: ExportMountInput)
   })
   const structural = new Set(errors.map((error) => error.nodeId))
   const thrown: string[] = []
+  const layoutError = container.querySelector('[data-wb-layout][data-wb-error]')?.getAttribute('data-wb-error') ?? null
   for (const element of Array.from(container.querySelectorAll('[data-wb-error]'))) {
+    // 틀은 노드가 아니다 — 그 폴백은 `layoutError` 가 말한다.
+    if (element.hasAttribute('data-wb-layout')) continue
     const id = element.getAttribute('data-wb-id') ?? ''
     if (!structural.has(id) && !thrown.includes(id)) thrown.push(id)
   }
   return {
     thrown,
     errors: [...errors],
+    layoutError,
     remeasure: () => flushSync(() => handle.remeasure()),
     say: (lines) => flushSync(() => handle.say(lines)),
     setViewState: (viewState) => flushSync(() => handle.setViewState(viewState)),
@@ -262,6 +290,20 @@ function ExportCanvas(props: {
     ...(input.codes === undefined ? {} : { codes: input.codes }),
   })
 
+  const layout = pageLayoutOf(input.document)
+  const pageId = input.pageId ?? null
+  const pageTitle = input.pageTitle ?? ''
+  const nav = useMemo(() => buildLayoutNav(input.nav?.menu ?? [], { id: pageId ?? '', title: pageTitle }), [input.nav, pageId, pageTitle])
+  const paths = input.nav?.paths
+  const at = input.path ?? ''
+  const frameHref = useCallback(
+    (id: string): string | null => {
+      const to = paths?.[id]
+      return typeof to === 'string' ? bundleHref(at, to) : null
+    },
+    [paths, at],
+  )
+
   // 셸의 상태 줄. 빈 목록이면 줄을 감춘다 — 빈 상자가 남으면 목업이 밀린다.
   const lines = useMemo(() => [...standing, ...notices], [standing, notices])
   useLayoutEffect(() => {
@@ -316,7 +358,9 @@ function ExportCanvas(props: {
 
   return (
     <>
-      {tree}
+      <LayoutFrame theme={input.theme} layout={layout} title={pageTitle} nav={nav} href={frameHref}>
+        {tree}
+      </LayoutFrame>
       <PopupLayer stack={popups} theme={input.theme} onEvent={onPopupEvent} codes={input.codes} />
       {markers.length > 0 && (
         <div className="wb-export-markers" aria-hidden="true">

@@ -47,7 +47,7 @@ function canvasDocumentRoot(): Element {
   return root
 }
 
-/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의 · 같은 토큰(없음)으로 번들의 목업 자리에 그린다. 마커가 없어 첫 원소가 뿌리다. */
+/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의 · 같은 토큰(없음)으로 번들의 목업 자리에 그린다. 틀(`data-wb-layout`)은 노드가 아니라 `data-wb-id` 가 없다 — 첫 노드가 뿌리다. */
 function bundleDocumentRoot(document_: PageDocument): Element {
   const canvas = document.createElement('div')
   canvas.className = 'wb-export-canvas'
@@ -64,7 +64,7 @@ function bundleDocumentRoot(document_: PageDocument): Element {
       codes: indexCodes(FIXTURE_CODES),
     })
   })
-  const root = canvas.firstElementChild
+  const root = canvas.querySelector('[data-wb-id]')
   if (root === null) throw new Error('번들에 문서가 없습니다')
   return root
 }

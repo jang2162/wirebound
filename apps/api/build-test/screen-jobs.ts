@@ -69,21 +69,28 @@ export function manifestOf(id: string): ThemeManifest {
 
 /**
  * 코드를 글자로 짓는 작은 테마 — `theme.js` 가 공유 런타임에서 SDK 를 받아 등록한다(kit 이 짓는 번들과 같은 길). `views` 는 `rt`
- * (공유 런타임)를 쓰는 글자이고, `before` 는 등록 전에 도는 글자다(바깥 요청 · 등록하지 않기 따위).
+ * (공유 런타임)를 쓰는 글자이고, `before` 는 등록 전에 도는 글자다(바깥 요청 · 등록하지 않기 따위). `layouts` 는 레이아웃 뷰의 글자이고
+ * (`ThemeDefinition.layouts`), 그 영역 선언은 `manifestLayouts` 다(manifest 의 `layouts`).
  */
 export function inlineTheme(options: {
   id?: string
   themeCss?: string | null
   views?: string
+  layouts?: string
+  manifestLayouts?: ThemeManifest['layouts']
   before?: string
   register?: boolean
   assets?: [string, Uint8Array][]
 }): BundleTheme {
-  const manifest = manifestOf(options.id ?? 'inline')
+  const manifest: ThemeManifest = {
+    ...manifestOf(options.id ?? 'inline'),
+    ...(options.manifestLayouts === undefined ? {} : { layouts: options.manifestLayouts }),
+  }
+  const layouts = options.layouts === undefined ? '' : `, layouts: ${options.layouts}`
   const register =
     options.register === false
       ? ''
-      : `rt.register(rt.sdk.defineTheme({ manifest: ${JSON.stringify(manifest)}, views: ${options.views ?? '{}'} }))`
+      : `rt.register(rt.sdk.defineTheme({ manifest: ${JSON.stringify(manifest)}, views: ${options.views ?? '{}'}${layouts} }))`
   return {
     ref: { themeId: manifest.id, version: manifest.version },
     manifest,
