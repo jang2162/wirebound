@@ -33,6 +33,7 @@ import { snapshotRoutes } from './routes/snapshots'
 import { themePackageRoutes } from './routes/theme-packages'
 import { myTokenRoutes, tokenRoutes } from './routes/tokens'
 import { treeRoutes } from './routes/tree'
+import { viewPrefRoutes } from './routes/view-prefs'
 import { ensureCatalog } from './schema-setup'
 import type { ScreenRenderer } from './services/screen-render'
 import { readExportRuntime } from './services/export-runtime'
@@ -292,6 +293,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   await app.register(tokenRoutes(), { prefix: '/api/projects' })
   // 프로젝트가 고정한 테마(`/:projectId/theme`) — 토큰으로도 닿는다(CLI · MCP 의 lint 가 manifest 를 읽는다).
   await app.register(projectThemeRoutes(), { prefix: '/api/projects' })
+  // 표시 옵션(`/:projectId/view-prefs`) — 사람 × 프로젝트의 끈 레이아웃 영역. 세션으로만(`routes/view-prefs.ts` 머리말).
+  await app.register(viewPrefRoutes(), { prefix: '/api/projects' })
   // **로그인한 사람의 토큰 전부**는 프로젝트 밖(`/api/auth/tokens`)이다 — 멤버가 아닌 프로젝트의 토큰도 거둬야 한다
   // (`routes/tokens.ts`의 «내 토큰은 프로젝트를 가로지른다»).
   await app.register(myTokenRoutes(), { prefix: '/api/auth' })

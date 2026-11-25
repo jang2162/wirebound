@@ -449,6 +449,17 @@ const PROBES: Probe[] = [
     restoreWrites: false,
     blocked: false,
   },
+  {
+    // **표시 옵션 저장 — 막힌다.** 복원은 이 표를 안 쓰지만(payload 에 없다) 라우트가 프로젝트 행을 `KEY SHARE` 로 먼저 잡는다
+    // (`routes/view-prefs.ts` — 토큰 발급과 같은 차례 · 처음 쓰는 판의 FK 와 같은 모드). 행이 이미 있는 판도 같은 자리에 선다.
+    route: 'PUT /:projectId/view-prefs',
+    label: '표시 옵션 저장 — 복원은 이 표를 안 쓰지만 프로젝트 행 `KEY SHARE` 때문에 막힌다',
+    method: 'PUT',
+    url: (ids) => `/api/projects/${ids.projectId}/view-prefs`,
+    payload: () => ({ hiddenRegions: ['subpage.gnb'] }),
+    restoreWrites: false,
+    blocked: true,
+  },
 ]
 
 /** 등록된 **`projectGuard`가 걸린 비-`GET`** 라우트 전부(위 "세는 단위") — `METHOD /:projectId/…`(표의 `route` 꼴). */

@@ -864,6 +864,7 @@ describe('`:projectId` 라우트 전부가 나쁜 헤더를 핸들러 앞에서 
     'invites',
     'password_resets',
     'admin_audit',
+    'project_view_prefs',
   ] as const
 
   async function rowCounts(ctx: TestContext): Promise<Record<string, number>> {

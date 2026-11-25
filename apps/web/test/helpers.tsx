@@ -82,6 +82,9 @@ export function fakeApi(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteModule: notStubbed('deleteModule'),
     // 공통코드 표는 셸이 열 때마다 읽는다(`codes/project-codes.tsx`) — 기본은 빈 표다(모든 에디터 케이스가 이 조회를 지난다).
     listCodes: async () => [],
+    // 표시 옵션은 에디터가 열 때 읽는다(설계 「표시 옵션 저장」) — 기본은 다 켠 판(`[]`)이다. 저장은 스텁해야 선다.
+    getViewPrefs: async () => [],
+    putViewPrefs: notStubbed('putViewPrefs'),
     createCodeGroup: notStubbed('createCodeGroup'),
     updateCodeGroup: notStubbed('updateCodeGroup'),
     deleteCodeGroup: notStubbed('deleteCodeGroup'),
