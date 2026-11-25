@@ -4349,10 +4349,14 @@
    **편집 모드 «컴포넌트» 탭(루트 `Page`를 골랐을 때)에는 두지 않는다** — 설계서 「설계서 화면
    구조」가 그렇게 정하고, 그 파일 머리말과 `panels/property-panel.tsx` 머리말이 그 이유를
    든다. 그 자리를 설명으로 남기면 다음 사람이 없는 것을 찾는다. */
+/* 이름 · 종류 · 설명은 같은 라벨-값 꼴이다 — 라벨 칸 76px(«컴포넌트» 탭 칸 줄 `.wb-shell-prop` 과 같은 폭) · 값 칸이 나머지. 폼은 두 칸 격자이고
+   칸(라벨 + 입력)이 두 칸을 다 쓰며(`display: contents`), 글자 수 · 저장 단추 · «바뀜» 은 값 칸에 선다. */
 .wb-shell-page-description-form {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  column-gap: 8px;
+  row-gap: 4px;
+  align-items: center;
   margin: 0 0 12px;
 }
 
@@ -4366,7 +4370,10 @@
 }
 
 .wb-shell-page-kind-label {
-  font-weight: 600;
+  flex: none;
+  width: 76px;
+  font-size: 12px;
+  color: var(--wb-shell-muted);
 }
 
 .wb-shell-page-kind-option {
@@ -4469,11 +4476,27 @@
 }
 
 .wb-shell-page-description-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: contents;
   font-size: 12px;
-  color: #234;
+  color: var(--wb-shell-muted);
+}
+
+/* 폼 격자의 둘째 칸에 서는 것들(글자 수 · 저장 · «바뀜»). */
+.wb-shell-page-description-count,
+.wb-shell-page-description-save,
+.wb-shell-page-meta-dirty {
+  grid-column: 2;
+}
+
+/* 아직 안 보낸 글이 있다는 표지 — 저장 단추 밑. 색에만 기대지 않게 글로 말한다. */
+.wb-shell-page-meta-dirty {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 0 6px;
+  background: #fff4d6;
+  font-size: 11px;
+  line-height: 18px;
+  color: #7a5200;
 }
 
 .wb-shell-page-description-input {
