@@ -335,6 +335,24 @@ describe('테마 규칙 — 현재 테마에 없는 variant', () => {
     )
   })
 
+  /**
+   * **걷힌 타입을 선언한 저장 테마에서도 테마 규칙이 돈다** — 옛 kit 스타터로 지은 테마는 `Slot` 을, 기본테마 1.5.0 · 1.6.0 은 `List` 를
+   * 선언한다. 서버가 저장된 판을 다시 읽는 판정(`readWbtheme` 의 `stored`)과 같아야 한다 — 다르면 그 판에 고정한 프로젝트에서만 «테마
+   * 없음» 이 된다. 모양 오류는 여전히 막는다(아래 «규격 밖이면»).
+   */
+  it('걷힌 타입(Slot · List)을 선언한 저장 테마에서도 테마 규칙이 돈다', async () => {
+    const io = 준비(테마에_없는_variant_프로젝트())
+    const retired = { variants: [{ id: 'boxed', label: '상자' }], defaultVariant: 'boxed' }
+    stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
+      status: 200,
+      body: projectThemeResponse({ ...LIST_VARIANTS, Slot: retired, List: retired }),
+    })
+    expect(await run(['lint'], io), io.stderr.join('\n')).toBe(EXIT.ok)
+    const out = io.stdout.join('\n')
+    expect(out).not.toContain('서버가 준 manifest 가 규격과 다릅니다')
+    expect(out).toContain('DataGrid 의 variant "grid" 는 테마 system-admin@0.1.0 에 없습니다')
+  })
+
   it('테마를 못 받아도(404) 나머지 lint 는 돌고, 빠진 것이 그렇다고 말한다', async () => {
     const io = 준비(오류가_있는_프로젝트())
     stub(io, 'GET', `/api/projects/${PROJECT}/theme`, {
