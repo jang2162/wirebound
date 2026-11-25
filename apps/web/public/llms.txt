@@ -20,13 +20,13 @@ Typical flow: `list_pages` → `get_page` → implement → `add_comment` where 
 
 ### list_pages
 
-Menu tree and page list of the bound project. Each page `path` is the argument of the other tools.
+Menu tree and page list of the bound project. Each page `path` is the argument of the other tools; `layout` is its page layout (`blank`, `popup`, `subpage`) and `kind` is `popup` for a popup layout, `page` otherwise.
 
 Arguments: none.
 
 ### get_page
 
-One page: document, node outline (`nodes[].id`, `nodes[].path`), comments, interaction sentences and `headSeq`. Unknown or ambiguous paths return candidates instead.
+One page: document, `layout`, node outline (`nodes[].id`, `nodes[].path`), comments, interaction sentences and `headSeq`. Unknown or ambiguous paths return candidates instead.
 
 - `path` (string, required) — Page path from `list_pages`, e.g. `Admin/Members/List`. A `page:` prefix is accepted.
 
@@ -36,7 +36,7 @@ Edit the page document with JSON Patch, through the same pipeline as human edits
 
 - `path` (string, required) — Page path.
 - `baseSeq` (integer ≥ 0, required) — The `headSeq` from `get_page` (or from the previous successful edit).
-- `ops` (array of objects, required) — RFC 6902 ops (add, remove, replace, move, test — not copy), at most 200. Paths under `/root` (use `nodes[].path`), `/viewStates` or `/version`.
+- `ops` (array of objects, required) — RFC 6902 ops (add, remove, replace, move, test — not copy), at most 200. Paths under `/root` (use `nodes[].path`), `/viewStates`, exactly `/layout` (the page layout — crossing into or out of `popup` also swaps the root type in the same ops) or `/version`.
 
 ### add_comment
 
@@ -106,7 +106,7 @@ Nodes carry no styles. Appearance comes from the project theme.
 - `switchTab` `{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.
 - `setViewState` `{ target: <view state id> | "default" }` — switch the screen of the document holding the rule to that state from its own `viewStates` (`"default"` is the base screen). Inside an open popup it switches that popup only. A target missing from the list is a warning, not an error.
 - `navigate` `{ target: "page:<menu path>" }` — go to another page.
-- `openModal` `{ target: "page:<menu path>" }` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is `Popup`.
+- `openModal` `{ target: "page:<menu path>" }` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose `layout` is `popup`.
 - `closeModal` `{}` — no target; close the top-most open popup.
 
 A `page:` target names a page by its menu path, the same `path` the MCP tools take.

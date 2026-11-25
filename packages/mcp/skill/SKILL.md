@@ -80,11 +80,61 @@
 의 `Button` 이다(서버는 넣어 주지 않는다). 한도 글은 `maxFiles`(0 이면 개수 없음) · `maxSize`(빈 글이면 크기 없음)에서 짓는다. 폼 표의 값 칸에 둘 때는
 `Field` 의 `children` 에 넣는다. «[파일선택][선택된 파일 없음]» 같은 단순 파일 선택 줄은 파일첨부가 아니라 `Button` + `readonly` `Input` 이다.
 
-**팝업은 페이지의 종류다.** 뿌리가 `Popup` 인 페이지가 팝업 페이지다(`list_pages` 의 `kind` 가 `popup` · `get_page` 의 `kind`). 팝업의 제목은
-뿌리의 `title`, 크기는 `size`(`small` · `medium` · `large`)이고, 내용은 뿌리의 `children`, 바닥 단추는 `zones.footer` 다 — 닫기(✖)는 노드가 아니다.
-다른 화면에서 그 팝업을 띄우는 상호작용은 `openModal`(대상은 그 팝업 페이지의 경로), 팝업 안의 «취소» · «닫기» 단추는 `closeModal`(대상 없음 —
-`{ "type": "closeModal" }`)이다. 팝업 페이지를 새로 만드는 도구는 없다 — 사람이 메뉴 트리에서 만든다. 있는 팝업 페이지의 뿌리 · 바닥을 고친다.
-`validate` 는 팝업이 아닌 페이지를 `openModal` 로 · 팝업 페이지를 `navigate` 로 가리키는 것 · 화면 페이지의 `closeModal` 을 경고한다.
+**페이지마다 레이아웃이 있다.** 문서의 `layout` 이 셋 가운데 하나다 — `blank`(틀 없음) · `subpage`(테마가 메뉴 트리로 GNB · LNB ·
+브레드크럼브 · 페이지 제목을 그린다) · `popup`(제목줄과 닫기가 있는 상자). `get_page` 의 `layout`(과 `document.layout`) · `list_pages` 의
+`layout` 이 그 값이다(`kind` 는 그것에서 지은 종류 — `popup` 이면 `popup`, 그 밖은 `page`). **틀은 노드가 아니다** — 서브페이지의 메뉴 줄 ·
+브레드크럼브 · 페이지 제목은 테마가 메뉴 트리와 페이지 이름에서 짓는다. 그것을 노드로 다시 짓지 마라(이미 노드로 그린 페이지를 `subpage` 로
+바꾸면 그 노드를 함께 걷는다). 레이아웃은 `patch_page` 의 `/layout` 으로 바꾼다 — 바꾸기 전 값의 `test` 를 앞에 둔다(남이 먼저 바꿨으면 409).
+
+<!-- wirebound:layout-example to-subpage -->
+```json
+[
+  { "op": "test", "path": "/layout", "value": "blank" },
+  { "op": "replace", "path": "/layout", "value": "subpage" }
+]
+```
+
+**팝업 경계를 넘는 바꿈은 뿌리와 한 묶음이다.** `popup` 은 뿌리 `Popup` 과, `blank` · `subpage` 는 뿌리 `Page` 와 짝이라 `/layout` 만 바꾸면
+저장 경계가 거절한다(422 `layout-root-mismatch`). 화면 → 팝업은 뿌리 타입을 `Popup` 으로 바꾸고 제목(`title`)을 싣는다(바닥 단추는 `zones.footer`
+에 함께 넣는다 — 서버는 넣어 주지 않는다).
+
+<!-- wirebound:layout-example to-popup -->
+```json
+[
+  { "op": "test", "path": "/root/type", "value": "Page" },
+  { "op": "test", "path": "/layout", "value": "subpage" },
+  { "op": "replace", "path": "/layout", "value": "popup" },
+  { "op": "replace", "path": "/root/type", "value": "Popup" },
+  { "op": "add", "path": "/root/props", "value": { "title": "회원 상세" } },
+  {
+    "op": "add",
+    "path": "/root/zones",
+    "value": { "footer": [{ "id": "n_close", "type": "Button", "props": { "label": "닫기" }, "interactions": [{ "on": "click", "actions": [{ "type": "closeModal" }] }] }] }
+  }
+]
+```
+
+팝업 → 화면은 바닥(`zones.footer`)의 노드를 몸통 끝으로 옮기고(지우지 않는다) 바닥 구역 · 제목을 걷은 뒤 뿌리 타입을 `Page` 로 바꾼다. 옮긴 단추의
+`closeModal` 은 화면에서 닫을 팝업이 없다 — `validate` 가 경고한다.
+
+<!-- wirebound:layout-example from-popup -->
+```json
+[
+  { "op": "test", "path": "/root/type", "value": "Popup" },
+  { "op": "test", "path": "/layout", "value": "popup" },
+  { "op": "replace", "path": "/layout", "value": "subpage" },
+  { "op": "move", "from": "/root/zones/footer/0", "path": "/root/children/-" },
+  { "op": "remove", "path": "/root/zones" },
+  { "op": "remove", "path": "/root/props" },
+  { "op": "replace", "path": "/root/type", "value": "Page" }
+]
+```
+
+**팝업 페이지**의 제목은 뿌리의 `title`(페이지 이름과 따로다), 크기는 `size`(`small` · `medium` · `large`)이고, 내용은 뿌리의 `children`, 바닥 단추는
+`zones.footer` 다 — 닫기(✖)는 노드가 아니다. 다른 화면에서 그 팝업을 띄우는 상호작용은 `openModal`(대상은 그 팝업 페이지의 경로), 팝업 안의 «취소» ·
+«닫기» 단추는 `closeModal`(대상 없음 — `{ "type": "closeModal" }`)이다. 페이지를 새로 만드는 도구는 없다 — 사람이 메뉴 트리에서 만든다. 있는
+페이지의 레이아웃 · 뿌리 · 바닥을 고친다. `validate` 는 팝업이 아닌 페이지를 `openModal` 로 · 팝업 페이지를 `navigate` 로 가리키는 것 · 화면 페이지의
+`closeModal` 을 경고한다.
 
 성공하면 응답의 `headSeq`가 **새 값**이다. 이어서 고칠 것이 있으면 그 값을 다음
 `baseSeq`로 쓴다.

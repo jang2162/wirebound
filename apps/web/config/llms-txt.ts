@@ -141,7 +141,7 @@ const ACTIONS: Record<string, string> = {
   switchTab: '`{ target: <TabPanel node id> }` — open that tab of its parent `Tabs`.',
   setViewState: `\`{ target: <view state id> | "${DEFAULT_VIEW_STATE}" }\` — switch the screen of the document holding the rule to that state from its own \`viewStates\` (\`"${DEFAULT_VIEW_STATE}"\` is the base screen). Inside an open popup it switches that popup only. A target missing from the list is a warning, not an error.`,
   navigate: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — go to another page.`,
-  openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose root is \`Popup\`.`,
+  openModal: `\`{ target: "${PAGE_TARGET_PREFIX}<menu path>" }\` — open that popup page over the current screen (a backdrop and a centered box). Point it at a page whose \`layout\` is \`popup\`.`,
   closeModal: '`{}` — no target; close the top-most open popup.',
 }
 
@@ -153,12 +153,12 @@ interface ToolText {
 /** 도구 → 영어 설명과 인자 설명. 도구 이름 · 인자 이름이 `TOOLS` 와 같아야 한다. */
 const TOOL_TEXT: Record<string, ToolText> = {
   list_pages: {
-    summary: 'Menu tree and page list of the bound project. Each page `path` is the argument of the other tools.',
+    summary: `Menu tree and page list of the bound project. Each page \`path\` is the argument of the other tools; \`layout\` is its page layout (${PAGE_LAYOUTS.map((layout) => `\`${layout}\``).join(', ')}) and \`kind\` is \`popup\` for a popup layout, \`page\` otherwise.`,
     args: {},
   },
   get_page: {
     summary:
-      'One page: document, node outline (`nodes[].id`, `nodes[].path`), comments, interaction sentences and `headSeq`. Unknown or ambiguous paths return candidates instead.',
+      'One page: document, `layout`, node outline (`nodes[].id`, `nodes[].path`), comments, interaction sentences and `headSeq`. Unknown or ambiguous paths return candidates instead.',
     args: { path: 'Page path from `list_pages`, e.g. `Admin/Members/List`. A `page:` prefix is accepted.' },
   },
   patch_page: {
@@ -167,7 +167,7 @@ const TOOL_TEXT: Record<string, ToolText> = {
     args: {
       path: 'Page path.',
       baseSeq: 'The `headSeq` from `get_page` (or from the previous successful edit).',
-      ops: `RFC 6902 ops (add, remove, replace, move, test — not copy), at most ${MAX_OPS_PER_EDIT}. Paths under \`/root\` (use \`nodes[].path\`), \`/viewStates\` or \`/version\`.`,
+      ops: `RFC 6902 ops (add, remove, replace, move, test — not copy), at most ${MAX_OPS_PER_EDIT}. Paths under \`/root\` (use \`nodes[].path\`), \`/viewStates\`, exactly \`/layout\` (the page layout — crossing into or out of \`popup\` also swaps the root type in the same ops) or \`/version\`.`,
     },
   },
   add_comment: {

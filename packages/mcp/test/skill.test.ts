@@ -187,6 +187,11 @@ describe('스킬의 도구 표가 실제 도구와 같다', () => {
       'navigate',
       'kind',
       'popup',
+      // 레이아웃의 꼴 — 문서 필드 · 값 · 짝인 뿌리 타입
+      'layout',
+      'blank',
+      'subpage',
+      'Page',
       // 화면 상태 바꾸기 — 액션 · 견주는 액션
       'setViewState',
       'setVisible',
