@@ -218,6 +218,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                     항목 추가
                   </button>
                   <ActionMenu
+                    size="sm"
                     label={`«${selected.name}» 그룹 더 보기`}
                     items={[
                       {
@@ -290,6 +291,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                       <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
                         {props.canEdit && (
                           <ActionMenu
+                            size="sm"
                             label={`«${item.name}» 더 보기`}
                             items={[
                               {

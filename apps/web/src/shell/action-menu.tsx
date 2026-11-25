@@ -194,6 +194,8 @@ export function ActionMenu(props: {
   disabled?: boolean
   /** 영역 꼬리표 크기(11px · 줄 높이 16px)로 줄인다 — 영역 표지가 위 형제를 덜 가리게(`canvas/state-badges.tsx`). `fullText` 와 함께 쓴다. */
   tag?: boolean
+  /** 작은 단추 줄(에디터 밖 화면의 위 줄 · 표)의 높이로 선다 — 그 줄의 글 단추와 같은 높이의 정사각형(`shell.css` «셸 단추의 두 높이»). */
+  size?: 'sm'
 }): ReactElement {
   const [open, setOpen] = useState(false)
   /** 열 때 포커스를 줄 항목 — `'first'` · `'last'`. 목록이 그려진 뒤 이펙트가 옮긴다. */
@@ -335,6 +337,7 @@ export function ActionMenu(props: {
           props.compact === true ? 'wb-shell-action-menu-compact' : '',
           props.text !== undefined ? 'wb-shell-action-menu-valued' : '',
           props.tag === true ? 'wb-shell-action-menu-tag' : '',
+          props.size === 'sm' ? 'wb-shell-action-menu-sm' : '',
         ]
           .filter(Boolean)
           .join(' ')}

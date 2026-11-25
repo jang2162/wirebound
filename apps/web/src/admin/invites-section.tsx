@@ -144,6 +144,7 @@ export function InvitesSection(): ReactElement {
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
                   {invite.state === 'usable' && (
                     <ActionMenu
+                      size="sm"
                       label={`«${invite.name}» 더 보기`}
                       items={[
                         { key: 'revoke', label: '거두기', icon: ICONS.revokeInvite, danger: true, onSelect: () => setRevoking(invite) },
