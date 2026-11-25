@@ -4400,6 +4400,64 @@
   color: #fff;
 }
 
+/* 상호작용 탭의 «이 페이지의 상호작용» 줄(`panels/interaction-panel.tsx`) — 줄마다 누가(타입 배지 · 이름) · 문장 · 위치(부모 사슬). 줄 전체가
+   그 노드로 가는 단추다. 고른 노드의 줄은 강조색 왼금. */
+.wb-shell-interaction-item {
+  margin: 0 0 4px;
+  border-left: 2px solid transparent;
+}
+
+.wb-shell-interaction-item[aria-current='true'] {
+  border-left-color: var(--wb-shell-accent);
+}
+
+.wb-shell-interaction-row {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--wb-shell-ink);
+  cursor: pointer;
+}
+
+.wb-shell-interaction-row:hover {
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-interaction-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wb-shell-interaction-who-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-shell-interaction-where {
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+  overflow-wrap: anywhere;
+}
+
+.wb-shell-interaction-count {
+  font-weight: 400;
+  color: var(--wb-shell-muted);
+}
+
 /* 이 탭의 칸 · 글 상자는 «컴포넌트» 탭 «속성» 묶음과 같은 `.wb-shell-control`, 단추는 `.wb-shell-panel-action` 을 함께 단다 — 여기 규칙은 자리 · 크기만 갖는다.
    둘이 없으면 브라우저 기본 꼴(테두리 2px inset · Arial 단추)로 선다(`build-test/page-info-style.test.ts`). */
 .wb-shell-page-title-input {

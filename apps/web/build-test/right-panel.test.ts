@@ -7,6 +7,7 @@
  * | 기본 폭 | 창 1280 · 1440 · 1920 에서 우측 패널이 창의 24% 를 300 ~ 380 으로 자른 폭이 아니다 · 열린 배율이 그 칸에 맞춰지지 않는다 |
  * | 탭 줄이 창 안 | 긴 Select 를 고르고 본문을 끝까지 굴리면 탭 줄이 패널 위 끝 밖으로 나간다 · 탭 줄 밑을 지나는 본문이 탭을 덮는다 |
  * | 페이지 정보 | 이름 · 종류 · 설명의 라벨이 한 열(같은 왼끝 · 76px 칸)이 아니다 · 값(입력 · 종류 단추 · 글 상자)이 한 열이 아니다 · 친 칸에 «바뀜» 이 안 선다 · 저장하면 안 걷힌다 |
+ * | 상호작용 줄 | 같은 문장의 줄 셋(그리드 셋)이 «누가» · 위치로 안 갈린다 · 숨은 상태의 그리드 줄을 눌러도 그 노드를 안 고르거나 · 화면 상태가 안 바뀌거나 · 캔버스 칸 밖이다 |
  * | 칸 배치 | 창 1280(패널 307)에서 라벨 칸이 76px 이 아니다 · 세그먼트 단추 · 값 칸이 패널 안쪽 오른끝을 넘는다(글자 노드의 `Range` 로도 잰다) · 묶인 Select 의 목록이 칩 열 개 한 번이 아니다(선택지 칸이 남는다) |
  *
  * `RP_SHOTS=<디렉터리>` 를 주면 판마다 화면 그림을 그 디렉터리에 남긴다(보고의 후 캡처).
@@ -259,6 +260,70 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
       if (shot !== undefined) await page.screenshot({ path: shot })
     } finally {
       await close()
+    }
+  })
+
+  it('상호작용 — 같은 문장의 줄이 «누가» · 위치로 갈리고, 숨은 상태의 줄을 누르면 그 상태로 바꿔 그 노드를 고르고 칸 안에 들인다', async () => {
+    // 폼 카드 앞에 높은 자리표시자를 넣어 카드를 캔버스 칸 아래로 민다 — 줄을 누르면 칸 안으로 굴려야 한다(다른 케이스와 갈라 이 케이스 끝에 걷는다).
+    const head = (await stack.request(alice, 'GET', fx.path)).body.headSeq as number
+    const tall = { id: 'n_tall', type: 'Placeholder', props: { label: '높은 자리', height: 1600 } }
+    const added = await stack.request(alice, 'PATCH', `${fx.path}/ops`, {
+      baseSeq: head,
+      ops: [{ op: 'add', path: '/root/children/2', value: tall }],
+    })
+    expect(added.status).toBe(200)
+    const { page, close } = await open(1440, 600)
+    try {
+      await page.getByRole('tab', { name: '상호작용', exact: true }).click()
+      const list = page.locator('.wb-shell-interaction-list')
+      await list.locator('.wb-shell-interaction-row').first().waitFor()
+      const rows = await list.locator('.wb-shell-interaction-row').evaluateAll((buttons) =>
+        buttons.map((button) => ({
+          who: button.querySelector('.wb-shell-interaction-who')?.textContent ?? '',
+          where: button.querySelector('.wb-shell-interaction-where')?.textContent ?? '',
+        })),
+      )
+      // eslint-disable-next-line no-console
+      console.log(`[상호작용 줄] ${JSON.stringify(rows)}`)
+      const grids = rows.filter((row) => row.who.startsWith('DataGrid'))
+      // 카나리아 — 같은 문장의 그리드 줄 셋.
+      expect(grids.length).toBe(3)
+      expect(new Set(grids.map((row) => `${row.who}|${row.where}`)).size).toBe(3)
+      expect(grids.map((row) => row.where)).toEqual(['', 'Card 등록·수정 폼', 'Card 등록·수정 폼'])
+
+      await list.locator('.wb-shell-interaction-row', { hasText: '(설문)' }).click()
+      await poll(
+        '설문 그리드를 고른다',
+        () =>
+          page.evaluate(
+            () =>
+              document
+                .querySelector('.wb-shell-structure-node[aria-current="true"]')
+                ?.closest('[data-tree-row]')
+                ?.getAttribute('data-tree-id') ?? null,
+          ),
+        (v) => v === 'n_g2',
+      )
+      // 한 번 그린 뒤 한 번 잰다 — 값으로 죽게(기다림의 끝 조건에 단언할 값을 안 넣는다).
+      await page.waitForTimeout(800)
+      const target = canvasFrame(page).locator('[data-wb-id="n_g2"]')
+      const node = (await target.count()) > 0 ? await target.boundingBox() : null
+      const pane = (await page.locator('.wb-shell-canvas').boundingBox())!
+      // 화면 상태 전환기는 «화면 상태: 이름» 을 접근 이름으로 단 단추다(`set-view-state.test.ts` 의 `switcher`).
+      const state = await page.locator('button[aria-label^="화면 상태: "]').getAttribute('aria-label')
+      expect({
+        서있음: node !== null,
+        칸안: node !== null && node.y >= pane.y - 1 && node.y + Math.min(node.height, pane.height) <= pane.y + pane.height + 1,
+        상태: state,
+      }).toEqual({ 서있음: true, 칸안: true, 상태: '화면 상태: 등록·수정 폼 열림' })
+      // 탭은 그대로 · 위에 그 노드의 규칙이 선다.
+      expect(await page.locator('[role="tab"][aria-selected="true"]').evaluate((el) => el.firstChild?.textContent)).toBe('상호작용')
+      const shot = shotPath('interactions.png')
+      if (shot !== undefined) await page.screenshot({ path: shot })
+    } finally {
+      await close()
+      const now = (await stack.request(alice, 'GET', fx.path)).body.headSeq as number
+      await stack.request(alice, 'PATCH', `${fx.path}/ops`, { baseSeq: now, ops: [{ op: 'remove', path: '/root/children/2' }] })
     }
   })
 })
