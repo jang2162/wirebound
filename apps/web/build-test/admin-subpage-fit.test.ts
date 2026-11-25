@@ -9,6 +9,7 @@
  * - 짧은 페이지 — 틀이 그리는 판의 높이를 채운다(LNB 바탕이 창 끝까지). 높이가 내용을 따르는 두 판에서는 그 채움이 높이를 안 키운다: 캔버스 · 미리보기
  *   iframe(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight` — 최소 높이로 줄여 잰다)과 PPTX 캡처(`apps/api/src/services/screen-render-chromium.ts`
  *   의 뷰포트 720×552 · `PAGE_SIZE`).
+ * - 본문 아래 여백 60(lms-skala `.adm-content` 의 `padding: 24px 28px 60px`).
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -326,5 +327,20 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
     } finally {
       await tab.close()
     }
+  })
+
+  it('본문 아래 여백 60 — `space.unit` 을 따른다(4px → 60 · 5px → 75)', async () => {
+    const read = async (tokens: Record<string, string>) => {
+      const tab = await open(1280, { tokens })
+      try {
+        return await tab.evaluate(
+          (frame) => getComputedStyle(document.querySelector(`${frame} > [data-wb-part="body"] > [data-wb-part="content"]`)!).paddingBottom,
+          FRAME,
+        )
+      } finally {
+        await tab.close()
+      }
+    }
+    expect([await read({}), await read({ 'space.unit': '5px' })]).toEqual(['60px', '75px'])
   })
 })

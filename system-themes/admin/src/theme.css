@@ -1633,7 +1633,7 @@
 /* ── 서브페이지 틀 ─────────────────────────────────────────────────────── */
 
 /*
- * 레이아웃 뷰(`src/views/layout-subpage.tsx`)의 조각 — GNB 60px · LNB 240px · 본문 패딩 24/28 · 브레드크럼브 12.5px · 페이지 제목 22px(lms-skala
+ * 레이아웃 뷰(`src/views/layout-subpage.tsx`)의 조각 — GNB 60px · LNB 240px · 본문 패딩 24/28 · 아래 60 · 브레드크럼브 12.5px · 페이지 제목 22px(lms-skala
  * 관리자 셸 `_header.scss` · `_lnb.scss` · `_content.scss`). 색은 토큰이고 글 크기는 본문 크기에서 셈한다(제목 단계와 같은 자세 — 본문을 키우면 따라
  * 큰다). 본문 바탕은 옅은 구역 색(`semantic.canvas`)이다 — 원본의 #f3f3f3 과 한 단계 차이고, 따로 토큰을 두면 옛 판에서 `semantic.canvas` 를 덮은
  * 프로젝트의 본문만 밝게 남는다.
@@ -1828,7 +1828,7 @@
   flex: 1;
   box-sizing: border-box;
   min-width: 0;
-  padding: var(--wb-space-6) var(--wb-space-7);
+  padding: var(--wb-space-6) var(--wb-space-7) calc(var(--wb-space-unit) * 15);
 }
 [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="content"] > [data-wb-part="breadcrumb"] {
   display: flex;
