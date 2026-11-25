@@ -54,13 +54,62 @@ const click = (container: HTMLElement, id: string) => {
 }
 const popupsIn = (container: HTMLElement) => container.querySelectorAll('[data-wb-popup-frame]').length
 
+/** 서브페이지 레이아웃 뷰를 낸 테마 — GNB 에 내비 전부를 `LayoutLink` 로 펴고(`data-nav` 가 항목 id) 제목 영역을 둔다. */
+const flat = (items: readonly LayoutNavItem[]): LayoutNavItem[] => items.flatMap((item) => [item, ...flat(item.children)])
+const Subpage: LayoutView = (props) => (
+  <div>
+    <LayoutRegion id="gnb" as="nav">
+      {flat(props.gnb).map((item) => (
+        <LayoutLink key={item.id} item={item} data-nav={item.id} />
+      ))}
+    </LayoutRegion>
+    <LayoutRegion id="title" as="h1">
+      {props.title}
+    </LayoutRegion>
+    {props.children}
+  </div>
+)
+const framed = defineTheme({
+  manifest: {
+    id: 't',
+    name: 't',
+    version: '1.0.0',
+    sdk: '^1.10.0',
+    tokens: { items: {} },
+    layouts: {
+      subpage: {
+        regions: [
+          { id: 'gnb', label: 'GNB' },
+          { id: 'title', label: '제목' },
+        ],
+      },
+    },
+  },
+  views: {},
+  layouts: { subpage: Subpage },
+})
+
+/**
+ * 장 문서는 내용만 든다 — 메뉴 · 머리 · 장 제목은 레이아웃 뷰가 틀로 그린다. 문서 안에 메뉴를 두거나 장 이름과 같은 제목을 두면 레이아웃 뷰를 낸
+ * 테마(기본테마)에서 두 벌로 선다.
+ */
 describe('예제 문서', () => {
-  it('문서가 검증을 지나고 장마다 같은 틀(왼쪽 메뉴)을 든다', () => {
-    for (const page of EXAMPLE_PAGES)
+  it('문서가 검증을 지나고 장 문서에 장 이름 제목 · 장을 옮기는 메뉴가 없다', () => {
+    for (const page of EXAMPLE_PAGES) {
+      const nodes = nodesOf(page.document)
+      // 카나리아 — 문서가 비지 않았다.
+      expect(nodes.length, page.id).toBeGreaterThan(5)
+      const titled = nodes.filter((n) => n.type === 'Text' && (n.props as { content?: string }).content === page.title)
       expect(
-        nodesOf(page.document).filter((n) => n.id === 'ex-l-shell'),
+        titled.map((n) => n.id),
         page.id,
-      ).toHaveLength(1)
+      ).toEqual([])
+      // 다른 장 전부로 가는 이음을 든 문서는 메뉴다 — 장마다 문서 안 이음은 다른 장 둘까지다(목록 줄 → 상세 · «주문 등록» 등).
+      const reached = new Set(
+        links(page.document).flatMap(([, type, target]) => (type === 'navigate' && pageOf(target) !== page.id ? [pageOf(target)] : [])),
+      )
+      expect(reached.size, page.id).toBeLessThan(EXAMPLE_PAGES.length - 1)
+    }
     for (const page of EXAMPLE_PAGES) expect(errors(validatePage(page.document)), page.id).toEqual([])
     for (const one of EXAMPLE_POPUPS) {
       expect(errors(validatePage(one.document)), one.target).toEqual([])
@@ -76,14 +125,12 @@ describe('예제 문서', () => {
     ])
     expect(EXAMPLE_POPUPS.map((p) => (p.document.root.props as { title?: string }).title)).toEqual(['주문 삭제'])
   })
-  it('노드 id 가 문서 안에서 겹치지 않고, 틀(ex-l-) 밖의 id 는 문서들 사이에도 겹치지 않는다', () => {
+  it('노드 id 가 문서 안에서도 문서들 사이에도 겹치지 않는다', () => {
     for (const doc of docs()) {
       const own = nodesOf(doc).map((n) => n.id)
       expect(new Set(own).size, doc.root.id).toBe(own.length)
     }
-    const ids = docs()
-      .flatMap((doc) => nodesOf(doc).map((n) => n.id))
-      .filter((id) => !id.startsWith('ex-l-'))
+    const ids = docs().flatMap((doc) => nodesOf(doc).map((n) => n.id))
     expect(new Set(ids).size).toBe(ids.length)
   })
   it('다섯 그룹이 다 실린다', () => {
@@ -96,7 +143,7 @@ describe('예제 문서', () => {
     const targets = [...EXAMPLE_PAGES, ...EXAMPLE_POPUPS].map((p) => pageTargetKey(p.target))
     for (const [node, , target] of all) expect(targets, `${node} → ${target}`).toContain(pageTargetKey(target))
   })
-  it('설계의 이음 여섯이 있다', () => {
+  it('설계의 문서 안 이음이 있다 — 장 사이 이동은 그 밖에 틀 링크(아래 «서브페이지 틀»)가 한다', () => {
     const orders = docOf('orders')
     // 목록 줄(주문번호) → 상세
     const rowLinks = links(orders).filter(([id]) => /-r\d+-no-l$/.test(id))
@@ -114,12 +161,9 @@ describe('예제 문서', () => {
     expect(actionsOf(popup, 'ex-pd-ok').map((a) => a.type)).toEqual(['closeModal', 'navigate'])
     expect(navTo(popup, 'ex-pd-ok')).toEqual(['orders'])
     expect(actionsOf(popup, 'ex-pd-cancel')).toEqual([{ type: 'closeModal' }])
-    // 왼쪽 메뉴 → 대시보드 · 목록 · 등록
-    expect(['ex-l-go-dash', 'ex-l-go-orders', 'ex-l-go-new'].flatMap((id) => navTo(docOf('dashboard'), id))).toEqual([
-      'dashboard',
-      'orders',
-      'order-form',
-    ])
+    // 대시보드 «전체 보기» → 목록 · 목록 «주문 등록» → 등록
+    expect(navTo(docOf('dashboard'), 'ex-d-all')).toEqual(['orders'])
+    expect(navTo(orders, 'ex-o-new')).toEqual(['order-form'])
   })
 })
 
@@ -149,16 +193,16 @@ describe('ThemeExamples', () => {
     expect(onChange.mock.calls).toEqual([['orders']])
     expect(popupsIn(container)).toBe(0)
   })
-  it('바깥 기록이 그대로다 — 왼쪽 메뉴 링크를 눌러도', () => {
+  it('바깥 기록이 그대로다 — 틀 링크를 눌러도', () => {
     const onChange = vi.fn()
-    const { container } = render(<Harness start="order-form" onChange={onChange} />)
+    const { container } = render(<ThemeExamples theme={framed} tokens={{}} page="order-form" onPageChange={onChange} />)
     const length = window.history.length
     const hash = window.location.hash
     const prevented: boolean[] = []
     const watch = (event: Event) => prevented.push(event.defaultPrevented)
     window.addEventListener('click', watch)
     try {
-      for (const id of ['ex-l-go-dash', 'ex-l-go-orders', 'ex-l-go-dash']) click(container, id)
+      for (const id of ['dashboard', 'orders', 'dashboard']) fireEvent.click(container.querySelector(`[data-nav="${id}"]`)!)
     } finally {
       window.removeEventListener('click', watch)
     }
@@ -175,11 +219,16 @@ describe('ThemeExamples', () => {
     expect(popupsIn(container)).toBe(0)
     expect(container.querySelector('[data-wb-examples]')!.getAttribute('data-wb-examples')).toBe('dashboard')
   })
-  it('틀과 장을 한 화면에 그린다 — 틀의 가운데 칸에 장 내용', () => {
-    const { container } = render(<Harness start="orders" onChange={() => {}} />)
-    const main = container.querySelector('[data-wb-id="ex-o"] [data-wb-id="ex-l-main"]')!
-    expect(main.querySelector('[data-wb-id^="ex-o-"]')).not.toBeNull()
+  it('틀과 장을 한 화면에 그린다 — 틀의 내용 상자에 장 뿌리 · 레이아웃 뷰가 없는 테마는 내용만', () => {
+    const { container } = render(<ThemeExamples theme={framed} tokens={{}} page="orders" onPageChange={() => {}} />)
+    const content = container.querySelector('[data-wb-layout="subpage"] [data-wb-layout-content]')!
+    expect(content.querySelector(':scope > [data-wb-id="ex-o"] [data-wb-id^="ex-o-"]')).not.toBeNull()
+    expect(container.querySelector('[data-wb-layout-region="gnb"]')).not.toBeNull()
     expect(container.querySelector('[data-wb-error]')).toBeNull()
+    cleanup()
+    const plain = render(<Harness start="orders" onChange={() => {}} />).container
+    expect(plain.querySelector('[data-wb-layout="subpage"] > [data-wb-layout-content] > [data-wb-id="ex-o"]')).not.toBeNull()
+    expect(plain.querySelector('[data-wb-layout-region]')).toBeNull()
   })
 })
 
@@ -188,40 +237,6 @@ describe('ThemeExamples', () => {
  * 장을 바꾸고, 끈 영역은 안 선다.
  */
 describe('ThemeExamples — 서브페이지 틀', () => {
-  const flat = (items: readonly LayoutNavItem[]): LayoutNavItem[] => items.flatMap((item) => [item, ...flat(item.children)])
-  const Subpage: LayoutView = (props) => (
-    <div>
-      <LayoutRegion id="gnb" as="nav">
-        {flat(props.gnb).map((item) => (
-          <LayoutLink key={item.id} item={item} data-nav={item.id} />
-        ))}
-      </LayoutRegion>
-      <LayoutRegion id="title" as="h1">
-        {props.title}
-      </LayoutRegion>
-      {props.children}
-    </div>
-  )
-  const framed = defineTheme({
-    manifest: {
-      id: 't',
-      name: 't',
-      version: '1.0.0',
-      sdk: '^1.10.0',
-      tokens: { items: {} },
-      layouts: {
-        subpage: {
-          regions: [
-            { id: 'gnb', label: 'GNB' },
-            { id: 'title', label: '제목' },
-          ],
-        },
-      },
-    },
-    views: {},
-    layouts: { subpage: Subpage },
-  })
-
   it('예제 메뉴 트리가 장 넷을 다 들고 팝업은 내비에 안 선다', () => {
     const nav = buildLayoutNav(EXAMPLE_MENU, { id: 'orders', title: '주문 목록' })
     const pages = flat(nav.gnb).filter((item) => item.kind === 'page')

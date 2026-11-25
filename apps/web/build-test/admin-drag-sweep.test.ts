@@ -10,7 +10,10 @@
  * `docs/superpowers/plans/2026-11-13-rv-sk-report.md` «3 · 실브라우저 훑기» 의 탐침이다(창 1000 판을 걷어 판 수를 줄였다).
  *
  * 판 — 구역 안에 글 · 카드(글 · 폼 표 · 그리드 · 조회 폼 · 글) · 탭 패널(같은 꼴) · 테두리 없는 카드 · 폼 표만 든 카드 · 글 셋, 팝업 페이지 몸통에 글 ·
- * 폼 표 · 글 · 그리드 · 글. 끄는 것은 팔레트 카드(`Button` · `Text` — 카드를 쥐고 위로 200px 끈 뒤)와 캔버스 손잡이(구조 트리 줄을 눌러 고른 글).
+ * 폼 표 · 글 · 그리드 · 글, 서브페이지 레이아웃 페이지(빈 레이아웃 화면과 같은 노드 — 틀은 기본테마의 레이아웃 뷰가 그린다).
+ *
+ * **서브페이지 판은 캔버스가 틀(`LayoutFrame`)을 그릴 때 틀 규칙(`theme.css` «서브페이지 틀»)을 지난다** — 캔버스가 아직 틀 없이 문서 뿌리만 그리는
+ * 판에서는 빈 레이아웃 화면과 같은 판이다. 캔버스에 틀이 서는지(`[data-wb-layout="subpage"]`)는 이 파일이 세지 않는다. 끄는 것은 팔레트 카드(`Button` · `Text` — 카드를 쥐고 위로 200px 끈 뒤)와 캔버스 손잡이(구조 트리 줄을 눌러 고른 글).
  *
  * 점 — 끌기를 세우고 배치가 선 뒤(`dragLayoutSettled`) 잰 노드마다 x = 왼끝 + min(폭/2, 120), y = 위끝 −1 · +1 · 아래끝 −1 · +1 · 다음 형제와의 틈
  * 가운데(마지막이면 아래끝 +4 · +12). 캔버스 칸(`.wb-shell-canvas`) 안 점만. 점마다 steps 4 로 옮긴 뒤 60ms × 6 번 «surface 의 `data-wb-preview` |
@@ -171,6 +174,7 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
   let alice: Session
   let screenUrl = ''
   let popupUrl = ''
+  let subpageUrl = ''
 
   beforeAll(async () => {
     if (!전제.ok) return
@@ -186,9 +190,15 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
     const add = (nodes: Node[]) => nodes.map((value, i) => ({ op: 'add', path: `/root/children/${i}`, value }))
     const screen = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '화면', kind: 'page' }), '화면')
     ok(await call('PATCH', `/projects/${project.id}/pages/${screen.id}/ops`, { baseSeq: 0, ops: add(SCREEN) }), 'ops 화면')
+    const subpage = ok(
+      await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '서브', kind: 'page', layout: 'subpage' }),
+      '서브페이지',
+    )
+    ok(await call('PATCH', `/projects/${project.id}/pages/${subpage.id}/ops`, { baseSeq: 0, ops: add(SCREEN) }), 'ops 서브페이지')
     const popup = ok(await call('POST', `/projects/${project.id}/pages`, { menuNodeId: menu.id, title: '팝업', kind: 'popup' }), '팝업')
     ok(await call('PATCH', `/projects/${project.id}/pages/${popup.id}/ops`, { baseSeq: 0, ops: add(POPUP) }), 'ops 팝업')
     screenUrl = `/projects/${project.id}/pages/${screen.id}`
+    subpageUrl = `/projects/${project.id}/pages/${subpage.id}`
     popupUrl = `/projects/${project.id}/pages/${popup.id}`
   }, 300_000)
 
@@ -312,6 +322,8 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
     ['화면 · 팔레트 Button', () => screenUrl, TARGETS_SCREEN, (p) => grabCard(p, 'Button'), 20],
     ['화면 · 팔레트 Text', () => screenUrl, TARGETS_SCREEN, (p) => grabCard(p, 'Text'), 20],
     ['화면 · 손잡이 s_t4', () => screenUrl, TARGETS_SCREEN, (p) => grabHandle(p, 's_t4'), 20],
+    ['서브페이지 · 팔레트 Button', () => subpageUrl, TARGETS_SCREEN, (p) => grabCard(p, 'Button'), 20],
+    ['서브페이지 · 손잡이 s_t4', () => subpageUrl, TARGETS_SCREEN, (p) => grabHandle(p, 's_t4'), 20],
     ['팝업 · 팔레트 Text', () => popupUrl, TARGETS_POPUP, (p) => grabCard(p, 'Text'), 15],
     ['팝업 · 손잡이 p_t3', () => popupUrl, TARGETS_POPUP, (p) => grabHandle(p, 'p_t3'), 15],
   ]

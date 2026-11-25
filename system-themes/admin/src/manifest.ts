@@ -14,8 +14,8 @@ export const MANIFEST: ThemeManifest = {
   id: 'system-admin',
   name: '기본테마',
   description: '관리자 화면 기본 테마. 회색 선의 표 격자와 파란 주색을 쓴다.',
-  version: '2.1.0',
-  sdk: '^1.8.0',
+  version: '2.2.0',
+  sdk: '^1.10.0',
   tokens: {
     groups: [
       { id: 'color', label: '색' },
@@ -123,6 +123,19 @@ export const MANIFEST: ThemeManifest = {
         { id: 'chip', label: '칩' },
       ],
       defaultVariant: 'checkbox',
+    },
+  },
+  /**
+   * 서브페이지 틀의 영역 넷 — 다 끌 수 있다(에디터 «보기» 메뉴). 뷰는 `src/views/layout-subpage.tsx` 가 같은 id 로 `LayoutRegion` 을 둔다.
+   */
+  layouts: {
+    subpage: {
+      regions: [
+        { id: 'gnb', label: 'GNB' },
+        { id: 'lnb', label: 'LNB' },
+        { id: 'breadcrumb', label: '브레드크럼브' },
+        { id: 'title', label: '페이지 제목' },
+      ],
     },
   },
 }

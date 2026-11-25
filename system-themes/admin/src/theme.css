@@ -106,6 +106,12 @@
   --wb-tree-indent: var(--wb-space-5);
   /* 쌍 격자(폼 표 · 열을 정한 조회 폼) · 등록 폼 · 상세 표의 라벨 칸 폭(SDK `FORM_LABEL_WIDTH_VAR`). */
   --wb-form-labelWidth: 140px;
+  /* 서브페이지 틀(아래 «서브페이지 틀») — 머리 높이 · 왼쪽 메뉴 폭은 밀도와 무관한 상수, 글 크기는 본문 크기에서 셈한다(15 · 14 · 12.5px). */
+  --wb-layout-gnbHeight: 60px;
+  --wb-layout-lnbWidth: 240px;
+  --wb-layout-gnbFontSize: calc(var(--wb-typography-body-fontSize) + 2px);
+  --wb-layout-lnbFontSize: calc(var(--wb-typography-body-fontSize) + 1px);
+  --wb-layout-crumbFontSize: calc(var(--wb-typography-body-fontSize) - 0.5px);
 }
 
 /* 서체는 노드마다 건다 — 캔버스 iframe · 내보낸 번들의 문서에는 서체가 없어 브라우저 기본(명조)으로 그려지고, `button` 은 서체를 안 물려받는다. */
@@ -1624,6 +1630,240 @@
   grid-column: 1 / -1;
 }
 
+/* ── 서브페이지 틀 ─────────────────────────────────────────────────────── */
+
+/*
+ * 레이아웃 뷰(`src/views/layout-subpage.tsx`)의 조각 — GNB 60px · LNB 240px · 본문 패딩 24/28 · 아래 60 · 브레드크럼브 12.5px · 페이지 제목 22px(lms-skala
+ * 관리자 셸 `_header.scss` · `_lnb.scss` · `_content.scss`). 색은 토큰이고 글 크기는 본문 크기에서 셈한다(제목 단계와 같은 자세 — 본문을 키우면 따라
+ * 큰다). 본문 바탕은 옅은 구역 색(`semantic.canvas`)이다 — 원본의 #f3f3f3 과 한 단계 차이고, 따로 토큰을 두면 옛 판에서 `semantic.canvas` 를 덮은
+ * 프로젝트의 본문만 밝게 남는다.
+ *
+ * **조각은 틀의 뿌리에서 자식 결합자(`>`)로만 닿는다** — 틀 안에 페이지 내용(노드)이 서고, 노드의 조각도 같은 이름(`title` · `body`)을 쓴다. 자손
+ * 셀렉터로 겨누면 카드 제목이 페이지 제목 크기로 선다. LNB 안은 노드가 없어 자손으로 닿아도 된다.
+ *
+ * **틀도 배치를 형제 구조로 가르지 않는다** — 영역을 끄면 감싸는 요소째 빠지므로(`LayoutRegion`) 몸통 · 본문은 flex 로 남은 영역만 채운다. 끈
+ * 영역의 자리를 형제 셀렉터로 메우면 끄는 동안의 숨긴 미리보기가 그 셈에 들어 캔버스가 멈춘다(위 «형제 구조로 가르지 않는다» ·
+ * `test/layout-subpage.test.ts`).
+ *
+ * **틀은 그리는 판의 높이(`100vh`)까지 선다** — 짧은 페이지에서도 LNB · 본문 바탕이 창 끝까지 간다. 높이가 내용을 따르는 판은 그 높이를 안 키운다: 캔버스 ·
+ * 미리보기 iframe 은 최소 높이로 줄여 내용을 재고(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight`), PPTX 캡처는 뷰포트가 이미 최소 높이다.
+ */
+[data-wb-layout="subpage"] > [data-wb-part="frame"] {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+  font-family: var(--wb-font-body);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-typography-body-fontSize);
+  line-height: var(--wb-typography-body-lineHeight);
+  background: var(--wb-semantic-canvas);
+}
+/*
+ * 머리는 한 줄 60px 이 기본이고 메뉴가 넘치면 메뉴 줄만 줄을 바꿔 높이가 는다 — 설계서는 모든 메뉴가 보여야 한다(가로로 굴리면 정적 판 · PPTX 캡처에서
+ * 넘친 메뉴와 고른 막대가 안 선다). 로고 · 사용자 칸 · 메뉴 한 줄의 높이는 60 에서 머리 밑선 1px 을 뺀 값이다.
+ */
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: var(--wb-space-4);
+  box-sizing: border-box;
+  min-height: var(--wb-layout-gnbHeight);
+  padding: 0 var(--wb-space-5);
+  background: var(--wb-semantic-surface);
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="logo"] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: calc(var(--wb-layout-gnbHeight) - 1px);
+  color: var(--wb-semantic-primary);
+  font-size: var(--wb-layout-gnbFontSize);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] {
+  flex: 1;
+  min-width: 0;
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] > [data-wb-part="gnbList"] {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--wb-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 메뉴 줄보다 긴 이름 하나는 제 줄에서 줄어 그 폭 안에서 꺾인다(낱말 단위 · 끊을 자리 없으면 아무 데서나). 다른 항목은 제 폭 그대로다. */
+[data-wb-layout="subpage"] [data-wb-part="gnbItem"] {
+  flex: 0 1 auto;
+}
+[data-wb-layout="subpage"] [data-wb-part="gnbLink"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: calc(var(--wb-layout-gnbHeight) - 1px);
+  padding: 0 calc(var(--wb-space-unit) * 3.5);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-layout-gnbFontSize);
+  text-decoration: none;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+[data-wb-layout="subpage"] [data-wb-part="gnbLink"][data-wb-current="true"] {
+  color: var(--wb-semantic-primary);
+  font-weight: 700;
+}
+/* 고른 1단 메뉴의 막대 — 링크 상자 폭에서 좌우 8px 을 들이고 머리 밑선 바로 위에 3px 로 눕는다. */
+[data-wb-layout="subpage"] [data-wb-part="gnbLink"][data-wb-current="true"]::after {
+  content: "";
+  position: absolute;
+  left: var(--wb-space-2);
+  right: var(--wb-space-2);
+  bottom: 2px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--wb-semantic-primary);
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="user"] {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--wb-space-3);
+  height: calc(var(--wb-layout-gnbHeight) - 1px);
+  color: var(--wb-semantic-textStrong);
+  font-size: var(--wb-layout-lnbFontSize);
+  white-space: nowrap;
+}
+[data-wb-layout="subpage"] [data-wb-part="avatar"] {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--wb-semantic-header);
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-width: 0;
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="lnb"] {
+  flex: none;
+  box-sizing: border-box;
+  width: var(--wb-layout-lnbWidth);
+  background: var(--wb-semantic-surface);
+  border-right: 1px solid var(--wb-semantic-border);
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbTabs"] {
+  display: flex;
+  border-bottom: 1px solid var(--wb-semantic-border);
+}
+/* «메뉴 / 즐겨찾기» 탭은 그림이다 — 고른 탭은 늘 «메뉴». */
+[data-wb-layout="subpage"] [data-wb-part="lnbTab"] {
+  flex: 1;
+  padding: var(--wb-space-3) 0;
+  border-bottom: 2px solid transparent;
+  color: var(--wb-semantic-textMuted);
+  text-align: center;
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbTab"][data-wb-current="true"] {
+  border-bottom-color: var(--wb-semantic-primary);
+  color: var(--wb-semantic-textStrong);
+  font-weight: 700;
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbSection"] {
+  padding: var(--wb-space-4) var(--wb-space-3);
+  border-bottom: 1px solid var(--wb-semantic-border);
+  color: var(--wb-semantic-textStrong);
+  font-size: var(--wb-layout-gnbFontSize);
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbTree"],
+[data-wb-layout="subpage"] [data-wb-part="lnbChildren"] {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 셋째 단부터는 하위 영역이다 — 옅은 바탕으로 한 덩어리로 묶고 단 사이 구분선을 뺀다. */
+[data-wb-layout="subpage"] [data-wb-part="lnbChildren"] {
+  background: var(--wb-semantic-canvas);
+  border-bottom: 1px solid var(--wb-semantic-borderFaint);
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbLink"] {
+  display: block;
+  padding: calc(var(--wb-space-unit) * 2.5) var(--wb-space-5) calc(var(--wb-space-unit) * 2.5) var(--wb-space-3);
+  border-bottom: 1px solid var(--wb-semantic-borderFaint);
+  color: var(--wb-semantic-text);
+  font-size: var(--wb-layout-lnbFontSize);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbNode"][data-wb-depth="3"] > [data-wb-part="lnbLink"] {
+  padding-left: calc(var(--wb-space-unit) * 8.5);
+  border-bottom-color: transparent;
+  font-size: var(--wb-typography-body-fontSize);
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbNode"][data-wb-depth="4"] > [data-wb-part="lnbLink"] {
+  padding-left: calc(var(--wb-space-unit) * 11.5);
+  border-bottom-color: transparent;
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-layout-crumbFontSize);
+}
+/* 갈 화면이 없는 메뉴(빈 메뉴 · 팝업만 든 메뉴)는 링크가 아니라 글이다 — 굵은 옅은 글로 가른다. */
+[data-wb-layout="subpage"] [data-wb-part="lnbLink"][aria-disabled="true"] {
+  color: var(--wb-semantic-textMuted);
+  font-weight: 700;
+}
+[data-wb-layout="subpage"] [data-wb-part="lnbLink"][aria-current="page"] {
+  background: var(--wb-semantic-primarySoft);
+  color: var(--wb-semantic-primary);
+  font-weight: 700;
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="content"] {
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: var(--wb-space-6) var(--wb-space-7) calc(var(--wb-space-unit) * 15);
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="content"] > [data-wb-part="breadcrumb"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wb-gap-piece);
+  margin: 0 0 var(--wb-space-2);
+  color: var(--wb-semantic-textMuted);
+  font-size: var(--wb-layout-crumbFontSize);
+}
+/*
+ * 브레드크럼브 칸은 flex 항목이라 자동 최소 폭이 그 이름의 가장 긴 낱말 폭이다 — 끊을 자리 없는 긴 이름은 줄 바꿈(`flex-wrap`) 뒤에도 본문 칸 · 창을
+ * 넘친다. `overflow-wrap: anywhere` 는 최소 폭 셈에도 들어 그 칸을 본문 칸 안에서 꺾는다. 한글은 낱말 단위로 꺾는다(`keep-all`).
+ */
+[data-wb-layout="subpage"] [data-wb-part="crumb"],
+[data-wb-layout="subpage"] [data-wb-part="crumbCurrent"] {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+[data-wb-layout="subpage"] [data-wb-part="crumbSep"] {
+  color: var(--wb-text-placeholder);
+}
+[data-wb-layout="subpage"] [data-wb-part="crumbCurrent"] {
+  color: var(--wb-semantic-text);
+  font-weight: 600;
+}
+[data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="content"] > [data-wb-part="title"] {
+  margin: 0 0 var(--wb-space-5);
+  color: var(--wb-semantic-textStrong);
+  font-size: var(--wb-typography-h1-fontSize);
+  font-weight: var(--wb-typography-h1-fontWeight);
+  line-height: var(--wb-typography-h1-lineHeight);
+  overflow-wrap: anywhere;
+}
+
 /* ── 중간 폭 ──────────────────────────────────────────────────────────── */
 
 /*
@@ -1750,5 +1990,34 @@
   }
   [data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] > [data-wb-component="Field"] > [data-wb-part="value"] {
     grid-column: auto;
+  }
+}
+
+/*
+ * 좁은 창(640 아래)의 서브페이지 틀 — 왼쪽 메뉴를 본문 위로 올려 폭 전체를 쓰고, 본문 여백을 한 단 줄인다. 240px 메뉴 곁에 남는 본문 칸은 글자 몇 자
+ * 폭이라 표 · 폼이 넘친다. 원본(lms-skala)은 메뉴를 서랍으로 감추지만 설계서는 메뉴 구성을 보여야 해서 감추지 않는다.
+ */
+@media (max-width: 640px) {
+  /* 메뉴 줄은 로고 · 사용자 칸 아래 한 줄을 다 쓴다 — 셋이 한 줄이면 메뉴 칸이 이름 하나 폭도 안 남는다. */
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] {
+    flex-wrap: wrap;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] {
+    order: 1;
+    flex-basis: 100%;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="user"] {
+    margin-left: auto;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] {
+    flex-direction: column;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="lnb"] {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--wb-semantic-border);
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] > [data-wb-part="content"] {
+    padding: var(--wb-space-4) var(--wb-space-3);
   }
 }

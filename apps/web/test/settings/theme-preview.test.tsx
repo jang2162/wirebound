@@ -92,7 +92,8 @@ describe('미리보기 — 보기 둘', () => {
   it('예제 안의 이동이 장 이름 줄을 따라 바꾼다', async () => {
     renderSettings()
     await examplesOpen()
-    fireEvent.click(frameDoc().querySelector('[data-wb-id="ex-l-go-orders"]')!)
+    // 대시보드 «최근 주문» 카드의 «전체 보기» — 문서 안 이음(틀 링크는 테마의 레이아웃 뷰가 그려 실브라우저 판이 잰다).
+    fireEvent.click(frameDoc().querySelector('[data-wb-id="ex-d-all"]')!)
     await waitFor(() => expect(shownPage()).toBe('orders'))
     expect(currentPage()).toEqual(['주문 목록'])
   })
