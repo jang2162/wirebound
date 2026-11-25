@@ -2589,10 +2589,123 @@
 /* 속성 한 줄. 라벨과 값을 좌우로 둔다. */
 .wb-shell-prop {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  /* 라벨 칸은 고정 76px — 값 칸이 나머지다(기본 폭 307 에서 ≈ 199px). 긴 라벨(«교차축 정렬»)은 두 줄로 접힌다. */
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
   gap: 8px;
   padding: 4px 0;
   border-bottom: 1px solid var(--wb-shell-line);
+}
+
+/* 속성 칸의 묶음(`panels/prop-group-box.tsx`) — 머리 단추 하나로 접고 편다. 묶음 사이는 머리의 위 여백이 가른다. */
+.wb-shell-prop-group {
+  margin: 0 0 6px;
+}
+
+.wb-shell-prop-group-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 4px 0 2px;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 2px;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-prop-group-toggle:hover {
+  color: var(--wb-shell-ink);
+}
+
+/* 펼침 표지 — 글 앞 삼각형. 접힌 묶음은 오른쪽을 가리킨다(`aria-expanded`). */
+.wb-shell-prop-group-toggle::before {
+  content: '';
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent currentColor;
+  transform: rotate(90deg);
+  transition: transform 0.1s;
+}
+
+.wb-shell-prop-group-toggle[aria-expanded='false']::before {
+  transform: none;
+}
+
+/* 세그먼트 단추(`panels/controls/select-control.tsx`) — 단추 꼴 라디오 줄(«상태 보임» 갈래 단추와 같은 말투). 넘치면 줄을 바꾼다(값 칸 밖으로
+   안 나간다). */
+.wb-shell-segments {
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 1px;
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-segment {
+  appearance: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 2px 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--wb-shell-muted);
+  cursor: pointer;
+}
+
+.wb-shell-segment[aria-checked='true'] {
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--wb-shell-line);
+  color: var(--wb-shell-ink);
+  font-weight: 600;
+}
+
+.wb-shell-segment:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 불리언 칸의 스위치 모양(`panels/controls/switch-control.tsx`) — 체크박스 그대로에 모양만. 손잡이는 배경의 둥근 점이다. */
+.wb-shell-switch {
+  appearance: none;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: radial-gradient(circle at 9px 50%, #fff 6px, transparent 6.5px), #c5ccd6;
+  cursor: pointer;
+}
+
+.wb-shell-switch:checked {
+  background: radial-gradient(circle at 21px 50%, #fff 6px, transparent 6.5px), var(--wb-shell-accent);
+}
+
+.wb-shell-switch:indeterminate {
+  background: radial-gradient(circle at 15px 50%, #fff 6px, transparent 6.5px), #9aa4b2;
+}
+
+.wb-shell-switch:focus-visible {
+  outline: 2px solid var(--wb-shell-accent);
+  outline-offset: 2px;
+}
+
+.wb-shell-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .wb-shell-prop-label {

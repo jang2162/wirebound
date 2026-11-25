@@ -52,7 +52,8 @@ export function SwitchControl(props: SwitchControlProps): ReactElement {
     <input
       id={id}
       disabled={disabled}
-      className="wb-shell-control"
+      // 모양은 스위치(`.wb-shell-switch`)지만 의미는 체크박스 그대로다 — 케이스 · 보조 기술이 체크박스로 찾는다.
+      className="wb-shell-control wb-shell-switch"
       type="checkbox"
       // `indeterminate`는 속성이 아니라 DOM 값이라 ref 로 건다. 갈린 칸은 꺼짐으로 그려 누르면 켬이 된다.
       ref={(element) => {

@@ -6,6 +6,7 @@
  * |---|---|
  * | 기본 폭 | 창 1280 · 1440 · 1920 에서 우측 패널이 창의 24% 를 300 ~ 380 으로 자른 폭이 아니다 · 열린 배율이 그 칸에 맞춰지지 않는다 |
  * | 탭 줄이 창 안 | 긴 Select 를 고르고 본문을 끝까지 굴리면 탭 줄이 패널 위 끝 밖으로 나간다 · 탭 줄 밑을 지나는 본문이 탭을 덮는다 |
+ * | 칸 배치 | 창 1280(패널 307)에서 라벨 칸이 76px 이 아니다 · 세그먼트 단추 · 값 칸이 패널 안쪽 오른끝을 넘는다(글자 노드의 `Range` 로도 잰다) |
  *
  * `RP_SHOTS=<디렉터리>` 를 주면 판마다 화면 그림을 그 디렉터리에 남긴다(보고의 후 캡처).
  */
@@ -135,6 +136,58 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
         밑: true,
         탭: [true, true, true, true],
       })
+    } finally {
+      await close()
+    }
+  })
+
+  it('창 1280 — 라벨 칸은 76px 이고 세그먼트 · 값 칸이 패널 안에 선다(GridColumn · Select)', async () => {
+    const { page, close } = await open(1280)
+    try {
+      const seen: Record<string, unknown> = {}
+      for (const id of ['n_g1_c1', 'n_sel']) {
+        await pickInTree(page, id)
+        seen[id] = await page.evaluate(() => {
+          const panel = document.querySelector('.wb-shell-panel') as HTMLElement
+          const inner = panel.getBoundingClientRect().right - parseFloat(getComputedStyle(panel).paddingRight)
+          const rows = [...panel.querySelectorAll('.wb-shell-prop')].filter((row) => (row as HTMLElement).offsetParent !== null)
+          // 글자 노드의 오른끝 — 끊을 자리 없는 낱말이 제 상자 안에 선 채 넘치는 판까지 센다.
+          let textRight = 0
+          const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT)
+          for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            const range = document.createRange()
+            range.selectNodeContents(text)
+            for (const rect of range.getClientRects()) textRight = Math.max(textRight, rect.right)
+          }
+          return {
+            rows: rows.length,
+            segments: panel.querySelectorAll('.wb-shell-segments').length,
+            labels: [...new Set(rows.map((row) => Math.round(row.querySelector('.wb-shell-prop-label')!.getBoundingClientRect().width)))],
+            past: Math.max(
+              0,
+              ...[...panel.querySelectorAll('.wb-shell-prop-value, .wb-shell-segments')].map(
+                (el) => el.getBoundingClientRect().right - inner,
+              ),
+            ),
+            textPast: Math.max(0, textRight - inner),
+            scroll: panel.scrollWidth - panel.clientWidth,
+          }
+        })
+      }
+      // eslint-disable-next-line no-console
+      console.log(`[칸 배치 1280] ${JSON.stringify(seen)}`)
+      const col = seen.n_g1_c1 as { rows: number; segments: number; labels: number[]; past: number; textPast: number; scroll: number }
+      const sel = seen.n_sel as typeof col
+      // 카나리아 — 칸이 서고 세그먼트가 섰다(GridColumn 의 정렬 · 폭 · 정렬 표시 · 음영 · 번호).
+      expect(col.rows).toBeGreaterThan(4)
+      expect(col.segments).toBeGreaterThanOrEqual(4)
+      expect({ 라벨: col.labels, 넘침: col.past, 글넘침: col.textPast, 가로: col.scroll }).toEqual({
+        라벨: [76],
+        넘침: 0,
+        글넘침: 0,
+        가로: 0,
+      })
+      expect({ 넘침: sel.past, 글넘침: sel.textPast, 가로: sel.scroll }).toEqual({ 넘침: 0, 글넘침: 0, 가로: 0 })
     } finally {
       await close()
     }

@@ -47,6 +47,8 @@ import { useProjectTheme } from '../theme/project-theme'
 import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
 import { CodeBindingField, codeLockedProp } from './code-binding'
 import { ancestorsOf, NodeHead } from './node-head'
+import { PropGroups } from './prop-group-box'
+import { propGroupOf, segmentable, type PropGroup } from './prop-groups'
 import { useProjectCodes } from '../codes/project-codes'
 // **schema의 `findNode`를 쓰지 않는다** — `children` 배열 안의 원소가 노드가 아니면
 // 던지고(`edit/safe-walk.ts` 머리말의 실측), 이 패널은 오류 경계 밖이라 그 예외가 셸을
@@ -368,6 +370,156 @@ export function PropertyPanel(props: {
   const fields = visibleFields(def, node, readProps(node), manifest)
   const variantField = variantFieldOf(def, manifest)
 
+  /** 그 묶음의 카탈로그 칸 — 차례는 `editor` 그대로. 규칙에 없는 꼴(`null`)은 표시에 둔다 — 칸을 잃지 않는다(새 꼴은 `prop-groups.test.ts` 가 잡는다). */
+  const grouped = (group: PropGroup): EditorField[] => fields.filter((field) => (propGroupOf(field) ?? 'look') === group)
+
+  /** **변형** — 머리 카드 안 별칭 아래. 개별 prop 이 아니라 이 노드가 어떤 표현인가를 정하는 것이라 묶음보다 위다. */
+  const variantRow =
+    variantField === null ? null : (
+      <div className="wb-shell-prop wb-shell-node-head-field" key={VARIANT_FIELD}>
+        <div className="wb-shell-prop-label">
+          <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
+            {variantField.label}
+          </label>
+        </div>
+        <div className="wb-shell-prop-value">
+          <VariantControl
+            // props 컨트롤과 같은 이유로 노드가 바뀌면 위젯을 다시 만든다.
+            key={node.id}
+            options={variantField.options}
+            value={node.variant}
+            id={controlId(VARIANT_FIELD)}
+            disabled={blocked}
+            onCommit={(variant) => {
+              if (!blocked) commitVariant(node.id, variant)
+            }}
+          />
+        </div>
+      </div>
+    )
+
+  // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야 스타일과 테스트가 "줄"을 다룰 수 있다.
+  const fieldRow = (field: EditorField): ReactElement => (
+    <div className="wb-shell-prop" key={field.prop}>
+      <dt className="wb-shell-prop-label">
+        {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
+            그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
+        <label id={`${controlId(field.prop)}-label`} htmlFor={labelTarget(field)}>
+          {field.label}
+        </label>
+      </dt>
+      <dd className="wb-shell-prop-value">
+        <PropControl
+          // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을 새 노드로
+          // 옮기지 않는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
+          key={node.id}
+          field={field}
+          def={def}
+          value={readProp(node, field.prop)}
+          // 공통코드에 묶인 동안 그 prop(대표 글 · 선택지)은 표가 정한다 — 칸을 잠근다(`./code-binding.tsx`).
+          disabled={blocked || field.prop === codeLockedProp(node)}
+          clearable={clearableProp(def, field.prop)}
+          image={{ projectId: props.projectId, place: (assetId) => placeImage(props.pageId, node.id, field.prop, assetId) }}
+          onCommit={(value) => {
+            if (!blocked) commitProp(node.id, field.prop, value)
+          }}
+          // 떠나기 전에 고른 것이 바뀐 초안은 이 노드에 쓴다(`useLeftoverCommit`).
+          onLeave={(value) =>
+            commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
+              propOps(running, nodeId, field.prop, value),
+            )
+          }
+        />
+        <FieldHint field={field} />
+      </dd>
+    </div>
+  )
+
+  /** **공통코드 칸** — 내용 묶음의 끝. 묶는 대상이 그 prop 이다(`./code-binding.tsx`). 묶이는 타입에만 선다. */
+  const codeRow =
+    doc === null ? null : (
+      <CodeBindingField
+        key={`${node.id}:code`}
+        projectId={props.projectId}
+        document={doc}
+        node={node}
+        disabled={blocked}
+        commit={(ops) => {
+          if (blocked) return
+          const blocker = store.editBlockedBy(ops)
+          if (blocker !== null) {
+            store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+            return
+          }
+          commitOps(ops)
+        }}
+      />
+    )
+
+  /** **그리드 행의 «행 내용»** — 내용 묶음의 끝. prop 이 아니라 칸 유무를 비추는 화면 명령이다(`./row-content-field.tsx`). */
+  const rowContentRow =
+    doc === null || type !== 'GridRow' ? null : (
+      <RowContentField
+        key={`${node.id}:row-content`}
+        document={doc}
+        rowId={node.id}
+        disabled={blocked}
+        readLock={(columnIds) => {
+          const held = columnIds.map((columnId) => lockOf(columnId)).find((lock) => lock !== null) ?? null
+          return held === null ? null : lockedNotice(held.userName)
+        }}
+        commit={(ops, reads) => {
+          if (blocked) return
+          // 보내기 전에 서버와 같은 물음 + 셀 틀을 읽는 열의 남의 잠금(행 줄 «열 틀로 칸 짓기» 와 같다 — `./structure-toolbar.tsx`).
+          const blocker =
+            store.editBlockedBy(ops) ?? reads.map((columnId) => store.lockedBy(columnId)).find((lock) => lock !== null) ?? null
+          if (blocker !== null) {
+            store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
+            return
+          }
+          commitOps(ops)
+        }}
+      />
+    )
+
+  /** **몫** — 레이아웃 묶음의 끝. 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */
+  const weightRow =
+    doc === null || weightRoom(...weightParentOf(doc, node.id)) === undefined ? null : (
+      <WeightField
+        // 형제 칸(상태 보임)과 키가 겹치면 React 가 둘의 짝을 잘못 지어 초안 · 까닭을 엉뚱한 칸에 남긴다 — 칸 이름을 붙여 가른다.
+        key={`${node.id}:weight`}
+        pairs={inPairGrid(...weightParentOf(doc, node.id))}
+        value={node.weight}
+        disabled={blocked}
+        onCommit={(weight) => {
+          if (blocked || doc === null) return
+          const ops = weightOps(doc, node.id, weight)
+          if (ops !== null) commitOps(ops)
+        }}
+        onLeave={(weight) =>
+          commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
+        }
+      />
+    )
+
+  /** **상태 보임** — 상태 묶음의 끝. 노드 봉투의 필드이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */
+  const visibilityRow =
+    doc === null || doc.root?.id === node.id ? null : (
+      <VisibilityField
+        key={`${node.id}:visibility`}
+        value={node.visibility}
+        viewStates={viewState.viewStates}
+        current={viewState.state}
+        hiddenNow={hiddenNodes.has(node.id)}
+        disabled={blocked}
+        onCommit={(visibility) => {
+          if (blocked || doc === null) return
+          const ops = visibilityOps(doc, node.id, visibility)
+          if (ops !== null) commitOps(ops)
+        }}
+      />
+    )
+
   // **props 검증 실패는 이 패널이 말하지 않는다.** 캔버스는 그리지 못한 이유 둘(알 수 없는
   // 타입 / props 검증 실패)을 폴백과 배너로 알리는데, 여기는 앞의 하나만 안내하고 검증에
   // 실패한 노드에는 원본 값을 평범하게 보여 준다. 닫지 않는 이유는 둘이다 —
@@ -422,157 +574,24 @@ export function PropertyPanel(props: {
             </p>
           </div>
         </div>
+        {variantRow}
       </NodeHead>
-      {fields.length === 0 && variantField === null ? (
+      {fields.length === 0 && variantField === null && (
         // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
-      ) : (
-        <>
-          <dl className="wb-shell-props">
-            {/* **변형이 맨 앞이다.** 개별 prop이 아니라 이 노드가 어떤 표현인가를 정하는
-                것이라 상위다. */}
-            {variantField !== null && (
-              <div className="wb-shell-prop" key={VARIANT_FIELD}>
-                <dt className="wb-shell-prop-label">
-                  <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
-                    {variantField.label}
-                  </label>
-                </dt>
-                <dd className="wb-shell-prop-value">
-                  <VariantControl
-                    // props 컨트롤과 같은 이유로 노드가 바뀌면 위젯을 다시 만든다.
-                    key={node.id}
-                    options={variantField.options}
-                    value={node.variant}
-                    id={controlId(VARIANT_FIELD)}
-                    disabled={blocked}
-                    onCommit={(variant) => {
-                      if (!blocked) commitVariant(node.id, variant)
-                    }}
-                  />
-                </dd>
-              </div>
-            )}
-            {fields.map((field) => (
-              // `<dl>` 안의 `<div>`는 표준이 허용하는 묶음이다. 라벨과 값을 한 줄로 묶어야
-              // 스타일과 테스트가 "줄"을 다룰 수 있다.
-              <div className="wb-shell-prop" key={field.prop}>
-                <dt className="wb-shell-prop-label">
-                  {/* 목록 컨트롤은 입력이 여럿이라 `htmlFor` 하나로 이름을 줄 수 없다.
-                      그쪽은 `role="group"`이 이 `<label>`을 `aria-labelledby`로 가리킨다. */}
-                  <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
-                    {field.label}
-                  </label>
-                </dt>
-                <dd className="wb-shell-prop-value">
-                  <PropControl
-                    // **노드가 바뀌면 위젯을 다시 만든다.** 로컬 초안(타이핑 중인 값)을 새 노드로
-                    // 옮기지 않는 장치이고, 아래 `PropControl`의 주석에 그 선택의 근거와 잰 값이 있다.
-                    key={node.id}
-                    field={field}
-                    def={def}
-                    value={readProp(node, field.prop)}
-                    // 공통코드에 묶인 동안 그 prop(대표 글 · 선택지)은 표가 정한다 — 칸을 잠근다(`./code-binding.tsx`).
-                    disabled={blocked || field.prop === codeLockedProp(node)}
-                    clearable={clearableProp(def, field.prop)}
-                    image={{ projectId: props.projectId, place: (assetId) => placeImage(props.pageId, node.id, field.prop, assetId) }}
-                    onCommit={(value) => {
-                      if (!blocked) commitProp(node.id, field.prop, value)
-                    }}
-                    // 떠나기 전에 고른 것이 바뀐 초안은 이 노드에 쓴다(`useLeftoverCommit`).
-                    onLeave={(value) =>
-                      commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) =>
-                        propOps(running, nodeId, field.prop, value),
-                      )
-                    }
-                  />
-                  <FieldHint field={field} />
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </>
       )}
-      <dl className="wb-shell-props">
-        {/* **공통코드 칸은 컴포넌트 속성 칸들 바로 아래다** — 묶는 대상이 그 prop 이다(`./code-binding.tsx`). 묶이는 타입에만 선다. */}
-        {doc !== null && (
-          <CodeBindingField
-            key={`${node.id}:code`}
-            projectId={props.projectId}
-            document={doc}
-            node={node}
-            disabled={blocked}
-            commit={(ops) => {
-              if (blocked) return
-              const blocker = store.editBlockedBy(ops)
-              if (blocker !== null) {
-                store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
-                return
-              }
-              commitOps(ops)
-            }}
-          />
-        )}
-        {/* **그리드 행의 «행 내용» 은 컴포넌트 속성 칸들 바로 아래다** — prop 이 아니라 칸 유무를 비추는 화면 명령이다(`./row-content-field.tsx`). */}
-        {doc !== null && type === 'GridRow' && (
-          <RowContentField
-            key={`${node.id}:row-content`}
-            document={doc}
-            rowId={node.id}
-            disabled={blocked}
-            readLock={(columnIds) => {
-              const held = columnIds.map((columnId) => lockOf(columnId)).find((lock) => lock !== null) ?? null
-              return held === null ? null : lockedNotice(held.userName)
-            }}
-            commit={(ops, reads) => {
-              if (blocked) return
-              // 보내기 전에 서버와 같은 물음 + 셀 틀을 읽는 열의 남의 잠금(행 줄 «열 틀로 칸 짓기» 와 같다 — `./structure-toolbar.tsx`).
-              const blocker =
-                store.editBlockedBy(ops) ?? reads.map((columnId) => store.lockedBy(columnId)).find((lock) => lock !== null) ?? null
-              if (blocker !== null) {
-                store.setEditFailure({ kind: 'message', message: lockedNotice(blocker.userName) })
-                return
-              }
-              commitOps(ops)
-            }}
-          />
-        )}
-        {/* **몫은 컴포넌트 속성 칸들 바로 아래다** — 별칭처럼 노드 봉투의 필드이고, 부모가 몫을 읽을 때만 선다(`weightRoom` — 렌더러가 몫을 싣는 판정과 같다). */}
-        {doc !== null && weightRoom(...weightParentOf(doc, node.id)) !== undefined && (
-          <WeightField
-            // 형제 칸(상태 보임)과 키가 겹치면 React 가 둘의 짝을 잘못 지어 초안 · 까닭을 엉뚱한 칸에 남긴다 — 칸 이름을 붙여 가른다.
-            key={`${node.id}:weight`}
-            pairs={inPairGrid(...weightParentOf(doc, node.id))}
-            value={node.weight}
-            disabled={blocked}
-            onCommit={(weight) => {
-              if (blocked || doc === null) return
-              const ops = weightOps(doc, node.id, weight)
-              if (ops !== null) commitOps(ops)
-            }}
-            onLeave={(weight) =>
-              commitLeftover({ pageId: props.pageId, nodeIds: [node.id], type }, (running, nodeId) => weightOps(running, nodeId, weight))
-            }
-          />
-        )}
-        {/* **상태 보임은 몫 아래다** — 같은 층(노드 봉투의 필드)이고 뿌리 말고는 어느 노드에나 선다(`./visibility-field.tsx`). */}
-        {doc !== null && doc.root?.id !== node.id && (
-          <VisibilityField
-            key={`${node.id}:visibility`}
-            value={node.visibility}
-            viewStates={viewState.viewStates}
-            current={viewState.state}
-            hiddenNow={hiddenNodes.has(node.id)}
-            disabled={blocked}
-            onCommit={(visibility) => {
-              if (blocked || doc === null) return
-              const ops = visibilityOps(doc, node.id, visibility)
-              if (ops !== null) commitOps(ops)
-            }}
-          />
-        )}
-      </dl>
+      {/* **칸은 묶음 넷으로 가른다**(`./prop-groups.ts`) — 내용 · 표시 · 레이아웃 · 상태. 묶음 안은 카탈로그 차례이고, 칸이 아닌 줄은 제 묶음의
+          끝에 선다: 공통코드 · 행 내용은 내용의 끝(묶는 대상이 그
+          묶음의 prop 이다), 몫은 레이아웃의 끝, 상태 보임은 상태의 끝. */}
+      <PropGroups
+        rows={{
+          content: [...grouped('content').map(fieldRow), codeRow, rowContentRow],
+          look: grouped('look').map(fieldRow),
+          layout: [...grouped('layout').map(fieldRow), weightRow],
+          state: [...grouped('state').map(fieldRow), visibilityRow],
+        }}
+      />
     </>
   )
 }
@@ -655,6 +674,15 @@ function usePlaceImage(now: {
 }
 
 /** 기본값이 없는 prop 인가 — 안 적으면 파싱한 값에도 없다. 그 prop 의 수 칸은 비워 «안 정한» 판으로 되돌릴 수 있다. */
+/** 그 prop 의 카탈로그 기본값이 글이면 그 글 — 값 없는 고르개가 보일 값(`SelectControl` 의 `fallback`). */
+function catalogDefault(def: ComponentDef | undefined, prop: string): string | undefined {
+  const schema = (
+    def?.props as unknown as { shape?: Record<string, { safeParse(value: unknown): { success: boolean; data?: unknown } }> } | undefined
+  )?.shape?.[prop]
+  const parsed = schema?.safeParse(undefined)
+  return parsed?.success === true && typeof parsed.data === 'string' ? parsed.data : undefined
+}
+
 function clearableProp(def: ComponentDef, prop: string): boolean {
   const schema = (def.props as unknown as { shape?: Record<string, { safeParse(value: unknown): { success: boolean; data?: unknown } }> })
     .shape?.[prop]
@@ -852,7 +880,7 @@ function BulkProperties(props: {
               return (
                 <div className="wb-shell-prop" key={field.prop}>
                   <dt className="wb-shell-prop-label">
-                    <label id={`${controlId(field.prop)}-label`} htmlFor={controlId(field.prop)}>
+                    <label id={`${controlId(field.prop)}-label`} htmlFor={labelTarget(field)}>
                       {field.label}
                     </label>
                   </dt>
@@ -887,6 +915,14 @@ function BulkProperties(props: {
 }
 
 /** 입력에 붙는 id. 필드는 한 패널 안에서 `prop`이 유일하므로 그것으로 충분하다. */
+/**
+ * 라벨의 `htmlFor` — 세그먼트 단추 무리(`./controls/select-control.tsx`)는 라벨을 받을 수 있는 요소가 아니라 `aria-labelledby` 로 이 라벨을 가리킨다.
+ * 그때 `htmlFor` 를 두면 라벨이 받을 수 없는 상자를 가리킨다(누름이 아무 데도 안 간다).
+ */
+function labelTarget(field: EditorField): string | undefined {
+  return field.control === 'select' && field.options !== undefined && segmentable(field.options) ? undefined : controlId(field.prop)
+}
+
 function controlId(prop: string): string {
   return `wb-prop-${prop}`
 }
@@ -1076,7 +1112,17 @@ function PropControl(props: {
   // 그 판정을 여기서 한 번 더 하는 것은, 그때 **아래 글자로 되돌아가야** 하기 때문이다 —
   // 위젯도 글자도 없으면 그 줄이 통째로 비어 사용자가 값을 볼 수 없다.
   if (field.control === 'select' && field.options !== undefined && field.options.length > 0) {
-    return <SelectControl field={field} value={value} id={id} disabled={disabled} onCommit={onCommit} mixed={mixed} />
+    return (
+      <SelectControl
+        field={field}
+        value={value}
+        id={id}
+        disabled={disabled}
+        onCommit={onCommit}
+        mixed={mixed}
+        fallback={catalogDefault(props.def, field.prop)}
+      />
+    )
   }
 
   return <>{formatValue(value)}</>

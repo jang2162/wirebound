@@ -337,7 +337,8 @@ function namesHolder(): boolean {
  * 추가·삭제는 즉시 커밋이라 칸만 꺼도 그 둘로 값이 그대로 나간다.
  */
 function widgets(): HTMLElement[] {
-  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button')]
+  // 세그먼트 단추(`.wb-shell-segment` — 넷 이하 선택지의 고르개)도 위젯이다 — 잠기면 함께 꺼져야 한다.
+  return [...body().querySelectorAll<HTMLElement>('input, textarea, select, .wb-shell-list button, .wb-shell-segment')]
 }
 
 function disabledOf(elements: HTMLElement[]): boolean[] {
@@ -680,9 +681,8 @@ describe('안 막는다 — 서버가 통과시킬 것은 그대로 나간다', 
     await settle()
 
     expect(allWidgetsOff()).toBe(false)
-    fireEvent.change(within(panel()).getByLabelText<HTMLSelectElement>('방향'), {
-      target: { value: 'vertical' },
-    })
+    // «방향»(선택지 둘)은 세그먼트 단추다(`src/panels/controls/select-control.tsx`).
+    fireEvent.click(within(within(panel()).getByRole('radiogroup', { name: '방향' })).getByRole('radio', { name: 'vertical' }))
     await waitFor(() => expect(view.calls).toHaveLength(1))
     expect(view.status).toEqual([200])
   })
