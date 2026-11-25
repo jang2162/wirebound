@@ -79,6 +79,9 @@ describe('공개 표면이 계약이다', () => {
     'satisfiesSdk',
     'VERSION_PATTERN',
     'SDK_RANGE_PATTERN',
+    // manifest `layouts` 의 영역 id 꼴 · 수 — 영역 id 를 열쇠로 받는 자리(표시 옵션)가 manifest 검증과 같은 값을 읽는다.
+    'LAYOUT_REGION_ID',
+    'LAYOUT_REGIONS_MAX',
     // `.wbtheme` 읽기 · 쓰기. 빌드 · 업로드 · 시딩 · 호스트가 같은 읽기로 검증한다.
     'readWbtheme',
     'packWbtheme',

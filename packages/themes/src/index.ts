@@ -17,7 +17,7 @@ export type { ManifestIssue, ManifestIssueCode } from './manifest/schema'
 // manifest 의 모양은 SDK 가 선언한다(`defineManifest` 가 작성자에게 같은 타입을 준다). 검증을 부르는 쪽(api)이 SDK 에 의존하지 않고
 // 그 이름을 쓰게 여기서 다시 낸다 — 타입뿐이라 react 를 끌어오지 않는다.
 export type { ThemeManifest } from '@wirebound/theme-sdk'
-export { ManifestSchema, validateManifest } from './manifest/schema'
+export { LAYOUT_REGION_ID, LAYOUT_REGIONS_MAX, ManifestSchema, validateManifest } from './manifest/schema'
 export { compareVersions, SDK_RANGE_PATTERN, satisfiesSdk, VERSION_PATTERN } from './manifest/semver'
 // 토큰 → CSS 변수(spec 「토큰이 화면에 닿는 길」). kit dev 의 갤러리 · 캔버스 · 내보내기가 같은 함수로 `:root` 를 짓는다.
 export { tokensCss, tokenValues, tokenVar } from './manifest/tokens'
