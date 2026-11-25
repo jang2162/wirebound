@@ -87,8 +87,9 @@ async function sight(page: Page): Promise<Sight> {
       }
     }
     const clip = (n: number): number => Math.max(0, Math.round(n))
-    // 하나를 고르는 항목(`menuitemradio` — 상태 전환기 · 영역 표지)도 항목이다 — 안 세면 그 목록은 항목 0 · 덮임 0 으로 늘 «다 보인다».
-    const items = [...menus[0]!.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"]')]
+    // 하나를 고르는 항목(`menuitemradio` — 상태 전환기 · 영역 표지) · 켜고 끄는 항목(`menuitemcheckbox` — «보기»)도 항목이다 — 안 세면 그 목록은
+    // 항목 0 · 덮임 0 으로 늘 «다 보인다».
+    const items = [...menus[0]!.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')]
     const covered = items.filter((item) => {
       const r = item.getBoundingClientRect()
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)

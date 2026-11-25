@@ -127,12 +127,13 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
     console.log('[머리 · 하단 바 모양]', JSON.stringify(seen))
 
     const zoom = ['축소', '확대', '화면 맞춤']
-    // 상태 전환기는 창 1440 에만 머리에 선다 — 900 · 700 은 `…` 로 접힌다(`src/shell/head-fold.ts` 의 `tight`).
+    // 상태 전환기 · «보기»(편집 모드)는 창 1440 에만 머리에 선다 — 900 · 700 은 `…` 로 접힌다(`src/shell/head-fold.ts` 의 `tight`).
+    // «보기» 는 이 판(빈 레이아웃)에서 꺼진 채 선다 — 꺼져도 자리는 같다.
     const head = (mode: '편집 모드' | '뷰 모드', folded: boolean, switcher: boolean): string[] => [
       '좌측 패널 접기',
       '프로젝트 목록',
       ...(switcher ? ['화면 상태: 기본'] : []),
-      ...(mode === '편집 모드' ? ['되돌리기', '다시 실행', '배치 선'] : []),
+      ...(mode === '편집 모드' ? ['되돌리기', '다시 실행', '배치 선', ...(switcher ? ['보기'] : [])] : []),
       '편집 모드',
       '뷰 모드',
       '뷰포트',
@@ -229,16 +230,19 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
 
   /**
    * **문턱 둘레의 창 폭마다 머리가 한 줄이고 단계가 문턱대로 선다** — 위 케이스의 창 셋(1440 · 900 · 700)은 문턱에서 멀어 문턱 상수를 낮춰도
-   * (`HEAD_SHORT_BELOW` 1099 → 1050 등) 같은 단계라 머리가 한 줄이다. 문턱 바로 밑(문턱 − 2)과 문턱에서 단계(«뷰포트 폭» 글 · 상태 전환기 · 줌이 머리에
+   * (`HEAD_SHORT_BELOW` 1143 → 1100 등) 같은 단계라 머리가 한 줄이다. 문턱 바로 밑(문턱 − 2)과 문턱에서 단계(«뷰포트 폭» 글 · 상태 전환기 · «보기» · 줌이 머리에
    * 있는가 · 줌 앞의 구분선이 있는가)와 한 줄을 함께 단언한다 — 단계로 가르므로 문턱이 어느 쪽으로 얼마를 움직여도 문턱 − 2 · 문턱 한쪽이 다른 단계가 되어 죽는다(머리가 두 줄이
    * 되는 것은 문턱을 잰 값의 여유(20 남짓)보다 더 내렸을 때뿐이라 높이로는 못 가른다).
    * 문턱을 새로 재면 아래 표의 창 폭을 같이 옮긴다(`src/shell/head-fold.ts` 의 «다시 재는 길»).
    */
-  it('문턱 둘레의 창 폭 — 머리는 한 줄이고 상태 전환기 · 줌은 문턱대로 머리에 선다', async () => {
+  it('문턱 둘레의 창 폭 — 머리는 한 줄이고 상태 전환기 · «보기» · 줌은 문턱대로 머리에 선다', async () => {
     const P = await fixture('head-edge')
-    const seen: Record<string, { head: number; overflow: number; label: boolean; switcher: boolean; zoom: boolean; divider: number }> = {}
+    const seen: Record<
+      string,
+      { head: number; overflow: number; label: boolean; switcher: boolean; view: boolean; zoom: boolean; divider: number }
+    > = {}
     const expected: typeof seen = {}
-    const widths = [1099, 1097, 1000, 965, 963, 878, 876]
+    const widths = [1143, 1141, 1050, 1009, 1007, 878, 876]
     for (const width of widths) {
       const { page, close } = await open(P, { width, height: 700 })
       try {
@@ -256,14 +260,17 @@ describe.skipIf(!전제.ok)('머리의 캔버스 도구 — 실브라우저', ()
             overflow: s.overflow,
             label,
             switcher: s.headControls.includes('화면 상태: 기본'),
+            view: s.headControls.includes('보기'),
             zoom: s.headControls.includes('축소'),
             divider: await page.locator('.wb-shell-header .wb-shell-head-divider').count(),
           }
           expected[`${width} ${mode}`] = {
             head: 48,
             overflow: 0,
-            label: width >= 1099,
-            switcher: width >= 965,
+            label: width >= 1143,
+            switcher: width >= 1009,
+            // «보기» 는 편집 모드에만 선다 — 전환기와 같은 단계에서 접힌다.
+            view: mode === '편집 모드' && width >= 1009,
             zoom: width >= 878,
             divider: width >= 878 ? 1 : 0,
           }

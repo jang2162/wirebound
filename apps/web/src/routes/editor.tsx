@@ -63,6 +63,7 @@ import { FirstRowDialog } from '../shell/first-row-dialog'
 import { ShellDialog } from '../shell/shell-dialog'
 import { ComponentPalette, PaletteToggle, rovingStep } from '../palette/component-palette'
 import { GuidesToggle } from '../canvas/layout-guides'
+import { useViewMenu, ViewMenu, VIEW_MENU_LABEL } from '../shell/view-menu'
 import { ShellFooter } from '../shell/shell-footer'
 import { useHeadFold, type HeadFold } from '../shell/head-fold'
 import { PanelFoldToggle } from '../shell/panel-fold'
@@ -887,7 +888,12 @@ function EditorShell(props: {
   const viewStateChoice = useViewState(props.pageId)
   // 주소 `?state=` — 열 때 읽고 뷰 모드 · viewer 에서 쓴다(`shell/view-state-address.ts`).
   useViewStateAddress(props.pageId, mode === 'view' || !canEdit)
-  /** `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에, 접힌 상태 전환기가 그다음에 선다. */
+  /** 접힌 머리(`tight` · `folded`)의 «보기» — 상태 전환기와 함께 `…` 의 항목 «보기 · <영역>» 으로 선다(`shell/view-menu.tsx`). 편집 모드에만 쓴다. */
+  const viewMenu = useViewMenu(props.pageId, `${VIEW_MENU_LABEL} · `)
+  /**
+   * `…` 의 항목 — spec 「`…` 메뉴」의 차례. 링크 둘은 주소가 있는 이동이다. 접힌 머리의 줌이 맨 앞에, 접힌 상태 전환기가 그다음에, 접힌 «보기»
+   * (편집 모드)가 그다음에 선다. 끌 영역이 없으면 «보기» 는 꺼진 한 줄로 까닭을 말한다.
+   */
   const menuItems: ActionMenuItem[] = [
     ...(fold === 'folded'
       ? [
@@ -899,6 +905,20 @@ function EditorShell(props: {
         ]
       : []),
     ...(!switcherInHead && props.pageId !== undefined ? viewStateMenuItems(viewStateChoice, { prefixed: true }) : []),
+    ...(!switcherInHead && mode === 'edit'
+      ? viewMenu.reason === undefined
+        ? viewMenu.items
+        : [
+            {
+              key: 'view-regions',
+              label: VIEW_MENU_LABEL,
+              icon: ICONS.viewRegions,
+              disabled: true,
+              title: viewMenu.reason,
+              description: viewMenu.reason,
+            },
+          ]
+      : []),
     { key: 'account', label: '계정 설정', icon: ICONS.account, to: '/account' },
     { key: 'codes', label: '공통코드', icon: ICONS.codes, to: `/projects/${props.project.id}/codes` },
     { key: 'settings', label: '프로젝트 설정', icon: ICONS.projectSettings, to: `/projects/${props.project.id}/settings` },
@@ -964,6 +984,8 @@ function EditorShell(props: {
                 {mode === 'edit' && canEdit && <UndoTools projectId={props.project.id} pageId={props.pageId} />}
                 {/* **배치 선**(`canvas/layout-guides.tsx`) — 편집 모드에서만 선다(선을 그리는 것도 편집 모드뿐이다). 읽기 도구라 viewer 에게도 선다. */}
                 {mode === 'edit' && <GuidesToggle />}
+                {/* **보기**(`shell/view-menu.tsx`) — 레이아웃 영역을 켜고 끈다. 편집 모드에서만 선다(뷰 모드는 늘 다 켬) · 모든 역할 · 상태 전환기와 같은 단계에서 `…` 로 접힌다(`shell/head-fold.ts`). */}
+                {mode === 'edit' && switcherInHead && <ViewMenu pageId={props.pageId} />}
                 <ModeTools />
                 {/* 접힌 머리에서는 구분선도 뺀다 — 뒤에 고르개 하나만 남아 가를 무리가 없고, 그 폭(선 1 + 틈 16)이 창 700 의 여유다(`shell/head-fold.ts`). */}
                 {fold !== 'folded' && <span className="wb-shell-head-divider" aria-hidden="true" />}
