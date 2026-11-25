@@ -3,9 +3,18 @@
  *
  * 선택지는 **카탈로그의 `EditorField.options`가 진실이다.** 화면이 목록을 따로 들면 카탈로그가
  * 값을 더할 때 여기가 따라오지 않아, 문서에는 있는데 고를 수 없는 값이 생긴다.
+ *
+ * **넷 이하이고 글이 값 칸에 드는 선택지는 세그먼트 단추다**(`../prop-groups.ts` 의 `segmentable`) — 단추 꼴 라디오 무리(`role="radiogroup"` ·
+ * `aria-labelledby` 가 칸 라벨 · ← → Home End · 고른 단추만 Tab 이 선다)이고 «상태 보임» 의 갈래 단추(`../visibility-field.tsx`)와 같은 꼴이다.
+ * 그 밖은 `<select>`.
+ *
+ * **값이 없으면 카탈로그 기본값을 고른 채로 보인다**(`fallback`) — 렌더러도 그 값으로 그린다. 빈 `<select>` 가 «폭» 처럼 아무 값도 안 정한
+ * 칸으로 읽혔다. 값이 있는데 선택지 밖이면(검증 전 문서) 그대로 빈 칸이다 — 아래 «문서의 값이 선택지에 없으면».
  */
-import type { ReactElement } from 'react'
+import { useRef, type KeyboardEvent, type ReactElement } from 'react'
 import type { EditorField } from '@wirebound/schema'
+import { rovingStep } from '../../palette/component-palette'
+import { segmentable } from '../prop-groups'
 import { MIXED_PLACEHOLDER } from './text-control'
 
 export interface SelectControlProps {
@@ -17,6 +26,8 @@ export interface SelectControlProps {
   onCommit: (value: string) => void
   /** 고른 노드들의 값이 갈린다(일괄 편집) — 빈 칸 대신 «여러 값»을 보인다. 그 칸을 다시 고르는 것은 커밋이 아니다. */
   mixed?: boolean
+  /** 값이 없을 때 보일 카탈로그 기본값(머리말). */
+  fallback?: string
 }
 
 /**
@@ -39,7 +50,12 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
   // 문서의 값이 선택지에 없으면 빈 칸으로 둔다. `<select>`는 값이 없는 상태를 표현할
   // 수단이 없어 첫 선택지가 골라진 것처럼 보이는데, 그러면 사용자가 건드리지도 않은
   // 값이 화면에 정답처럼 뜬다.
-  const current = props.mixed !== true && typeof value === 'string' && options.includes(value) ? value : ''
+  const shown = value === undefined ? props.fallback : value
+  const current = props.mixed !== true && typeof shown === 'string' && options.includes(shown) ? shown : ''
+
+  if (segmentable(options)) {
+    return <Segments options={options} current={current} id={id} disabled={disabled} onCommit={onCommit} />
+  }
 
   return (
     <select
@@ -60,5 +76,59 @@ export function SelectControl(props: SelectControlProps): ReactElement | null {
         </option>
       ))}
     </select>
+  )
+}
+
+/** 세그먼트 단추 줄(머리말). 고른 것이 없으면(갈린 일괄 값 · 선택지 밖 값) 첫 단추가 Tab 자리다. */
+function Segments(props: {
+  options: readonly string[]
+  current: string
+  id: string
+  disabled: boolean
+  onCommit: (value: string) => void
+}): ReactElement {
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  const stop = props.options.includes(props.current) ? props.current : props.options[0]
+  // 같은 값은 편집이 아니다 — 아래 `<select>` 와 같은 거름.
+  const pick = (option: string): void => {
+    if (option !== props.current) props.onCommit(option)
+  }
+  const move = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+    const next = rovingStep(event.key, index, props.options.length)
+    if (next === null) return
+    event.preventDefault()
+    const target = props.options[next]!
+    buttons.current.get(target)?.focus()
+    pick(target)
+  }
+  return (
+    <div
+      id={props.id}
+      className="wb-shell-segments"
+      role="radiogroup"
+      aria-labelledby={`${props.id}-label`}
+      aria-disabled={props.disabled || undefined}
+    >
+      {props.options.map((option, index) => (
+        <button
+          key={option}
+          ref={(element) => {
+            if (element === null) buttons.current.delete(option)
+            else buttons.current.set(option, element)
+          }}
+          type="button"
+          role="radio"
+          className="wb-shell-segment"
+          aria-checked={option === props.current}
+          tabIndex={option === stop ? 0 : -1}
+          disabled={props.disabled}
+          onClick={() => pick(option)}
+          onKeyDown={(event) => move(event, index)}
+        >
+          {option}
+        </button>
+      ))}
+    </div>
   )
 }

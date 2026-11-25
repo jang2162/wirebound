@@ -14,6 +14,7 @@
  */
 import type { Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { panelWidthDefault } from '../src/shell/sidebar-layout'
 import {
   canvasFrame,
   editorStackPrerequisite,
@@ -159,11 +160,13 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
     // eslint-disable-next-line no-console
     console.log(`[좁은 창 표]\n${rows.join('\n')}`)
     const want = (width: number) => {
-      const side = width >= 1060 ? 264 : Math.max(200, width - 16 - 480 - 300)
-      const open1 = width - 16 - side - 300
+      // 우측 기본 폭은 창을 따른다(`panelWidthDefault` — 창 1440 에서 346, 1060 아래는 최소 300).
+      const panel = panelWidthDefault(width)
+      const side = width >= 1060 ? 264 : Math.max(200, width - 16 - 480 - panel)
+      const open1 = width - 16 - side - panel
       return {
-        open: [side, 300, open1],
-        sideFolded: [0, 300, width - 8 - 300, ['우측 패널 폭']],
+        open: [side, panel, open1],
+        sideFolded: [0, panel, width - 8 - panel, ['우측 패널 폭']],
         // 우측만 접으면 좌측의 예산이 창 − 8 − 480 이라 좌측 264 가 그 아래 창(752 미만)에서 조인다.
         panelFolded: [
           Math.max(200, Math.min(264, width - 8 - 480)),
@@ -173,7 +176,7 @@ describe.skipIf(!전제.ok)('좁은 창 캔버스 · 화면 맞춤 · 가로 끝
         ],
         bothFolded: [width, []],
         reloaded: [0, 0, width, { side: true, panel: true }],
-        back: [side, 300, open1],
+        back: [side, panel, open1],
         overflow: [0, 0, 0, 0, 0, 0],
       }
     }

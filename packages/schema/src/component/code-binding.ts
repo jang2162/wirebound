@@ -8,7 +8,7 @@ export function codeBindingOf(type: string): CodeBinding | null {
 
 /**
  * 선택지를 하나만 고르는 타입인가 — 선택지 칸의 `select` 선언(`EditorField.select`)이 정본이다(`Select` · `RadioGroup`). 묶인 선택 위젯의
- * `code.selected` 가 0 ~ 1 개여야 하는 근거이고, 속성 패널의 «표의 항목 중 고르기»도 이것을 본다.
+ * `code.selected` 가 0 ~ 1 개여야 하는 근거이고, 속성 패널 공통코드 카드의 «고른 값»도 이것을 본다.
  */
 export function picksOneChoice(def: ComponentDef): boolean {
   return def.editor.some((field) => field.prop === 'options' && field.select === 'one')

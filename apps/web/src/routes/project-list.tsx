@@ -157,7 +157,7 @@ function ProjectCards(props: { projects: ProjectListItem[] | null; add: ReactEle
           <label className="wb-shell-home-filter wb-shell-home-search">
             <span className="wb-shell-home-filter-label">검색</span>
             <input
-              className="wb-shell-project-input"
+              className="wb-shell-project-input wb-shell-home-control"
               type="search"
               placeholder="이름 · 슬러그 · 설명"
               value={text}
@@ -175,7 +175,7 @@ function ProjectCards(props: { projects: ProjectListItem[] | null; add: ReactEle
             <span className="wb-shell-home-filter-label">역할</span>
             <select
               id={`${base}-role`}
-              className="wb-shell-project-input"
+              className="wb-shell-project-input wb-shell-home-control"
               value={query.role}
               onChange={(event) => change({ role: event.target.value as ProjectRole | 'all' })}
             >
@@ -190,7 +190,7 @@ function ProjectCards(props: { projects: ProjectListItem[] | null; add: ReactEle
             <span className="wb-shell-home-filter-label">정렬</span>
             <select
               id={`${base}-sort`}
-              className="wb-shell-project-input"
+              className="wb-shell-project-input wb-shell-home-control"
               value={query.sort}
               onChange={(event) => change({ sort: event.target.value as ProjectSort })}
             >

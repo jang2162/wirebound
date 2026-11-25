@@ -81,10 +81,15 @@ describe('공통코드 사용처', () => {
 
       const usage = await send('GET', `/api/projects/${project.id}/codes/usage?group=ORDER_STATUS`)
       expect(usage.statusCode, usage.body).toBe(200)
-      const hits = usage.json().usage as { nodes: { nodeId: string; name: string }[] }[]
+      const hits = usage.json().usage as { nodes: { nodeId: string; name: string; type: string; trail: string[] }[] }[]
       expect(hits.flatMap((hit) => hit.nodes.map((node) => [node.nodeId, node.name]))).toEqual([
         ['n_live', '새 이름 사이 글자'],
         ['n_gone', '옛 이름 사이 글자'],
+      ])
+      // 같은 이름을 가를 단서 — 타입 · 조상의 표시 이름(페이지 뿌리는 뺀다). 페이지 바로 밑이라 조상이 없다.
+      expect(hits.flatMap((hit) => hit.nodes.map((node) => [node.type, node.trail]))).toEqual([
+        ['Affix', []],
+        ['Affix', []],
       ])
     })
   })

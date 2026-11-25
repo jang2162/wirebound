@@ -248,7 +248,7 @@ export function UsersSection(): ReactElement {
                   {user.lastSeenAt === null ? '없음' : <When iso={user.lastSeenAt} />}
                 </td>
                 <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
-                  <ActionMenu label={`${user.name} 더 보기`} items={rowItems(user)} />
+                  <ActionMenu size="sm" label={`${user.name} 더 보기`} items={rowItems(user)} />
                 </td>
               </tr>
             ))}

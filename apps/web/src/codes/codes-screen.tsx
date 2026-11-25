@@ -1,6 +1,7 @@
 /**
  * **공통코드 화면의 몸**(`routes/codes.tsx`) — 왼쪽 그룹 목록(이름 · 키 · 항목 수 · 사용 수), 오른쪽 고른 그룹의 항목 표(차례 · 코드값 · 이름 ·
- * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 › 노드 이름 — 누르면 에디터가 그 페이지를 열고 그 노드를 고른다).
+ * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 · 레이아웃 · 모듈마다 접는 묶음 — 줄은 타입 · 노드 이름 · 조상 이름, 누르면 에디터가 그
+ * 페이지를 열고 그 노드를 고른다).
  *
  * - **주소가 고른 것을 든다** — `?group=<키>`(없거나 모르는 키면 첫 그룹) · `?item=<코드값>`(사용처를 그 항목으로 좁힌다). 바꿀 때는 `replace`.
  * - **키 · 코드값은 만든 뒤 못 바꾼다**(서버가 받지 않는다) — 표의 코드값 칸은 글이고, 줄 «…» 에 «이름 바꾸기» 만 있다. 바꾸려면 새 항목을
@@ -10,10 +11,13 @@
  *   이 화면은 셸 밖이라 룸에 안 든다 — 남의 쓰기는 다시 받기 · 새로고침에 보인다.
  * - 꼴은 관리자 칸과 같다 — 목록 | 상세(`.wb-shell-admin-layout` — 창이 900px 아래면 목록이 위로) · 표(`.wb-shell-admin-table` — 좁으면 카드).
  *   사람 글(이름 · 페이지 제목)은 `isolate` 로 가둔다.
+ * - **그룹 찾기는 목록만 거른다**(이름 · 키의 부분 일치 · 대소문자 무시). 친 글은 컴포넌트 상태다 — 주소에 싣지 않는다(주소의 `?group=` 은 고른
+ *   그룹이고 찾기 글과 섞이지 않는다 · 주소를 값으로 읽는 칸은 한글 조합이 걸음마다 굳는다 — 정본 «프로젝트 목록» 의 검색 칸). 고른 그룹이
+ *   걸러져 목록에 없어도 오른쪽은 그대로다 — 찾기는 고르기가 아니다.
  */
-import { useCallback, useId, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { CODE_NAME_MAX, CODE_VALUE_MAX, type CodeGroup, type CodeItem, type UsageHit } from '@wirebound/schema'
+import { CODE_NAME_MAX, CODE_VALUE_MAX, type CodeGroup, type CodeItem, type UsageHit, type UsageNode } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import type { CodeUsageCounts } from '../api/client'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -29,6 +33,7 @@ const USAGE_FAILURE = '사용처를 불러오지 못했습니다'
 export const NO_GROUPS = '만든 공통코드 그룹이 없습니다'
 export const NO_ITEMS = '이 그룹에 항목이 없습니다'
 export const NO_USAGE = '이 코드를 쓰는 노드가 없습니다'
+export const NO_MATCH = '맞는 그룹이 없습니다'
 /** 지우기 확인 상자가 보이는 사용처 수. */
 export const DELETE_PREVIEW = 5
 export const BREAKS_REFERENCES = '참조가 끊깁니다 — 그 노드는 묶을 때의 글과 끊김 표지로 남습니다.'
@@ -55,6 +60,29 @@ type NameTarget =
   | { kind: 'rename-group'; group: CodeGroup }
   | { kind: 'rename-item'; group: CodeGroup; item: CodeItem }
 
+/** 줄에 보이는 조상 이름 — 노드에 가까운 둘까지, 더 깊으면 앞을 «…» 로 줄인다. 같은 이름의 노드를 가르는 단서다(내부 id 는 안 보인다). */
+export const TRAIL_SHOWN = 2
+
+export function trailText(node: UsageNode): string {
+  const near = node.trail.slice(-TRAIL_SHOWN).map((name) => isolate(name))
+  return [...(node.trail.length > TRAIL_SHOWN ? ['…'] : []), ...near].join(' › ')
+}
+
+/** 사용처 머리의 요약 — «페이지 N · 레이아웃 N · 모듈 N · 노드 M»(없는 종류는 뺀다). */
+export function usageSummary(hits: readonly UsageHit[]): string {
+  const kinds = (['page', 'layout', 'module'] as const)
+    .map((kind) => [kind, hits.filter((hit) => hit.kind === kind).length] as const)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${KIND_TEXT[kind]} ${count}`)
+  return [...kinds, `노드 ${hits.reduce((sum, hit) => sum + hit.nodes.length, 0)}`].join(' · ')
+}
+
+/** 찾기 글이 그 그룹에 맞나 — 이름 · 키의 부분 일치(대소문자 무시). 빈 글(공백만)은 다 맞다. */
+export function groupMatches(group: CodeGroup, find: string): boolean {
+  const needle = find.trim().toLocaleLowerCase()
+  return needle === '' || group.name.toLocaleLowerCase().includes(needle) || group.key.toLocaleLowerCase().includes(needle)
+}
+
 /** 사용처 줄 — 페이지면 에디터로 가는 주소, 레이아웃 · 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
 export function usageHref(projectId: string, hit: UsageHit, nodeId: string): string | null {
   return hit.kind === 'page' ? `/projects/${projectId}/pages/${hit.id}?node=${encodeURIComponent(nodeId)}` : null
@@ -68,6 +96,8 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
   const [failure, setFailure] = useState<Failure | null>(null)
   const [naming, setNaming] = useState<NameTarget | null>(null)
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null)
+  const [find, setFind] = useState('')
+  const listRef = useRef<HTMLUListElement>(null)
 
   const { list, stale, reload } = useAdminList<Table>(
     useCallback(async () => {
@@ -82,6 +112,19 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
   const selected = groups.find((group) => group.key === params.get('group')) ?? groups[0]
   const itemValue = params.get('item')
   const selectedItem = selected?.items.find((item) => item.value === itemValue)
+  const shownGroups = groups.filter((group) => groupMatches(group, find))
+  const selectedKey = selected?.key
+
+  // 고른 그룹이 목록 칸 밖(목록이 따로 구른다)이면 그 칸만 굴려 들인다 — 창은 안 굴린다(`scrollIntoView` 는 창까지 굴린다).
+  useEffect(() => {
+    const scroller = listRef.current
+    const pick = scroller?.querySelector('[aria-current="true"]')
+    if (scroller === null || scroller === undefined || !(pick instanceof HTMLElement)) return
+    const box = scroller.getBoundingClientRect()
+    const at = pick.getBoundingClientRect()
+    if (at.top < box.top) scroller.scrollTop -= box.top - at.top
+    else if (at.bottom > box.bottom) scroller.scrollTop += at.bottom - box.bottom
+  }, [selectedKey, list.status])
 
   function choose(group: string, item?: string): void {
     setParams(
@@ -187,21 +230,35 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
       {list.status === 'ready' && groups.length === 0 && <p className="wb-shell-project-notice">{NO_GROUPS}</p>}
       {list.status === 'ready' && selected !== undefined && (
         <div className="wb-shell-admin-layout wb-shell-codes-layout">
-          <ul className="wb-shell-admin-list" aria-label="공통코드 그룹">
-            {groups.map((group) => (
-              <li className="wb-shell-admin-list-item" key={group.key}>
-                <button
-                  className="wb-shell-admin-pick"
-                  type="button"
-                  aria-current={group.key === selected.key ? 'true' : undefined}
-                  onClick={() => choose(group.key)}
-                >
-                  <span className="wb-shell-admin-pick-name">{isolate(group.name)}</span>
-                  <span className="wb-shell-admin-pick-meta">{`${group.key} · 항목 ${group.items.length} · 사용 ${counts[group.key]?.group ?? 0}`}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="wb-shell-codes-side">
+            <input
+              className="wb-shell-project-input wb-shell-codes-find"
+              type="search"
+              aria-label="그룹 찾기"
+              placeholder="이름 · 키 찾기"
+              value={find}
+              onChange={(event) => setFind(event.target.value)}
+            />
+            {shownGroups.length === 0 ? (
+              <p className="wb-shell-project-notice">{NO_MATCH}</p>
+            ) : (
+              <ul className="wb-shell-admin-list wb-shell-codes-groups" aria-label="공통코드 그룹" ref={listRef}>
+                {shownGroups.map((group) => (
+                  <li className="wb-shell-admin-list-item" key={group.key}>
+                    <button
+                      className="wb-shell-admin-pick"
+                      type="button"
+                      aria-current={group.key === selected.key ? 'true' : undefined}
+                      onClick={() => choose(group.key)}
+                    >
+                      <span className="wb-shell-admin-pick-name">{isolate(group.name)}</span>
+                      <span className="wb-shell-admin-pick-meta">{`${group.key} · 항목 ${group.items.length} · 사용 ${counts[group.key]?.group ?? 0}`}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <section className="wb-shell-codes-group" aria-label={`그룹 ${selected.name}`}>
             <div className="wb-shell-admin-bar">
               <h2 className="wb-shell-codes-title">{isolate(selected.name)}</h2>
@@ -218,6 +275,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                     항목 추가
                   </button>
                   <ActionMenu
+                    size="sm"
                     label={`«${selected.name}» 그룹 더 보기`}
                     items={[
                       {
@@ -262,7 +320,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                     </th>
                   </tr>
                 </thead>
-                <tbody className="wb-shell-admin-body">
+                <tbody className="wb-shell-admin-body wb-shell-codes-body">
                   {selected.items.map((item, index) => (
                     <tr
                       className="wb-shell-admin-row"
@@ -273,14 +331,16 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                       <td className="wb-shell-admin-cell" data-label="차례">
                         {index + 1}
                       </td>
-                      <td className="wb-shell-admin-cell wb-shell-admin-cell-email" data-label="코드값">
+                      <td className="wb-shell-admin-cell wb-shell-admin-cell-email wb-shell-codes-value" data-label="코드값">
                         {item.value}
                       </td>
                       <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
                         {isolate(item.name)}
                       </td>
                       <td className="wb-shell-admin-cell" data-label="사용 여부">
-                        {item.active ? '사용' : '사용 안 함'}
+                        <span className="wb-shell-codes-active" data-active={item.active ? 'true' : 'false'}>
+                          {item.active ? '사용' : '사용 안 함'}
+                        </span>
                       </td>
                       <td className="wb-shell-admin-cell" data-label="사용 수">
                         <button className="wb-shell-codes-uses" type="button" onClick={() => choose(selected.key, item.value)}>
@@ -290,6 +350,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                       <td className="wb-shell-admin-cell wb-shell-admin-cell-menu">
                         {props.canEdit && (
                           <ActionMenu
+                            size="sm"
                             label={`«${item.name}» 더 보기`}
                             items={[
                               {
@@ -432,11 +493,12 @@ function UsageList(props: {
     useCallback(() => api.codeUsage(projectId, group.key, item?.value), [api, projectId, group.key, item?.value, revision]),
     USAGE_FAILURE,
   )
-  const title = item === undefined ? `«${isolate(group.name)}» 을(를) 쓰는 곳` : `«${isolate(item.name)}» 을(를) 쓰는 곳`
+  const scope = `«${isolate(item === undefined ? group.name : item.name)}»`
   return (
     <section className="wb-shell-codes-group" aria-label="사용처">
       <div className="wb-shell-admin-bar">
-        <h3 className="wb-shell-codes-subtitle">{title}</h3>
+        <h3 className="wb-shell-codes-subtitle">쓰는 곳</h3>
+        <span className="wb-shell-codes-key">{list.status === 'ready' ? `${scope} · ${usageSummary(list.value)}` : scope}</span>
         {item !== undefined && (
           <button className="wb-shell-project-action" type="button" onClick={props.onAll}>
             그룹 전체 보기
@@ -455,24 +517,41 @@ function UsageList(props: {
       )}
       {list.status === 'ready' && list.value.length === 0 && <p className="wb-shell-project-notice">{NO_USAGE}</p>}
       {list.status === 'ready' && list.value.length > 0 && (
-        <ul className="wb-shell-codes-usage" aria-label="사용처 목록">
-          {list.value.flatMap((hit) =>
-            hit.nodes.map((node) => {
-              const href = usageHref(projectId, hit, node.nodeId)
-              const text = `${KIND_TEXT[hit.kind]} ${isolate(hit.title)} › ${isolate(node.name)}`
-              return (
-                <li className="wb-shell-codes-usage-item" key={`${hit.kind}\n${hit.id}\n${node.nodeId}`}>
-                  {href === null ? (
-                    text
-                  ) : (
-                    <Link className="wb-shell-codes-usage-link" to={href}>
-                      {text}
-                    </Link>
-                  )}
-                </li>
-              )
-            }),
-          )}
+        <ul className="wb-shell-codes-usage-hits" aria-label="사용처 목록">
+          {list.value.map((hit) => (
+            <li className="wb-shell-codes-usage-hit" key={`${hit.kind}\n${hit.id}`}>
+              {/* 묶음 — 페이지(· 레이아웃 · 모듈) 이름과 노드 수. 처음에는 펴 둔다 — 접는 것은 훑는 사람의 몫이다. */}
+              <details className="wb-shell-codes-usage-fold" open>
+                <summary className="wb-shell-codes-usage-summary">
+                  {`${KIND_TEXT[hit.kind]} ${isolate(hit.title)}`}
+                  <span className="wb-shell-codes-usage-count">{hit.nodes.length}</span>
+                </summary>
+                <ul className="wb-shell-codes-usage-nodes">
+                  {hit.nodes.map((node) => {
+                    const href = usageHref(projectId, hit, node.nodeId)
+                    const line = (
+                      <>
+                        <span className="wb-shell-codes-usage-type">{node.type}</span>
+                        <span className="wb-shell-codes-usage-name">{isolate(node.name)}</span>
+                        {node.trail.length > 0 && <span className="wb-shell-codes-usage-trail">{trailText(node)}</span>}
+                      </>
+                    )
+                    return (
+                      <li className="wb-shell-codes-usage-node" key={node.nodeId}>
+                        {href === null ? (
+                          <span className="wb-shell-codes-usage-line">{line}</span>
+                        ) : (
+                          <Link className="wb-shell-codes-usage-link" to={href}>
+                            {line}
+                          </Link>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </details>
+            </li>
+          ))}
         </ul>
       )}
     </section>

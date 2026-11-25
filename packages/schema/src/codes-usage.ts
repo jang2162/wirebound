@@ -21,7 +21,18 @@ export interface UsageHit {
   kind: UsageSource['kind']
   id: string
   title: string
-  nodes: { nodeId: string; name: string }[]
+  nodes: UsageNode[]
+}
+
+/**
+ * 사용처의 노드 하나. `name` 은 표시 이름이고(`nodeDisplayName`), 같은 이름이 한 페이지에 여럿일 때 사람이 가를 단서가 `type` 과 `trail` 이다 —
+ * `trail` 은 그 노드의 조상의 표시 이름(뿌리 쪽부터 · 페이지 · 레이아웃의 뿌리 `Page` 는 뺀다 — 모든 줄에 같은 글이라 아무것도 안 가른다).
+ */
+export interface UsageNode {
+  nodeId: string
+  name: string
+  type: string
+  trail: string[]
 }
 
 /**
@@ -44,8 +55,15 @@ export function codeUsage(sources: readonly UsageSource[], group: string, item?:
   for (const source of sources) {
     const nodes: UsageHit['nodes'] = []
     for (const root of source.nodes) {
-      for (const { node } of walkNodes(root)) {
-        if (refersTo(node, group, item)) nodes.push({ nodeId: node.id, name: nodeDisplayName(node, undefined, codes) })
+      // 걷기는 부모를 먼저 낸다 — 자식의 조상 이름은 부모의 것에 부모 이름 하나를 더한 것이다.
+      const trails = new Map<WbNode, string[]>()
+      for (const { node, parent } of walkNodes(root)) {
+        const above = parent === null ? [] : (trails.get(parent) ?? [])
+        const own = parent === null && node.type === 'Page' ? above : [...above, nodeDisplayName(node, undefined, codes)]
+        trails.set(node, own)
+        if (refersTo(node, group, item)) {
+          nodes.push({ nodeId: node.id, name: nodeDisplayName(node, undefined, codes), type: node.type, trail: above })
+        }
       }
     }
     if (nodes.length > 0) hits.push({ kind: source.kind, id: source.id, title: source.title, nodes })
