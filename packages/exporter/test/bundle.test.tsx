@@ -95,6 +95,7 @@ describe('exportBundle — 파일 트리', () => {
       'assets/shell.css',
       'assets/views.css',
       'assets/runtime.js',
+      'assets/nav.js',
     ])
   })
 
@@ -161,12 +162,12 @@ describe('exportBundle — <head>', () => {
   })
 
   /**
-   * **개수 · 정체 · 차례를 함께 센다.** *"스크립트가 있다"*만 재면 넷째가 새어도 안 죽는다. 데이터는 **실행되지 않고**
+   * **개수 · 정체 · 차례를 함께 센다.** *"스크립트가 있다"*만 재면 다섯째가 새어도 안 죽는다. 데이터는 **실행되지 않고**
    * (`application/json`), 런타임은 **자산을 가리키는 고전 스크립트**이며(`type="module"`이면 `file://`에서 통째로 죽는다),
-   * 끝의 인라인이 `boot()` 를 부른다. `defer` 가 없어야 차례대로 돈다 — 테마 번들이 런타임의 전역을 읽는다.
+   * 번들 한 벌의 내비(`assets/nav.js`)가 그 뒤에 서고, 끝의 인라인이 `boot()` 를 부른다. `defer` 가 없어야 차례대로 돈다 — 테마 번들이 런타임의 전역을 읽는다.
    */
   it.each(['index.html', 'pages/회원-목록.html', 'pages/회원-상세.html'])(
-    '%s가 스크립트를 정확히 셋 낸다 — 데이터 · runtime.js · boot',
+    '%s가 스크립트를 정확히 넷 낸다 — 데이터 · runtime.js · nav.js · boot',
     (path) => {
       const scripts = [...parse(fileAt(twoPages(), path)).querySelectorAll('script')]
       expect(
@@ -180,6 +181,7 @@ describe('exportBundle — <head>', () => {
       ).toEqual([
         ['application/json', 'wb-export-page', null, false, (scripts[0]?.textContent ?? '').slice(0, 30)],
         [null, null, path === 'index.html' ? 'assets/runtime.js' : '../assets/runtime.js', false, null],
+        [null, null, path === 'index.html' ? 'assets/nav.js' : '../assets/nav.js', false, null],
         [null, null, null, false, '__wirebound_export__.boot()'],
       ])
     },
@@ -213,6 +215,10 @@ describe('exportBundle — 페이지 JSON', () => {
     expect(data).toEqual({
       document: LIST_PAGE,
       title: '회원 목록',
+      // 이 번들은 페이지 id 를 안 줬다 — 틀의 내비는 «트리에 없는 페이지» 판이다.
+      pageId: null,
+      pageTitle: '회원 목록',
+      path: 'pages/회원-목록.html',
       target: null,
       themeRef: null,
       manifest: null,

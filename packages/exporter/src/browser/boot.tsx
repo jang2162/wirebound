@@ -28,12 +28,14 @@ import { adoptManifest, type RuntimeHandle } from '@wirebound/theme-sdk/runtime'
 import { tokenValues } from '@wirebound/themes'
 import {
   COMMENTS_TAB_RADIO_ID,
+  EXPORT_NAV_GLOBAL,
   MARKER_ANCHOR_PREFIX,
   PAGE_DATA_ID,
   SCREEN_HASH,
   STATE_HASH_PREFIX,
   STATE_SELECT_ID,
   THEME_SCRIPT_ID,
+  type ExportNav,
   type ExportPageData,
 } from '../page-data'
 import { mountExportDocument, type ExportMount } from './mount'
@@ -110,6 +112,10 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       theme,
       tokens,
       window: win,
+      nav: readNav(win),
+      pageId: data.pageId ?? null,
+      pageTitle: data.pageTitle ?? data.title,
+      path: data.path ?? '',
       hrefs: data.hrefs,
       markers: data.markers,
       images: data.images ?? {},
@@ -129,10 +135,9 @@ export async function boot(env: BootEnv): Promise<BootResult> {
       unfollow()
       unmount()
     }
-    if (mount.thrown.length > 0) {
-      failures.push(`테마 뷰가 던졌습니다: ${mount.thrown.join(', ')}`)
-      mount.say(failures)
-    }
+    if (mount.layoutError !== null) failures.push(mount.layoutError)
+    if (mount.thrown.length > 0) failures.push(`테마 뷰가 던졌습니다: ${mount.thrown.join(', ')}`)
+    if (mount.layoutError !== null || mount.thrown.length > 0) mount.say(failures)
 
     await sheetSettled(doc.querySelector<HTMLLinkElement>(THEME_SHEET_SELECTOR), win)
     mount.remeasure()
@@ -142,6 +147,18 @@ export async function boot(env: BootEnv): Promise<BootResult> {
   } catch (error) {
     failures.push(`번들 페이지를 세우지 못했습니다: ${error instanceof Error ? error.message : String(error)}`)
     return await finish(null)
+  }
+}
+
+/**
+ * 번들 한 벌의 내비(`assets/nav.js` 가 세운 전역). 없거나 모양이 틀리면(그 파일을 못 실은 판) 빈 트리다 — 틀은 지금 페이지 하나짜리 브레드크럼브로 선다.
+ */
+function readNav(win: Window): ExportNav {
+  const value = (win as unknown as Record<string, unknown>)[EXPORT_NAV_GLOBAL] as Partial<ExportNav> | undefined
+  if (value === null || typeof value !== 'object') return { menu: [], paths: {} }
+  return {
+    menu: Array.isArray(value.menu) ? value.menu : [],
+    paths: value.paths !== null && typeof value.paths === 'object' ? value.paths : {},
   }
 }
 

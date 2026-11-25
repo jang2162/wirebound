@@ -251,11 +251,12 @@ export function stateFixture(): PageDocument {
   }
 }
 
-/** **팝업 페이지** — 뿌리가 `Popup` 이고 몸통 · «바닥» 구역을 든다. «취소» 는 «팝업 닫기» 를 든다. */
+/** **팝업 페이지** — 팝업 레이아웃(`layout: 'popup'`)이고 뿌리가 그 짝 `Popup` 이며 몸통 · «바닥» 구역을 든다. «취소» 는 «팝업 닫기» 를 든다. */
 export function popupFixture(): PageDocument {
   nextId = 4000
   return {
-    version: 6,
+    version: 7,
+    layout: 'popup',
     root: {
       id: id(),
       type: 'Popup',
@@ -267,6 +268,23 @@ export function popupFixture(): PageDocument {
           { id: id(), type: 'Button', props: { label: '선택' } },
         ],
       },
+    },
+  }
+}
+
+/** **서브페이지 장** — 서브페이지 레이아웃(`layout: 'subpage'`)의 화면. 틀(GNB · LNB · 브레드크럼브 · 제목)은 테마의 레이아웃 뷰가 그린다. */
+export function subpageFixture(): PageDocument {
+  nextId = 5000
+  return {
+    version: 7,
+    layout: 'subpage',
+    root: {
+      id: id(),
+      type: 'Page',
+      children: [
+        { id: id(), type: 'Text', props: { content: '회원을 찾는다' } },
+        { id: id(), type: 'Button', props: { label: '검색' } },
+      ],
     },
   }
 }

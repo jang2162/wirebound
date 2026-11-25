@@ -92,6 +92,7 @@ describe('테마를 실은 번들의 파일', () => {
       'assets/shell.css',
       'assets/views.css',
       'assets/runtime.js',
+      'assets/nav.js',
       'assets/theme/theme.js',
       'assets/theme/theme.css',
       'assets/theme/assets/t.woff2',
@@ -133,11 +134,12 @@ describe('테마를 실은 번들의 파일', () => {
   })
 
   /** 테마 번들은 런타임 **뒤**, `boot` **앞**이다 — 공유 런타임 전역을 읽고, `boot` 가 그 등록을 받는다. */
-  it('스크립트가 데이터 → 런타임 → 테마 번들 → boot 차례다', () => {
+  it('스크립트가 데이터 → 런타임 → 내비 → 테마 번들 → boot 차례다', () => {
     const scripts = [...parse(fileAt(bundle(), 'pages/회원-목록.html') as string).querySelectorAll('script')]
     expect(scripts.map((script) => [script.getAttribute('id'), script.getAttribute('src')])).toEqual([
       ['wb-export-page', null],
       [null, '../assets/runtime.js'],
+      [null, '../assets/nav.js'],
       ['wb-export-theme', '../assets/theme/theme.js'],
       [null, null],
     ])

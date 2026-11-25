@@ -21,8 +21,11 @@ import * as api from '../src/index'
  */
 const BROWSER_SOURCES = ['../src/browser/']
 
-/** 두 프로그램이 함께 드는 DOM 없는 계약(페이지 JSON 의 모양) — 브라우저 쪽이 import 하므로 그 `tsconfig` 에도 든다. */
-const SHARED_SOURCES = ['../src/page-data.ts']
+/**
+ * 두 프로그램이 함께 드는 DOM 없는 파일 — 페이지 JSON 의 모양과 번들 안 상대 경로(틀 링크를 런타임이 짓는다). 브라우저 쪽이 import 하므로 그
+ * `tsconfig` 에도 든다.
+ */
+const SHARED_SOURCES = ['../src/page-data.ts', '../src/bundle/filename.ts']
 
 function isBrowserSource(path: string): boolean {
   return BROWSER_SOURCES.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry))

@@ -220,6 +220,7 @@ describe('받는 쪽이 받는 dist 로 지은 번들을 나가는 런타임으�
       'assets/shell.css',
       'assets/views.css',
       'assets/runtime.js',
+      'assets/nav.js',
     ])
     expect(fileAt('assets/runtime.js')).toBe(runtimeJs)
   })

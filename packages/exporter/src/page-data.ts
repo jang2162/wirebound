@@ -4,7 +4,7 @@
  * Node 쪽(`bundle/index.ts` 가 짓는다)과 브라우저 쪽(`browser/boot.tsx` 가 읽는다)이 이 파일 하나를 본다. DOM 을 모르고 값만 둔다 —
  * 두 `tsconfig`(`tsconfig.json` · `tsconfig.runtime.json`)가 함께 든다.
  */
-import type { CodeTable, PageDocument } from '@wirebound/schema'
+import type { CodeTable, LayoutNavMenu, PageDocument } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 페이지 JSON 을 실은 `<script type="application/json">` 의 id. */
@@ -39,6 +39,23 @@ export const MARKER_ANCHOR_PREFIX = 'wb-marker-'
 /** «코멘트» 탭의 라디오 id(`bundle/shell.tsx` 의 `radioId('comments')`) — 탭은 라디오 + CSS 라 이것을 골라야 그 칸이 보인다. */
 export const COMMENTS_TAB_RADIO_ID = 'wb-export-tab-comments'
 
+/**
+ * 번들의 내비가 사는 자리 — 서브페이지 틀(GNB · LNB · 브레드크럼브)이 읽는 메뉴 트리와 페이지 경로를 **번들에 한 벌** 싣는다(`ExportNav`). 장마다 트리를
+ * 실으면 장 수 × 트리 크기로 자란다. `file://` 로도 열리도록 JSON 이 아니라 전역을 세우는 일반 스크립트다(`EXPORT_NAV_GLOBAL`).
+ */
+export const NAV_JS_PATH = 'assets/nav.js'
+
+/** `assets/nav.js` 가 세우는 전역 — 런타임이 읽는다(`browser/boot.tsx`). */
+export const EXPORT_NAV_GLOBAL = '__wirebound_export_nav__'
+
+/** 번들 한 벌의 내비(`assets/nav.js`). */
+export interface ExportNav {
+  /** 메뉴 트리 — `buildLayoutNav` 의 입력. 페이지마다 `layout` 을 든다(팝업은 내비에 안 선다). */
+  menu: LayoutNavMenu[]
+  /** 페이지 id → 그 장 파일의 번들 안 경로(`pages/….html` — 인코딩 전). 장은 제 자리(`ExportPageData.path`)에서 본 상대 경로로 바꿔 링크로 쓴다. */
+  paths: Record<string, string>
+}
+
 /** 번들 안에서 런타임이 사는 자리. */
 export const RUNTIME_JS_PATH = 'assets/runtime.js'
 
@@ -56,6 +73,15 @@ export interface ExportMarker {
 export interface ExportPageData {
   document: PageDocument
   title: string
+  /**
+   * 이 장의 페이지 id — 내비(`ExportNav`)에서 지금 페이지를 찾는 열쇠다. 장은 트리를 싣지 않고 이것만 든다. 없으면(`BundlePage.id` 를 안 준 번들) `null` 이고
+   * 틀의 내비는 «트리에 없는 페이지» 판이다(`buildLayoutNav`).
+   */
+  pageId: string | null
+  /** 페이지의 제목 그대로(`BundlePage.pageTitle`) — 틀의 제목 영역 · 트리에 없는 페이지의 브레드크럼브가 쓴다. `title` 은 조상이 붙은 번들 이름이다. */
+  pageTitle: string
+  /** 이 파일의 번들 안 경로(`index.html` · `pages/….html`) — 내비의 경로(`ExportNav.paths`)를 여기서 본 상대 경로로 바꿔 틀 링크의 `href` 를 짓는다. */
+  path: string
   /** 이 페이지를 가리키는 상호작용 타겟. 없으면 `null`. */
   target: string | null
   /** 프로젝트가 고정한 `테마@판`. 없으면(바인딩 없음 · 패키지를 못 읽음) `null` — 런타임이 기본 뷰로 그린다. */

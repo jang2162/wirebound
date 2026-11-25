@@ -111,6 +111,7 @@ export const NOSCRIPT_LINE = '이 설계서의 화면은 자바스크립트로 �
  * |---|---|
  * | `type="application/json"`인 페이지 JSON | **실행되지 않는다.** 값이므로 코드일 이유가 없다 |
  * | `assets/runtime.js` | 공유 런타임 전역을 세운다 — 테마 번들보다 먼저여야 한다(`browser/runtime.tsx`) |
+ * | `assets/nav.js` | 번들 한 벌의 내비 전역(`ExportNav`) — `boot()` 보다 먼저면 된다 |
  * | `assets/theme/theme.js`(테마가 있을 때) | 테마 번들이 공유 런타임에 등록한다. 런타임이 **이 스크립트의 등록만** 받는다(`id`) |
  * | 인라인 `boot()` | 페이지를 세운다 |
  *
@@ -120,7 +121,7 @@ export const NOSCRIPT_LINE = '이 설계서의 화면은 자바스크립트로 �
  * 안을 안 보고 `</script>`에서 그대로 끊긴다 — 그 규칙은 그 함수가 든다.
  * `type="application/json"`이어도 파서에게는 같은 raw text다.
  */
-export function shellScripts(input: { dataJson: string; runtimeHref: string; themeHref: string | null }): ReactElement {
+export function shellScripts(input: { dataJson: string; runtimeHref: string; navHref: string; themeHref: string | null }): ReactElement {
   return (
     <>
       <script
@@ -131,6 +132,7 @@ export function shellScripts(input: { dataJson: string; runtimeHref: string; the
         dangerouslySetInnerHTML={{ __html: input.dataJson }}
       />
       <script src={input.runtimeHref} />
+      <script src={input.navHref} />
       {input.themeHref !== null && <script src={input.themeHref} id={THEME_SCRIPT_ID} />}
       <script dangerouslySetInnerHTML={{ __html: `${EXPORT_GLOBAL}.boot()` }} />
     </>

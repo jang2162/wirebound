@@ -48,6 +48,9 @@
  * 레이아웃 틀(SDK 1.10.0)을 들이며 `assets/views.css` 만 다시 지었다 — 내용 상자(`[data-wb-layout-content]`)와 팝업 레이아웃의 막(`[data-wb-layout="popup"]`)
  * 규칙 둘이다. 번들이 아직 장을 틀로 감싸지 않아 페이지 HTML 은 그대로다(다시 재는 법: `packages/theme-sdk/src/default-views/layout.tsx` 의
  * `layoutCssBlocks` 를 빈 목록으로 두고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-25-lt-report.md`).
+ * 번들이 장을 틀로 감싸며 장 HTML 을 다시 지었다 — 스크립트에 번들 한 벌의 내비(`<script src="…assets/nav.js">`)가 더해지고 페이지 데이터에 칸 셋
+ * (`pageId` · `pageTitle` · `path`)이 붙었다. 시트는 그대로이고 `assets/nav.js` 가 새 파일이다(이 번들은 메뉴 트리를 안 넘겨 빈 트리다). 다시 재는 법: 장 HTML
+ * 에서 그 스크립트 한 줄과 데이터의 세 칸을 걷고 해시하면 앞 값이 선다(`docs/superpowers/plans/2026-11-25-lx-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -87,18 +90,20 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': '57971df664af2a5a',
-    'pages/넓은-표본.html': 'd3f9228e6ff2f166',
-    'pages/글.html': '3c57529a0b5b606c',
-    'pages/깨진-문서.html': 'c150d92dc536c2bf',
+    'index.html': 'd98de1a79806e177',
+    'pages/넓은-표본.html': 'fee250c1d58ededf',
+    'pages/글.html': 'c2431bd40c38d97c',
+    'pages/깨진-문서.html': 'aa46080e5ff78705',
     'assets/views.css': '3620a5c4630e6ae4',
+    'assets/nav.js': '62616a8c3a28e33e',
   },
   themed: {
-    'index.html': '1c35814ab3bb58f4',
-    'pages/넓은-표본.html': 'e7223e65a3f79f4e',
-    'pages/글.html': 'eff974ff79c0fecc',
-    'pages/깨진-문서.html': 'e8249eb7e8b5a746',
+    'index.html': '6b17e8150c9b3911',
+    'pages/넓은-표본.html': '39982fe8d34c5998',
+    'pages/글.html': 'e030075146f42bc2',
+    'pages/깨진-문서.html': '0c4fd53e0f160ba9',
     'assets/views.css': '3620a5c4630e6ae4',
+    'assets/nav.js': '62616a8c3a28e33e',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',
     'assets/theme/assets/a.bin': '039058c6f2c0cb49',
