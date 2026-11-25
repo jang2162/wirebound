@@ -116,4 +116,46 @@ describe.skipIf(!전제.ok)('셸 단추의 두 높이 — 실브라우저', () =
     // eslint-disable-next-line no-console
     console.log(`[shell-buttons] ${JSON.stringify(log)}`)
   })
+
+  /**
+   * 테마 판 줄(`/admin/themes`)의 «미리보기» · «숨김» — 같은 위 · 같은 높이이고, 줄 첫 줄(판 이름)과 같은 가운데에 선다. 판 이름의 상자는 줄의
+   * 첫 줄 높이 그대로라(가운데 맞춤 아래에서) 그 가운데가 첫 줄의 가운데다.
+   */
+  it('테마 판 줄 — 두 단추가 같은 위 · 같은 높이 · 판 이름과 같은 가운데(창 1280 · 900)', async () => {
+    const log: Record<string, unknown>[] = []
+    for (const width of [1280, 900]) {
+      const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width, height: 900 } })
+      try {
+        await page.goto('/admin/themes')
+        await page.locator('.wb-shell-admin-version').first().waitFor()
+        const rows = await page.evaluate(() =>
+          [...document.querySelectorAll('.wb-shell-admin-version')].map((row) => {
+            const box = (el: Element | null) => {
+              const rect = el?.getBoundingClientRect()
+              return rect === undefined ? null : { top: rect.top, height: rect.height, mid: rect.top + rect.height / 2 }
+            }
+            const [preview, hide] = [...row.querySelectorAll('button')].map(box)
+            return { name: box(row.querySelector('.wb-shell-tokens-name')), preview, hide }
+          }),
+        )
+        // 판 카나리아 — 판 줄이 있고 줄마다 단추 둘 · 판 이름이 섰다.
+        expect(rows.length).toBeGreaterThan(0)
+        for (const row of rows) {
+          expect(row.name !== null && row.preview !== undefined && row.hide !== undefined).toBe(true)
+          const gaps = {
+            top: Math.abs(row.preview!.top - row.hide!.top),
+            height: Math.abs(row.preview!.height - row.hide!.height),
+            mid: Math.abs(row.name!.mid - row.preview!.mid),
+          }
+          log.push({ width, ...gaps })
+          expect({ width, top: gaps.top, height: gaps.height }).toEqual({ width, top: 0, height: 0 })
+          expect(gaps.mid, `${width}`).toBeLessThanOrEqual(1)
+        }
+      } finally {
+        await context.close()
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[shell-buttons 판 줄] ${JSON.stringify(log)}`)
+  })
 })

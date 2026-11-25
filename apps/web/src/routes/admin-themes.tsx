@@ -325,32 +325,36 @@ function ThemeDetail(props: {
       {pkg.description !== null && <p className="wb-shell-admin-desc">{pkg.description}</p>}
       <ul className="wb-shell-project-items">
         {pkg.versions.map((row) => (
-          <li key={row.version} className="wb-shell-project-item">
+          <li key={row.version} className="wb-shell-project-item wb-shell-admin-version">
             <span className="wb-shell-tokens-name">{row.version}</span>
             <span className="wb-shell-tokens-project">{row.name}</span>
             {row.hidden && <span className="wb-shell-admin-hidden">숨김</span>}
             <span className="wb-shell-tokens-meta">
               {`${sizeText(row.size)} · 올린 때 ${formatWhen(row.uploadedAt)} · ${row.uploadedBy === null ? '시스템' : row.uploadedBy.name}`}
             </span>
-            <button
-              className="wb-shell-admin-preview-pick"
-              type="button"
-              aria-pressed={row.version === props.version}
-              aria-label={`${row.themeId}@${row.version} 미리보기`}
-              onClick={() => props.onPreview(row.version)}
-            >
-              {shellIcon('preview', 14, 'wb-shell-icon-lead')}
-              미리보기
-            </button>
-            <button
-              className="wb-shell-project-action"
-              type="button"
-              disabled={props.busy}
-              aria-label={`${row.themeId}@${row.version} ${row.hidden ? '되살림' : '숨김'}`}
-              onClick={() => props.onToggle(row)}
-            >
-              {row.hidden ? '되살림' : '숨김'}
-            </button>
+            {/* 단추 둘은 한 상자로 줄 오른끝에 — 둘이 따로 서면 좁은 줄에서 하나만 꺾인다. 고른 판의 «미리보기 중» 은 색에만 기대지 않는 표시다 —
+                접근 이름은 판마다 그대로이고 고른 것은 `aria-pressed` 가 말한다. */}
+            <span className="wb-shell-admin-version-actions">
+              <button
+                className="wb-shell-admin-preview-pick"
+                type="button"
+                aria-pressed={row.version === props.version}
+                aria-label={`${row.themeId}@${row.version} 미리보기`}
+                onClick={() => props.onPreview(row.version)}
+              >
+                {shellIcon('preview', 14, 'wb-shell-icon-lead')}
+                {row.version === props.version ? '미리보기 중' : '미리보기'}
+              </button>
+              <button
+                className="wb-shell-project-action"
+                type="button"
+                disabled={props.busy}
+                aria-label={`${row.themeId}@${row.version} ${row.hidden ? '되살림' : '숨김'}`}
+                onClick={() => props.onToggle(row)}
+              >
+                {row.hidden ? '되살림' : '숨김'}
+              </button>
+            </span>
           </li>
         ))}
       </ul>
