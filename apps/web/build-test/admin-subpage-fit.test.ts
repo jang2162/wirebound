@@ -6,6 +6,9 @@
  *   제자리에 선 채 글자만 넘친다).
  * - GNB — 메뉴가 한 줄을 넘치면 줄을 바꿔 다 보인다. 창 1280 · 1024 · 720(PPTX 캡처 폭) · 390 × 메뉴 7 · 12 · 긴 이름, 고른 메뉴는 늘 끝이다. 링크마다
  *   가운데의 `elementFromPoint` 가 그 링크다(잘리거나 덮이거나 창 밖이면 아니다).
+ * - 짧은 페이지 — 틀이 그리는 판의 높이를 채운다(LNB 바탕이 창 끝까지). 높이가 내용을 따르는 두 판에서는 그 채움이 높이를 안 키운다: 캔버스 · 미리보기
+ *   iframe(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight` — 최소 높이로 줄여 잰다)과 PPTX 캡처(`apps/api/src/services/screen-render-chromium.ts`
+ *   의 뷰포트 720×552 · `PAGE_SIZE`).
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -76,6 +79,22 @@ const SHORT_DOC: PageDocument = {
     id: 'root',
     type: 'Page',
     children: [{ id: 'card', type: 'Card', props: { title: '결과' }, children: [{ id: 't', type: 'Text', props: { content: '본문' } }] }],
+  },
+}
+
+/** 긴 페이지 — 카드 스물(창 720 에서 문서가 캡처 뷰포트 552 보다 길다). */
+const TALL_DOC: PageDocument = {
+  version: 7,
+  layout: 'subpage',
+  root: {
+    id: 'root',
+    type: 'Page',
+    children: Array.from({ length: 20 }, (_, at) => ({
+      id: `c${at}`,
+      type: 'Card',
+      props: { title: `카드 ${at}` },
+      children: [{ id: `c${at}-t`, type: 'Text', props: { content: '본문 한 줄' } }],
+    })),
   },
 }
 
@@ -208,6 +227,102 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
         FRAME,
       )
       expect(rows).toBe(2)
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it.each([
+    [1280, 900],
+    [1024, 768],
+  ])('짧은 페이지 — 틀 · LNB 가 창(%i×%i) 끝까지 선다', async (width, height) => {
+    const { menu, current } = gnbMenu(COMMON7)
+    const tab = await open(width, { menu, current }, height)
+    try {
+      const got = await tab.evaluate((frame) => {
+        const at = (selector: string) => document.querySelector(`${frame}${selector}`)!.getBoundingClientRect()
+        return {
+          content: at(' > [data-wb-part="body"] > [data-wb-part="content"] > [data-wb-layout-content]').height,
+          frame: at('').bottom,
+          lnb: at(' > [data-wb-part="body"] > [data-wb-part="lnb"]').bottom,
+        }
+      }, FRAME)
+      // 카나리아 — 내용이 창보다 짧다(그래서 채움이 보인다).
+      expect(got.content).toBeLessThan(height / 2)
+      expect({ frame: got.frame, lnb: got.lnb }).toEqual({ frame: height, lnb: height })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('캔버스 · 미리보기 iframe — 최소 높이로 줄여 잰 높이가 내용 높이다(채움이 iframe 을 안 키운다)', async () => {
+    const { menu, current } = gnbMenu(COMMON7)
+    const tab = await launched.browser!.newPage({ viewport: { width: 1280, height: 900 } })
+    try {
+      await tab.setContent(
+        '<!doctype html><html><body style="margin:0"><iframe style="border:0;width:720px;height:320px"></iframe></body></html>',
+      )
+      const got = await tab.evaluate(
+        (srcdoc) => {
+          const iframe = document.querySelector('iframe')!
+          return new Promise<{ natural: number; heights: number[] }>((resolve) => {
+            iframe.addEventListener('load', () => {
+              const doc = iframe.contentDocument!
+              const win = iframe.contentWindow!
+              // `canvas-iframe.tsx` 의 `contentHeight` — 뿌리 상자 높이와 body 위 + body scrollHeight 의 큰 쪽.
+              const contentHeight = () =>
+                Math.ceil(
+                  Math.max(
+                    doc.documentElement.getBoundingClientRect().height,
+                    doc.body.getBoundingClientRect().top + win.scrollY + doc.body.scrollHeight,
+                  ),
+                )
+              const frame = doc.querySelector('[data-wb-part="frame"]') as HTMLElement
+              // 채움을 끈 내용 높이 — 기대값.
+              frame.style.minHeight = '0'
+              iframe.style.height = '320px'
+              const natural = contentHeight()
+              frame.style.minHeight = ''
+              const heights: number[] = []
+              for (let round = 0; round < 4; round += 1) {
+                // `naturalHeight` — 최소 높이(320)로 줄여 재고, 잰 값으로 키운다.
+                iframe.style.height = '320px'
+                const h = contentHeight()
+                iframe.style.height = `${h}px`
+                heights.push(h)
+              }
+              resolve({ natural, heights })
+            })
+            iframe.srcdoc = srcdoc
+          })
+        },
+        html({ menu, current, doc: TALL_DOC }),
+      )
+      // 카나리아 — 내용이 최소 높이보다 길다(그래야 채움이 높이를 바꾸는지 보인다).
+      expect(got.natural).toBeGreaterThan(320)
+      expect(got.heights).toEqual([got.natural, got.natural, got.natural, got.natural])
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('PPTX 캡처(720×552) — 긴 페이지의 잰 크기가 뷰포트 높이를 안 따른다', async () => {
+    const { menu, current } = gnbMenu(COMMON7)
+    const tab = await open(720, { menu, current, doc: TALL_DOC }, 552)
+    try {
+      // `screen-render-chromium.ts` 의 `PAGE_SIZE` 높이 식.
+      const size = () =>
+        tab.evaluate(() => {
+          const d = document.documentElement
+          const b = document.body
+          return Math.max(d.scrollHeight, d.offsetHeight, d.clientHeight, Math.max(b.scrollHeight, b.offsetHeight, b.clientHeight))
+        })
+      const atCapture = await size()
+      await tab.setViewportSize({ width: 720, height: 450 })
+      const atShort = await size()
+      // 카나리아 — 문서가 캡처 뷰포트보다 길다.
+      expect(atShort).toBeGreaterThan(552)
+      expect(atCapture).toBe(atShort)
     } finally {
       await tab.close()
     }
