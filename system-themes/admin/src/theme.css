@@ -1564,14 +1564,22 @@
   line-height: var(--wb-typography-h4-lineHeight);
   font-weight: var(--wb-typography-h4-fontWeight);
 }
+/* 닫기 — 26px 정사각 누름 칸 · 16px 표지(원본 `.adp-modal__close`). 본문 크기 글자 하나면 누를 자리가 13px 남짓이다. */
 [data-wb-component="Popup"] > [data-wb-part="titlebar"] > [data-wb-part="close"] {
   flex: none;
-  padding: 0 var(--wb-space-1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: calc(var(--wb-space-unit) * 6.5);
+  height: calc(var(--wb-space-unit) * 6.5);
+  padding: 0;
   border: 0;
   border-radius: var(--wb-radius-sm);
   background: transparent;
   color: var(--wb-semantic-textMuted);
   font: inherit;
+  font-size: var(--wb-typography-h3-fontSize);
   line-height: 1;
   cursor: pointer;
 }
