@@ -1,7 +1,7 @@
 import { defineTheme } from '@wirebound/theme-sdk'
 import manifest from '../theme.config'
-import { VIEWS } from './views/index'
+import { LAYOUTS, VIEWS } from './views/index'
 import './theme.css'
 
 /** `.wbtheme` 의 진입(`wb-theme build --entry src/theme.tsx`). `src/index.ts` 의 `ADMIN_V0` 와 같은 정의를 `.wbtheme` 로 낸다. */
-export default defineTheme({ manifest, views: VIEWS })
+export default defineTheme({ manifest, views: VIEWS, layouts: LAYOUTS })
