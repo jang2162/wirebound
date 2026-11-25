@@ -449,7 +449,8 @@ describe.skipIf(!전제.ok)('그리드 에디터 입구(실브라우저)', () =>
         (root) => find(root, cells[1]!.id) === undefined,
       )
       await pick(page, third)
-      await page.getByLabel('종류', { exact: true }).selectOption('total')
+      // «종류»(data · total · gap)는 세그먼트 단추다(`src/panels/controls/select-control.tsx`).
+      await page.getByRole('radiogroup', { name: '종류', exact: true }).getByRole('radio', { name: 'total', exact: true }).click()
       const total = await poll(
         '합계 행',
         () => server(P),

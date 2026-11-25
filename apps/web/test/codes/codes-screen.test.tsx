@@ -8,7 +8,7 @@ import type { CodeGroup, UsageHit } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'
 import type { ApiClient, CodeUsageCounts } from '../../src/api/client'
 import type { ProjectView } from '../../src/api/types'
-import { BREAKS_REFERENCES } from '../../src/codes/codes-screen'
+import { BREAKS_REFERENCES, NO_MATCH } from '../../src/codes/codes-screen'
 import { isolate } from '../../src/shell/isolate'
 import { PAGE_ID, PROJECT_ID, PROJECT_NAME, pageDoc, renderEditor, selectionOutline } from '../editor-harness'
 import { currentPath, currentSearch } from '../helpers'
@@ -20,7 +20,12 @@ interface Fake {
   api: Partial<ApiClient>
 }
 
-const HIT: UsageHit = { kind: 'page', id: PAGE_ID, title: '회원 목록', nodes: [{ nodeId: 'n-affix', name: '결제 대기 사이 글자' }] }
+const HIT: UsageHit = {
+  kind: 'page',
+  id: PAGE_ID,
+  title: '회원 목록',
+  nodes: [{ nodeId: 'n-affix', name: '결제 대기 사이 글자', type: 'Affix', trail: [] }],
+}
 
 function fake(role: ProjectView['role'] = 'owner'): Fake {
   const groups: CodeGroup[] = [
@@ -109,7 +114,79 @@ describe('공통코드 화면', () => {
     expect(cells.slice(0, 5)).toEqual(['1', 'WAIT', isolate('결제 대기'), '사용', '1곳'])
     expect(within(rowOf('완료')).getAllByRole('cell')[3]!.textContent).toBe('사용 안 함')
     const usage = await screen.findByRole('list', { name: '사용처 목록' })
-    expect(usage.textContent).toBe(`페이지 ${isolate('회원 목록')} › ${isolate('결제 대기 사이 글자')}`)
+    // 페이지마다 묶음(이름 · 노드 수) — 줄은 타입 · 노드 이름(조상이 없으면 조상 글이 없다).
+    expect(usage.querySelector('summary')?.textContent).toBe(`페이지 ${isolate('회원 목록')}1`)
+    expect(within(usage).getByRole('link').textContent).toBe(`Affix${isolate('결제 대기 사이 글자')}`)
+    // 머리 — 조사 없이 «쓰는 곳» · 고른 범위 · 수.
+    const region = screen.getByRole('region', { name: '사용처' })
+    within(region).getByRole('heading', { name: '쓰는 곳' })
+    expect(region.querySelector('.wb-shell-codes-key')?.textContent).toBe(`«${isolate('주문 상태')}» · 페이지 1 · 노드 1`)
+  })
+
+  /** 같은 이름의 노드 둘이 조상 이름으로 갈린다 — 내부 id 는 줄에 안 보인다. 조상이 셋 이상이면 가까운 둘만 · 앞은 «…». */
+  it('사용처 — 같은 이름의 둘을 조상 이름으로 가르고 페이지마다 묶는다', async () => {
+    const board = fake()
+    const select = (nodeId: string, trail: string[]) => ({ nodeId, name: '셀렉트', type: 'Select', trail })
+    board.api.codeUsage = async () => [
+      {
+        kind: 'page',
+        id: PAGE_ID,
+        title: '과목관리',
+        nodes: [select('n_s1', ['검색 폼', '과목분류 필드']), select('n_s2', ['교수법 필드'])],
+      },
+      { kind: 'module', id: 'm1', title: '기본 틀', nodes: [select('n_s3', ['머리', '카드', '탭', '분류 필드'])] },
+    ]
+    await open(board)
+    const usage = await screen.findByRole('list', { name: '사용처 목록' })
+    expect([...usage.querySelectorAll('summary')].map((summary) => summary.textContent)).toEqual([
+      `페이지 ${isolate('과목관리')}2`,
+      `모듈 ${isolate('기본 틀')}1`,
+    ])
+    const lines = [...usage.querySelectorAll('.wb-shell-codes-usage-node')].map((line) => line.textContent)
+    expect(lines).toEqual([
+      `Select${isolate('셀렉트')}${isolate('검색 폼')} › ${isolate('과목분류 필드')}`,
+      `Select${isolate('셀렉트')}${isolate('교수법 필드')}`,
+      `Select${isolate('셀렉트')}… › ${isolate('탭')} › ${isolate('분류 필드')}`,
+    ])
+    expect(new Set(lines).size).toBe(lines.length)
+    expect(lines.join('')).not.toContain('n_s')
+    // 페이지 줄은 링크(그 노드로) · 모듈 줄은 글이다.
+    expect(
+      within(usage)
+        .getAllByRole('link')
+        .map((link) => link.getAttribute('href')),
+    ).toEqual([`/projects/${PROJECT_ID}/pages/${PAGE_ID}?node=n_s1`, `/projects/${PROJECT_ID}/pages/${PAGE_ID}?node=n_s2`])
+    expect(screen.getByRole('region', { name: '사용처' }).querySelector('.wb-shell-codes-key')?.textContent).toBe(
+      `«${isolate('주문 상태')}» · 페이지 1 · 모듈 1 · 노드 3`,
+    )
+  })
+
+  it('그룹 찾기 — 이름 · 키의 부분 일치(대소문자 무시) · 없으면 문장 · 걸러진 고른 그룹의 오른쪽은 그대로', async () => {
+    await open(fake())
+    const find = screen.getByRole('searchbox', { name: '그룹 찾기' })
+    const shown = () =>
+      within(screen.getByRole('list', { name: '공통코드 그룹' }))
+        .getAllByRole('button')
+        .map((pick) => pick.querySelector('.wb-shell-admin-pick-name')?.textContent)
+    expect(shown()).toEqual([isolate('주문 상태'), isolate('등급')])
+    fireEvent.change(find, { target: { value: 'grade' } })
+    expect(shown()).toEqual([isolate('등급')])
+    fireEvent.change(find, { target: { value: '주문' } })
+    expect(shown()).toEqual([isolate('주문 상태')])
+    fireEvent.change(find, { target: { value: '  Order_ ' } })
+    expect(shown()).toEqual([isolate('주문 상태')])
+    // 고른 그룹(주문 상태)이 걸러져도 오른쪽은 그대로 — 찾기는 고르기가 아니다.
+    fireEvent.change(find, { target: { value: '등' } })
+    expect(shown()).toEqual([isolate('등급')])
+    expect(screen.getByRole('region', { name: '그룹 주문 상태' })).toBeTruthy()
+    expect(currentSearch()).toBe('')
+    fireEvent.change(find, { target: { value: '없는 그룹' } })
+    expect(screen.queryByRole('list', { name: '공통코드 그룹' })).toBeNull()
+    screen.getByText(NO_MATCH)
+    expect(screen.getByRole('region', { name: '그룹 주문 상태' })).toBeTruthy()
+    // 비우면 다 선다.
+    fireEvent.change(find, { target: { value: '' } })
+    expect(shown()).toEqual([isolate('주문 상태'), isolate('등급')])
   })
 
   it('코드값 칸은 글뿐이다 — 고칠 칸이 없고 «…» 에도 코드값 바꾸기가 없다', async () => {
@@ -164,7 +241,9 @@ describe('공통코드 화면', () => {
     let asked = 0
     board.api.codeUsage = async (_p, key, item) => {
       asked += 1
-      return key === 'ORDER_STATUS' && item === 'DONE' ? [{ ...HIT, nodes: [...HIT.nodes, { nodeId: 'n-late', name: '완료 버튼' }] }] : []
+      return key === 'ORDER_STATUS' && item === 'DONE'
+        ? [{ ...HIT, nodes: [...HIT.nodes, { nodeId: 'n-late', name: '완료 버튼', type: 'Button', trail: [] }] }]
+        : []
     }
     await open(board)
     // 판 카나리아 — 화면이 아는 사용 수는 0 이다.

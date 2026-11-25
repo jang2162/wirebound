@@ -237,6 +237,9 @@ function propRows(): { label: string; value: string }[] {
 }
 
 function rowValue(row: Element): string {
+  // 세그먼트 단추(`src/panels/controls/select-control.tsx`)는 고른 단추의 글이 값이다 — 고른 것이 없으면 빈 칸.
+  const segments = row.querySelector('[role="radiogroup"]')
+  if (segments !== null) return segments.querySelector('[aria-checked="true"]')?.textContent ?? ''
   const widget = row.querySelector<HTMLInputElement | HTMLTextAreaElement>('input, textarea, select')
   if (widget === null) return row.querySelector('.wb-shell-prop-value')?.textContent ?? ''
   if (widget instanceof HTMLInputElement && widget.type === 'checkbox') {
@@ -270,10 +273,15 @@ describe('속성 패널', () => {
 
     select('Input')
 
-    // 카탈로그의 `editor` 배열 순서 그대로다. 순서를 여기 다시 적는 것은 구현이
-    // `InputDef`를 import해 그대로 훑기만 해도 통과하는 단언을 만들지 않기 위해서다 —
-    // 순서가 잘못 바뀌면 이 줄이 죽어야 한다.
-    expect(labels()).toEqual(['종류', '값', '안내 문구', '폭', '비활성', '읽기 전용', '오류 상태'])
+    // 묶음(내용 · 표시 · 레이아웃 · 상태 — `src/panels/prop-groups.ts`) 차례이고 묶음 안은 카탈로그의 `editor` 배열 순서 그대로다. 순서를
+    // 여기 다시 적는 것은 구현이 `InputDef`를 import해 그대로 훑기만 해도 통과하는 단언을 만들지 않기 위해서다 — 순서가 잘못 바뀌면 이 줄이 죽어야 한다.
+    expect(labels()).toEqual(['값', '안내 문구', '종류', '폭', '비활성', '읽기 전용', '오류 상태'])
+    expect([...panel().querySelectorAll('.wb-shell-prop-group-toggle')].map((button) => button.textContent)).toEqual([
+      '내용',
+      '표시',
+      '레이아웃',
+      '상태',
+    ])
     // 어느 컴포넌트의 속성인지도 보여 준다(설계서 「설계서 화면 구조」의 패널 머리).
     // «컴포넌트» 탭의 묶음 이름(«속성» · «코멘트») 사이에 노드 제목이 선다(`src/panels/component-panel.tsx`).
     expect(
@@ -289,11 +297,12 @@ describe('속성 패널', () => {
     select('Input')
 
     expect(propRows()).toEqual([
-      { label: '종류', value: 'number' },
       // 값이 없는 글 칸은 빈 칸이다 — 카탈로그 기본값을 채우지 않는다.
       { label: '값', value: '' },
       { label: '안내 문구', value: '검색어' },
-      { label: '폭', value: '' },
+      { label: '종류', value: 'number' },
+      // 값이 없는 고르개는 카탈로그 기본값을 고른 채로 보인다 — 렌더러도 그 값으로 그린다(`SelectControl` 의 `fallback`).
+      { label: '폭', value: 'medium' },
       // **값이 없는 스위치는 "꺼짐"으로 보인다** — 체크박스가 그리기 때문이다
       // (`formatValue(undefined)`가 그리면 빈 문자열이 된다). 체크박스에는
       // "값 없음"을 표현할 자리가 없어 **화면에서는 `false`와 구분되지 않는다** — 문서
@@ -1405,5 +1414,63 @@ describe('속성 패널 — 변형', () => {
         expect(field.options, type).toEqual(decl.variants.map((v) => ({ id: v.id, label: v.label })))
       }
     }
+  })
+})
+
+/**
+ * **묶음 접기 · 세그먼트 단추**(`src/panels/prop-group-box.tsx` · `src/panels/controls/select-control.tsx`). 접힘은 묶음 이름으로 셸 동안 남는다
+ * (노드를 바꿔 골라도 · 탭을 다녀와도). 세그먼트는 누름 · 화살표로 즉시 커밋하고 같은 값은 안 보낸다.
+ */
+describe('속성 패널 — 묶음 · 세그먼트', () => {
+  function toggle(name: string): HTMLButtonElement {
+    return within(panel()).getByRole<HTMLButtonElement>('button', { name })
+  }
+
+  it('묶음을 접으면 그 칸이 숨고, 다른 노드를 골라도 · 탭을 다녀와도 접힌 채다', async () => {
+    await openPage(DOC)
+    select('Input')
+    expect(toggle('상태').getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(toggle('상태'))
+    expect({
+      펼침: toggle('상태').getAttribute('aria-expanded'),
+      보이는칸: within(panel()).queryByRole('checkbox', { name: '비활성' }),
+    }).toEqual({
+      펼침: 'false',
+      보이는칸: null,
+    })
+    // 다른 묶음은 그대로다.
+    expect(within(panel()).getByRole('textbox', { name: '안내 문구' })).toBeTruthy()
+
+    // 다른 노드(Card — 상태 묶음이 «상태 보임» 하나 · 이 문서엔 상태가 없어 그 칸도 안 선다) → 다시 Input.
+    select('Card')
+    select('Input')
+    expect(toggle('상태').getAttribute('aria-expanded')).toBe('false')
+
+    // 탭 왕복 — 탭 본문은 내려갔다 다시 서도 접힘은 우측 패널이 든다.
+    fireEvent.click(screen.getByRole('tab', { name: '코멘트' }))
+    fireEvent.click(screen.getByRole('tab', { name: '컴포넌트' }))
+    expect(toggle('상태').getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle('상태'))
+    expect(within(panel()).getByRole('checkbox', { name: '비활성' })).toBeTruthy()
+  })
+
+  it('선택지 넷 이하는 세그먼트 단추다 — 누르면 그 값을 보내고, 고른 단추를 다시 눌러도 안 보낸다 · 화살표는 다음 값', async () => {
+    const { calls, api } = editable()
+    await openPage(DOC, { apiOverrides: api })
+    select('Input')
+    const kind = within(panel()).getByRole('radiogroup', { name: '종류' })
+    const radios = within(kind).getAllByRole('radio')
+    expect(radios.map((radio) => [radio.textContent, radio.getAttribute('aria-checked'), radio.tabIndex])).toEqual([
+      ['text', 'false', -1],
+      ['number', 'true', 0],
+      ['password', 'false', -1],
+    ])
+    fireEvent.click(within(kind).getByRole('radio', { name: 'number' }))
+    fireEvent.click(within(kind).getByRole('radio', { name: 'password' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/kind', value: 'password' }])
+    fireEvent.keyDown(within(kind).getByRole('radio', { name: 'password' }), { key: 'ArrowLeft' })
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(lastOps(calls)).toEqual([{ op: 'replace', path: '/root/children/0/props/kind', value: 'number' }])
   })
 })

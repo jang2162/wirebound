@@ -37,7 +37,8 @@ export function ComponentPanel(props: { projectId: string; pageId: string | unde
   return (
     <>
       <section aria-labelledby="wb-component-part-props">
-        <h2 id="wb-component-part-props" className="wb-shell-component-part-title">
+        {/* «속성» 은 접근 이름으로만 남는다 — 눈에는 머리 카드(`./node-head.tsx`)가 무엇을 고치는지 말한다. */}
+        <h2 id="wb-component-part-props" className="wb-shell-component-part-title wb-shell-component-part-title-hidden">
           속성
         </h2>
         <PropertyPanel projectId={props.projectId} pageId={props.pageId} canEdit={props.canEdit} />

@@ -43,6 +43,7 @@ import { PageInfoPanel } from '../panels/page-info'
 import { PanelDraftsProvider } from '../panels/panel-drafts'
 import { ComponentCommentsOpenProvider, ComponentPanel } from '../panels/component-panel'
 import { AliasEditProvider } from '../panels/alias-edit'
+import { PropGroupFoldsProvider } from '../panels/prop-group-box'
 import { StructureTree } from '../panels/structure-tree'
 import { leftUnsentNotice, restoredRevisions, useEditCommit } from '../edit/use-edit-commit'
 import { ActionMenu, type ActionMenuItem } from '../shell/action-menu'
@@ -1315,35 +1316,37 @@ function RightPanel(props: {
 
   return (
     <ComponentCommentsOpenProvider>
-      {/* 칸 provider 는 탭 줄까지 품는다 — «코멘트» 탭 이름의 수(`CommentTabLabel`)가 코멘트 목록 칸을 읽는다. 아래 본문 자리의 주석이 provider 의 몫이다. */}
-      <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
-        <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
-          {tabs.map((item, index) => (
-            <button
-              key={item.id}
-              ref={(element) => {
-                if (element === null) tabRefs.current.delete(item.id)
-                else tabRefs.current.set(item.id, element)
-              }}
-              type="button"
-              role="tab"
-              id={`wb-tab-${item.id}`}
-              className="wb-shell-tab"
-              aria-selected={tab === item.id}
-              aria-controls={`wb-tabpanel-${item.id}`}
-              // «코멘트» 탭의 수(`CommentTabLabel`) — 수가 없으면 가리키는 요소가 없어 설명도 없다.
-              aria-describedby={item.id === 'comments' ? COMMENT_TAB_NOTE : undefined}
-              tabIndex={tab === item.id ? 0 : -1}
-              onClick={() => setChosen(item.id)}
-              onKeyDown={(event) => moveTab(event, index)}
-            >
-              {item.id === 'comments' ? <CommentTabLabel label={item.label} /> : item.label}
-            </button>
-          ))}
-        </div>
-        <CommentTabLabel label="" note />
+      {/* 속성 칸 묶음의 접힘도 셸 동안 든다 — 탭 본문은 탭을 옮기면 내려간다(`panels/prop-group-box.tsx`). */}
+      <PropGroupFoldsProvider>
+        {/* 칸 provider 는 탭 줄까지 품는다 — «코멘트» 탭 이름의 수(`CommentTabLabel`)가 코멘트 목록 칸을 읽는다. 아래 본문 자리의 주석이 provider 의 몫이다. */}
+        <PanelDraftsProvider projectId={props.projectId} pageId={props.pageId}>
+          <div className="wb-shell-tabs" role="tablist" aria-label="우측 패널 탭">
+            {tabs.map((item, index) => (
+              <button
+                key={item.id}
+                ref={(element) => {
+                  if (element === null) tabRefs.current.delete(item.id)
+                  else tabRefs.current.set(item.id, element)
+                }}
+                type="button"
+                role="tab"
+                id={`wb-tab-${item.id}`}
+                className="wb-shell-tab"
+                aria-selected={tab === item.id}
+                aria-controls={`wb-tabpanel-${item.id}`}
+                // «코멘트» 탭의 수(`CommentTabLabel`) — 수가 없으면 가리키는 요소가 없어 설명도 없다.
+                aria-describedby={item.id === 'comments' ? COMMENT_TAB_NOTE : undefined}
+                tabIndex={tab === item.id ? 0 : -1}
+                onClick={() => setChosen(item.id)}
+                onKeyDown={(event) => moveTab(event, index)}
+              >
+                {item.id === 'comments' ? <CommentTabLabel label={item.label} /> : item.label}
+              </button>
+            ))}
+          </div>
+          <CommentTabLabel label="" note />
 
-        {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
+          {/* **보이지 않는 탭은 DOM에서 뺀다** — `hidden`으로 두지 않는다. 코멘트 탭은
           마운트될 때 `listComments`를 부르므로, 감춰 둔 채 살려 두면 보지도 않는 목록을
           위해 페이지를 열 때마다 요청이 나간다. 구조 트리를 뷰 모드에서 DOM에서 빼는 것과
           같은 판단이고, 근거도 같다(그쪽 주석).
@@ -1360,26 +1363,27 @@ function RightPanel(props: {
 
           «페이지 정보»와 코멘트 탭이 **같은 provider**를 쓴다 — 페이지가 바뀌면 버리는 일도
           그 한 자리에서 같은 값으로 한다. */}
-        <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
-          {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
+          <div className="wb-shell-tabpanel" role="tabpanel" id={`wb-tabpanel-${tab}`} aria-labelledby={`wb-tab-${tab}`}>
+            {/* **복원하면 본문을 다시 세운다**(`key`). 코멘트 · 설명 본문은 마운트될 때 읽으므로 탭을 다녀오면 맞는데,
               복원은 탭을 안 바꾼다. 다시 세우는 것은 탭을 다녀온 것과 같은 길이다 — 친 글자 · 나가 있는 쓰기는 위
               provider 가 들고 있어 살아남고, 지난 쓰기의 통지는 마운트가 지운다(복원 앞의 일이다). 본문마다 신호를 받아
               다시 읽게 하지 않은 것은, 그러면 복원이 바꾸는 것을 읽는 본문이 늘 때마다 그 배선을 잊는 자리가 생기기 때문이다. */}
-          {(() => {
-            const Body = PANEL_BODIES[tab]
-            return (
-              <Body
-                key={props.restoredToken}
-                projectId={props.projectId}
-                pageId={props.pageId}
-                canEdit={props.canEdit}
-                editable={mode === 'edit' && props.canEdit}
-                menuRev={props.menuRev}
-              />
-            )
-          })()}
-        </div>
-      </PanelDraftsProvider>
+            {(() => {
+              const Body = PANEL_BODIES[tab]
+              return (
+                <Body
+                  key={props.restoredToken}
+                  projectId={props.projectId}
+                  pageId={props.pageId}
+                  canEdit={props.canEdit}
+                  editable={mode === 'edit' && props.canEdit}
+                  menuRev={props.menuRev}
+                />
+              )
+            })()}
+          </div>
+        </PanelDraftsProvider>
+      </PropGroupFoldsProvider>
     </ComponentCommentsOpenProvider>
   )
 }

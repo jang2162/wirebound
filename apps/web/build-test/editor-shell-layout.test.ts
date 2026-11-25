@@ -5,7 +5,7 @@
  *
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * |---|---|
- * | 우측 손잡이 | 왼쪽으로 끌어도 · `ArrowLeft`로도 안 넓어진다 · 두 번 눌러 300 이 아니다 · 새로고침 뒤 폭을 잃는다 |
+ * | 우측 손잡이 | 왼쪽으로 끌어도 · `ArrowLeft`로도 안 넓어진다 · 두 번 눌러 기본 폭(창 1440 에서 346 — `panelWidthDefault`)이 아니다 · 새로고침 뒤 폭을 잃는다 |
  * | 창을 줄이면 | 캔버스가 480 아래 · 셸에 가로 넘침 · 우측보다 좌측을 먼저 조인다 · 저장값을 되쓴다 |
  * | 하단 바의 통지 둘 | 한쪽이 가려진다 · 캔버스가 안 준다(바가 안 자란다) |
  * | 화면 맞춤 | 맞춘 뒤 캔버스에 가로 넘침이 있다(좌측 최대 · 넓은 프리셋 칸 포함 — 줌 하한이 맞춤을 막지 않는다) · 보이지 않는 넘침이 있다 · 좌측 최대에서 «화면 맞춤»이 가려진다 |
@@ -42,7 +42,7 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
     expect(after).toEqual({ processes: 0, listeningPorts: [], databases: 0 })
   })
 
-  it('우측 손잡이 — 왼쪽으로 끌면 · ArrowLeft 로 넓어지고, 두 번 누르면 300, 새로고침 뒤에도 그 폭이다', async () => {
+  it('우측 손잡이 — 왼쪽으로 끌면 · ArrowLeft 로 넓어지고, 두 번 누르면 기본 폭, 새로고침 뒤에도 그 폭이다', async () => {
     const { P } = await fixture(stack, alice, 'panel', 3)
     const { context, page } = await stack.openTab(stack.users.alice, { viewport: { width: 1440, height: 900 } })
     try {
@@ -70,7 +70,7 @@ describe.skipIf(!전제.ok)('에디터 셸 가로 배치 — 실브라우저', (
       await canvasFrame(page).locator('[data-wb-id]').first().waitFor()
       const reloaded = await panelWidth(page)
 
-      expect({ dragged, arrowed, reset, kept, reloaded }).toEqual({ dragged: 360, arrowed: 376, reset: 300, kept: 380, reloaded: 380 })
+      expect({ dragged, arrowed, reset, kept, reloaded }).toEqual({ dragged: 406, arrowed: 422, reset: 346, kept: 426, reloaded: 426 })
     } finally {
       await context.close()
     }

@@ -233,7 +233,7 @@ export {
 } from './codes'
 export type { CodeIndex, ResolvedChoices, ResolvedCode } from './codes-resolve'
 export { indexCodes, isCodeBroken, resolveChoices, resolveCode, resolvedCodeProps, resolveLabel } from './codes-resolve'
-export type { CodeUsageCount, UsageHit, UsageSource } from './codes-usage'
+export type { CodeUsageCount, UsageHit, UsageNode, UsageSource } from './codes-usage'
 export { codeUsage, codeUsageCounts } from './codes-usage'
 
 // 사람이 지은 이름을 글에 이을 때 방향을 가둔다 — 풀린 토큰 글과 같은 규칙을 화면이 쓴다(코멘트 토큰 고르개의 라벨).

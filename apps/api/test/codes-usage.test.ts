@@ -1,11 +1,11 @@
-/** 공통코드 사용처(`GET …/codes/usage` · `…/codes/usage-counts`) — 페이지 · 레이아웃 · 프로젝트 모듈을 세고 개인 모듈은 안 센다. */
+/** 공통코드 사용처(`GET …/codes/usage` · `…/codes/usage-counts`) — 페이지 · 프로젝트 모듈을 세고 개인 모듈은 안 센다. */
 import { describe, expect, it } from 'vitest'
 import { createMenuNode, createPage, createProject, signup, withApi } from './helpers'
 
 const bound = (id: string, item: string) => ({ id, type: 'Affix', props: { text: '옛 이름' }, code: { group: 'ORDER_STATUS', item } })
 
 describe('공통코드 사용처', () => {
-  it('페이지 둘 · 레이아웃 · 모듈을 내고 개인 모듈은 안 센다', async () => {
+  it('페이지 둘 · 모듈을 내고 개인 모듈은 안 센다', async () => {
     await withApi(async (ctx) => {
       const owner = await signup(ctx)
       const project = await createProject(ctx, owner.cookie)
@@ -69,10 +69,15 @@ describe('공통코드 사용처', () => {
 
       const usage = await send('GET', `/api/projects/${project.id}/codes/usage?group=ORDER_STATUS`)
       expect(usage.statusCode, usage.body).toBe(200)
-      const hits = usage.json().usage as { nodes: { nodeId: string; name: string }[] }[]
+      const hits = usage.json().usage as { nodes: { nodeId: string; name: string; type: string; trail: string[] }[] }[]
       expect(hits.flatMap((hit) => hit.nodes.map((node) => [node.nodeId, node.name]))).toEqual([
         ['n_live', '새 이름 사이 글자'],
         ['n_gone', '옛 이름 사이 글자'],
+      ])
+      // 같은 이름을 가를 단서 — 타입 · 조상의 표시 이름(페이지 뿌리는 뺀다). 페이지 바로 밑이라 조상이 없다.
+      expect(hits.flatMap((hit) => hit.nodes.map((node) => [node.type, node.trail]))).toEqual([
+        ['Affix', []],
+        ['Affix', []],
       ])
     })
   })

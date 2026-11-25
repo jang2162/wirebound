@@ -931,6 +931,7 @@ export function PageMeta(props: {
         >
           이름 저장
         </button>
+        {titleValue !== state.title && <span className="wb-shell-page-meta-dirty">바뀜</span>}
       </form>
       <MetaNotices field="title" write={title} />
       <PageKind projectId={projectId} pageId={pageId} title={state.title} canEdit />
@@ -975,6 +976,7 @@ export function PageMeta(props: {
         >
           설명 저장
         </button>
+        {descriptionValue !== descriptionServer && <span className="wb-shell-page-meta-dirty">바뀜</span>}
       </form>
       <MetaNotices field="description" write={description} />
     </>

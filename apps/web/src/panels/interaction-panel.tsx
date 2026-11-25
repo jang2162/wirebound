@@ -55,6 +55,7 @@ import {
   describeNode,
   getComponent,
   isolateBidi,
+  nodeRowLabel,
   viewStateName,
   viewStateOrder,
   listInteractionSentences,
@@ -77,6 +78,9 @@ import { walkSafely } from '../edit/safe-walk'
 import { shellIcon } from '../shell/icons'
 import { useEditorStore, useEditorStoreInstance, useOpenDocument } from '../store/use-editor-store'
 import { useLockedBy } from '../store/use-locked-by'
+import { stateShowingNode, useViewState } from '../shell/use-view-state'
+import { useCommentPointing } from '../comments/comment-pointing'
+import { ancestorsOf } from './node-head'
 // 우측 패널의 두 탭이 같은 이유로 같이 꺼진다 — 문장을 두 벌로 두지 않는다.
 import { blockedNotice } from './property-panel'
 import '../catalog-setup'
@@ -167,6 +171,8 @@ export function InteractionPanel(props: {
   // **속성 패널과 같은 값을 같은 자리에서 받는다**(`store/use-locked-by.ts`) — 판정은
   // 스토어의 `lockedBy` 하나이고 여기서 하는 것은 그것을 위젯에 잇는 것뿐이다.
   const lockOf = useLockedBy()
+  const viewState = useViewState(props.pageId)
+  const { reveal } = useCommentPointing()
 
   if (doc === null) {
     return <p className="wb-shell-panel-notice">{NO_PAGE}</p>
@@ -181,6 +187,18 @@ export function InteractionPanel(props: {
    */
   const lock = node === undefined ? null : lockOf(node.id)
   const blocked = lock !== null || !props.canEdit
+  /** 목록 줄의 «그 노드로 가기»(아래 줄 단추의 주석). 남이 잡아 고름이 안 서면 아무것도 안 한다(캔버스 누름과 같은 판정 — 스토어). */
+  const go = (nodeId: string): void => {
+    const verdict = stateShowingNode(doc, nodeId, viewState.state)
+    if (verdict.change) viewState.choose(verdict.state)
+    store.selectNode(nodeId)
+    const state = store.getState()
+    if (state.selectedNodeId !== nodeId) return
+    const selection = state.selectedNodeIds.join('\n')
+    // 화면 상태를 바꿨으면 그 상태의 판이 다 선 뒤(두 프레임)에 들인다 — 먼저 들이면 바뀌는 중의 자리를 재 칸 끝에 못 미친다.
+    if (verdict.change) requestAnimationFrame(() => requestAnimationFrame(() => reveal({ nodeId, selection })))
+    else reveal({ nodeId, selection })
+  }
   const notice = blockedNotice(props.canEdit, lock)
 
   return (
@@ -213,20 +231,44 @@ export function InteractionPanel(props: {
           「설계서 화면 구조」의 그림도 우측에 목록을 보이고, 탭의 쓸모가 *"이 설계서에 어떤 규칙이 걸려
           있는가"*를 훑는 것이기 때문이다. 고른 노드의 줄에는 표시를 단다. */}
       <section className="wb-shell-panel-section" aria-label="이 페이지의 상호작용">
-        <h3 className="wb-shell-panel-subtitle">이 페이지의 상호작용</h3>
+        <h3 className="wb-shell-panel-subtitle">
+          이 페이지의 상호작용
+          {sentences.length > 0 && <span className="wb-shell-interaction-count">{` · ${sentences.length}`}</span>}
+        </h3>
         {sentences.length === 0 ? (
           <p className="wb-shell-panel-notice">{NO_INTERACTIONS}</p>
         ) : (
           <ul className="wb-shell-interaction-list">
-            {sentences.map((item) => (
-              <li
-                key={`${item.nodeId}:${item.index}`}
-                className="wb-shell-interaction-sentence"
-                {...(item.nodeId === selectedNodeId ? { 'aria-current': 'true' as const } : {})}
-              >
-                {item.text}
-              </li>
-            ))}
+            {sentences.map((item) => {
+              const owner = findSafely(doc, item.nodeId)
+              const where = owner === undefined ? [] : ancestorsOf(doc.root, item.nodeId).slice(1)
+              return (
+                <li
+                  key={`${item.nodeId}:${item.index}`}
+                  className="wb-shell-interaction-item"
+                  {...(item.nodeId === selectedNodeId ? { 'aria-current': 'true' as const } : {})}
+                >
+                  {/* **줄을 누르면 그 노드를 고르고 캔버스로 데려간다** — 코멘트 묶음 머리 단추와 같은 길(`./comment-panel.tsx` 의 `pickNode`): 숨은
+                      상태면 보이는 상태로 바꾸고, 고른 뒤 펼침(`reveal`)이 캔버스 칸 안으로 굴린다. 탭은 안 옮긴다 — 위에 그 노드의 규칙이 선다. */}
+                  <button type="button" className="wb-shell-interaction-row" onClick={() => go(item.nodeId)}>
+                    {owner !== undefined && (
+                      <span className="wb-shell-interaction-who">
+                        <span className="wb-shell-node-head-type">{String(owner.type)}</span>
+                        <bdi className="wb-shell-interaction-who-name">
+                          {nodeRowLabel(owner, codes).slice(String(owner.type).length).trim()}
+                        </bdi>
+                      </span>
+                    )}
+                    <span className="wb-shell-interaction-sentence">{item.text}</span>
+                    {where.length > 0 && (
+                      <span className="wb-shell-interaction-where">
+                        <bdi>{where.map((node) => nodeRowLabel(node, codes)).join(' › ')}</bdi>
+                      </span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>

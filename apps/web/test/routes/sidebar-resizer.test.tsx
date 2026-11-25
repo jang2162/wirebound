@@ -35,7 +35,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  PANEL_WIDTH_DEFAULT,
+  panelWidthDefault,
   PANEL_WIDTH_MIN,
   REGION_MIN_HEIGHT,
   SIDE_WIDTH_DEFAULT,
@@ -190,7 +190,7 @@ describe('폭을 어디에 싣는가', () => {
     // 넓은 화면의 폭이 영구히 깎인다(브라우저에서 1440→900→1440으로 왕복해 확인했다).
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ sideWidth: 1200 }))
     await openPage(DOC)
-    expect(sidebar().style.width).toBe(`${sideWidthMax(window.innerWidth, PANEL_WIDTH_DEFAULT)}px`)
+    expect(sidebar().style.width).toBe(`${sideWidthMax(window.innerWidth, panelWidthDefault(window.innerWidth))}px`)
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ sideWidth: 1200 })
   })
 
@@ -253,7 +253,7 @@ describe('사람이 정한 값이 남는다', () => {
     fireEvent.pointerMove(window, { clientX: 9000, clientY: 400 })
     fireEvent.pointerUp(window)
 
-    const max = sideWidthMax(window.innerWidth, PANEL_WIDTH_DEFAULT)
+    const max = sideWidthMax(window.innerWidth, panelWidthDefault(window.innerWidth))
     await waitFor(() => expect(sidebar().style.width).toBe(`${max}px`))
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ sideWidth: max })
   })
@@ -291,9 +291,9 @@ describe('사람이 정한 값이 남는다', () => {
  * 가 넓힌다(`ShellResizer`의 `reversed`). 창은 1184 다(`WINDOW_WIDTH`) — 좌측 기본 264 에서 우측의 최대는 1184 − 16 − 480 − 264 = 424.
  */
 describe('우측 폭', () => {
-  it('기본은 300 이고 우측 패널의 인라인 `width`다', async () => {
+  it('기본은 창에 따른 값(이 창에서 300)이고 우측 패널의 인라인 `width`다', async () => {
     await openPage(DOC)
-    expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT}px`)
+    expect(panel().style.width).toBe(`${panelWidthDefault(window.innerWidth)}px`)
     const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
     expect(handle.getAttribute('aria-valuemin')).toBe(String(PANEL_WIDTH_MIN))
     expect(handle.getAttribute('aria-valuemax')).toBe(String(panelWidthMax(window.innerWidth, SIDE_WIDTH_DEFAULT)))
@@ -306,15 +306,15 @@ describe('우측 폭', () => {
     fireEvent.pointerMove(window, { clientX: 640, clientY: 400 })
     fireEvent.pointerUp(window)
 
-    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT + 60}px`))
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ panelWidth: PANEL_WIDTH_DEFAULT + 60 })
+    await waitFor(() => expect(panel().style.width).toBe(`${panelWidthDefault(window.innerWidth) + 60}px`))
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')).toEqual({ panelWidth: panelWidthDefault(window.innerWidth) + 60 })
   })
 
   it('`ArrowLeft`가 한 칸 넓히고 `ArrowRight`가 한 칸 좁힌다 — 최소 아래로는 안 간다', async () => {
     await openPage(DOC)
     const handle = screen.getByRole('separator', { name: '우측 패널 폭' })
     fireEvent.keyDown(handle, { key: 'ArrowLeft' })
-    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT + 16}px`))
+    await waitFor(() => expect(panel().style.width).toBe(`${panelWidthDefault(window.innerWidth) + 16}px`))
     fireEvent.keyDown(handle, { key: 'ArrowRight' })
     fireEvent.keyDown(handle, { key: 'ArrowRight' })
     await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_MIN}px`))
@@ -326,7 +326,7 @@ describe('우측 폭', () => {
     fireEvent.keyDown(handle, { key: 'End' })
     await waitFor(() => expect(panel().style.width).toBe(`${panelWidthMax(window.innerWidth, SIDE_WIDTH_DEFAULT)}px`))
     fireEvent.doubleClick(handle)
-    await waitFor(() => expect(panel().style.width).toBe(`${PANEL_WIDTH_DEFAULT}px`))
+    await waitFor(() => expect(panel().style.width).toBe(`${panelWidthDefault(window.innerWidth)}px`))
   })
 
   /** 우측을 넓힌 채 좌측을 끝까지 민다 — 좌측의 최대가 우측의 **지금 폭**을 뺀다(옛 «우측 300» 가정이면 캔버스 몫이 준다). */
