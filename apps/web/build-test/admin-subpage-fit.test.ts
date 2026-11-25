@@ -5,7 +5,7 @@
  * - 브레드크럼브 · 제목 — 끊을 자리 없는 85 자 이름이 본문 칸 안에서 꺾인다. 글자 노드 `Range` 의 오른끝을 본문 칸 끝 · 창 끝과 견준다(요소 상자는
  *   제자리에 선 채 글자만 넘친다).
  * - GNB — 메뉴가 한 줄을 넘치면 줄을 바꿔 다 보인다. 창 1280 · 1024 · 720(PPTX 캡처 폭) · 390 × 메뉴 7 · 12 · 긴 이름, 고른 메뉴는 늘 끝이다. 링크마다
- *   가운데의 `elementFromPoint` 가 그 링크다(잘리거나 덮이거나 창 밖이면 아니다).
+ *   가운데의 `elementFromPoint` 가 그 링크다(잘리거나 덮이거나 창 밖이면 아니다). 줄보다 짧은 이름은 한 줄로 선다(짓눌려 꺾이지 않는다).
  * - 짧은 페이지 — 틀이 그리는 판의 높이를 채운다(LNB 바탕이 창 끝까지). 높이가 내용을 따르는 두 판에서는 그 채움이 높이를 안 키운다: 캔버스 · 미리보기
  *   iframe(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight` — 최소 높이로 줄여 잰다)과 PPTX 캡처(`apps/api/src/services/screen-render-chromium.ts`
  *   의 뷰포트 720×552 · `PAGE_SIZE`).
@@ -186,6 +186,16 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
         const gnb = document.querySelector(`${frame} > [data-wb-part="gnb"]`)!
         const links = [...gnb.querySelectorAll('[data-wb-part="gnbLink"]')]
         const hidden: string[] = []
+        // 이름이 줄보다 짧은 메뉴는 한 줄로 선다 — 줄을 안 바꾸고 항목을 짓눌러 다 보이게 하면 글이 꺾여 여러 줄이 된다.
+        const squeezed: string[] = []
+        for (const link of links) {
+          const text = link.textContent ?? ''
+          if (!text.includes('Administrationconsole')) {
+            const range = document.createRange()
+            range.selectNodeContents(link)
+            if (new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size > 1) squeezed.push(text.slice(0, 12))
+          }
+        }
         for (const link of links) {
           const r = link.getBoundingClientRect()
           const x = r.left + r.width / 2
@@ -203,6 +213,7 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
           barInside: c !== undefined && c.bottom <= g.bottom + 0.5,
           gnbHeight: g.height,
           hidden,
+          squeezed,
           doc: document.documentElement.scrollWidth <= window.innerWidth,
         }
       }, FRAME)
@@ -210,7 +221,7 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
       expect(got.chosenLast).toBe(true)
       expect(got.barInside).toBe(true)
       expect(got.gnbHeight).toBeGreaterThanOrEqual(60)
-      expect({ hidden: got.hidden, doc: got.doc }).toEqual({ hidden: [], doc: true })
+      expect({ hidden: got.hidden, squeezed: got.squeezed, doc: got.doc }).toEqual({ hidden: [], squeezed: [], doc: true })
     } finally {
       await tab.close()
     }
