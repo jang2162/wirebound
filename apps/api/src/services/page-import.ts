@@ -168,7 +168,7 @@ export async function importPage(db: DbHandle, input: PageImportInput): Promise<
           description,
           // **빈 문서로 만든다** — 문서는 아래 `applyEdit`이 쓴다. `POST .../pages`가
           // 만드는 것과 같은 모양이라, 이 가져오기의 **역(inverse)이 빈 페이지로 되돌린다.**
-          schema: { version: CURRENT_DOCUMENT_VERSION, root: { id: createNodeId(), type: 'Page', children: [] } },
+          schema: { version: CURRENT_DOCUMENT_VERSION, layout: 'blank', root: { id: createNodeId(), type: 'Page', children: [] } },
           schemaVersion: CURRENT_DOCUMENT_VERSION,
         })
       } catch (error) {

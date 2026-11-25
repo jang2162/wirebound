@@ -68,17 +68,8 @@ import { createRoot } from 'react-dom/client'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { mountExportDocument } from '../src/browser/mount'
 import { exportBundle } from '../src/bundle/index'
-import { describeTree, normalizeStyle } from '../test-support/dom-compare'
-import {
-  brokenFixture,
-  broadFixture,
-  EMPTY_MANIFEST,
-  markedTheme,
-  popupFixture,
-  slotFixture,
-  stateFixture,
-  typesIn,
-} from '../test-support/fixtures'
+import { describeTree } from '../test-support/dom-compare'
+import { brokenFixture, broadFixture, EMPTY_MANIFEST, markedTheme, popupFixture, stateFixture, typesIn } from '../test-support/fixtures'
 
 installCatalog()
 
@@ -121,7 +112,6 @@ function bundleTree(document_: PageDocument, theme: ThemeDefinition | undefined)
 /** 이 파일이 견주는 문서 전부. 픽스처마다 성질이 다르다 — 근거는 각 함수의 머리말에 있다. */
 const FIXTURES = {
   넓게: broadFixture,
-  Slot: slotFixture,
   폴백: brokenFixture,
   상태: stateFixture,
   팝업: popupFixture,
@@ -304,15 +294,6 @@ describe('무엇을 덮었나 (문서 하나로 재지 마라)', () => {
     expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual([])
   })
 
-  /**
-   * **`Slot`을 가른 것이 편의가 아니라 강제라는 근거다.** 이 이슈가 사라지면(설계서
-   * 「레이아웃」이 바뀌면) 픽스처를 하나로 합쳐야 하고, 그때 이 케이스가 먼저 죽어 알려 준다.
-   */
-  it('Slot은 페이지 문서에 둘 수 없다 — 그래서 픽스처가 갈려 있다', () => {
-    const errors = validatePage(slotFixture()).filter((issue) => issue.severity === 'error')
-    expect(errors.map((issue) => `${issue.path}: ${issue.message}`)).toEqual(['/root: 페이지에는 Slot을 둘 수 없습니다 (1개 발견)'])
-  })
-
   /** 폴백 픽스처가 실제로 폴백을 그리는지. 안 그리면 아래 견주기가 그 상자를 안 재는 것이다. */
   it('폴백 픽스처가 폴백 상자를 그린다', () => {
     const { errors } = exportBundle({ pages: [{ title: '깨진 문서', document: brokenFixture() }], runtimeJs: '/* runtime */' })
@@ -367,13 +348,11 @@ describe('화면과 번들이 같은 DOM을 낸다', () => {
    * | 픽스처 | 서로 다른 DOM | 왜 |
    * |---|---|---|
    * | 넓게 | 둘 | `marked` 의 뷰(`Button` · `Card`)와 `Section` 의 variant 선언이 문서에 닿는다 |
-   * | Slot | 하나 | `Page` · `Slot` 뿐이라 `marked` 가 바꾸는 것이 없다 |
    * | 폴백 | 하나 | 폴백 상자는 테마를 안 탄다 — 렌더러가 뷰를 고르기 전에 멈춘 자리다 |
    * | 상태 | 둘 | 기본 가지의 `Button`에 `marked` 의 뷰가 닿는다 — 영역 · 가지는 테마를 안 탄다 |
    */
   const DISTINCT_SHAPES: [fixture: keyof typeof FIXTURES, count: number][] = [
     ['넓게', 2],
-    ['Slot', 1],
     ['폴백', 1],
     ['상태', 2],
   ]

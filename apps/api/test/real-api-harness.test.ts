@@ -41,7 +41,6 @@ const CLEARED_TABLES = [
   'menu_nodes',
   'pages',
   'revisions',
-  'layouts',
   'comments',
   'snapshots',
   'modules',

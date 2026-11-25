@@ -64,7 +64,6 @@ export interface ViewProps<P extends Record<string, unknown> = Record<string, un
    * 그리드 뷰가 «행» 구역의 행 props · 칸으로 배치를 셈한다(`gridLayout`). 구역을 그대로 두는 뷰는 `zones` 를 `<Zone>` 으로 둔다.
    */
   zoneItems: Readonly<Record<string, readonly ViewItem[]>>
-  slot: ReactNode
   /**
    * 값 칸의 입력 조각이면 그 필드의 이름과 필수 — 렌더러가 `Field` 몸통의 입력 조각에만 싣는다(아니면 없다). 입력 칸만 훑는 보조 기술은 묶음
    * (`group`)의 이름을 지나지 않으므로 조각 뷰는 이것을 제 접근 이름 · `aria-required` 로 편다(SDK 기본 뷰가 그렇게 한다).

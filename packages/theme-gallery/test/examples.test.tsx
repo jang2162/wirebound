@@ -6,14 +6,13 @@ import {
   getComponent,
   installCatalog,
   pageTargetKey,
-  validateLayout,
   validatePage,
   walkNodes,
-  type AnyDocument,
+  type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
 import { defineTheme } from '@wirebound/theme-sdk'
-import { EXAMPLE_LAYOUT, EXAMPLE_PAGES, EXAMPLE_POPUPS, ThemeExamples, type ExamplePageId } from '@wirebound/theme-gallery'
+import { EXAMPLE_PAGES, EXAMPLE_POPUPS, ThemeExamples, type ExamplePageId } from '@wirebound/theme-gallery'
 
 beforeAll(() => installCatalog())
 afterEach(() => {
@@ -22,12 +21,12 @@ afterEach(() => {
 })
 
 const theme = defineTheme({ manifest: { id: 't', name: 't', version: '1.0.0', sdk: '^1.0.0', tokens: { items: {} } }, views: {} })
-const docs = (): AnyDocument[] => [EXAMPLE_LAYOUT, ...EXAMPLE_PAGES.map((p) => p.document), ...EXAMPLE_POPUPS.map((p) => p.document)]
-const nodesOf = (doc: AnyDocument): WbNode[] => [...walkNodes(doc.root)].map((entry) => entry.node)
+const docs = (): PageDocument[] => [...EXAMPLE_PAGES.map((p) => p.document), ...EXAMPLE_POPUPS.map((p) => p.document)]
+const nodesOf = (doc: PageDocument): WbNode[] => [...walkNodes(doc.root)].map((entry) => entry.node)
 const errors = (issues: { severity: string }[]) => issues.filter((issue) => issue.severity === 'error')
 
 /** 문서 안의 페이지 이음 — `[노드 id, 액션 종류, 타겟]`. */
-function links(doc: AnyDocument): [string, string, string][] {
+function links(doc: PageDocument): [string, string, string][] {
   const out: [string, string, string][] = []
   for (const node of nodesOf(doc))
     for (const interaction of node.interactions ?? [])
@@ -37,7 +36,7 @@ function links(doc: AnyDocument): [string, string, string][] {
   return out
 }
 const pageOf = (target: string) => EXAMPLE_PAGES.find((p) => pageTargetKey(p.target) === pageTargetKey(target))?.id
-const actionsOf = (doc: AnyDocument, id: string) =>
+const actionsOf = (doc: PageDocument, id: string) =>
   nodesOf(doc)
     .find((n) => n.id === id)
     ?.interactions?.flatMap((i) => i.actions) ?? []
@@ -55,9 +54,12 @@ const click = (container: HTMLElement, id: string) => {
 const popupsIn = (container: HTMLElement) => container.querySelectorAll('[data-wb-popup-frame]').length
 
 describe('예제 문서', () => {
-  it('문서가 검증을 지나고 레이아웃의 Slot 은 하나다', () => {
-    expect(errors(validateLayout(EXAMPLE_LAYOUT))).toEqual([])
-    expect(nodesOf(EXAMPLE_LAYOUT).filter((n) => n.type === 'Slot')).toHaveLength(1)
+  it('문서가 검증을 지나고 장마다 같은 틀(왼쪽 메뉴)을 든다', () => {
+    for (const page of EXAMPLE_PAGES)
+      expect(
+        nodesOf(page.document).filter((n) => n.id === 'ex-l-shell'),
+        page.id,
+      ).toHaveLength(1)
     for (const page of EXAMPLE_PAGES) expect(errors(validatePage(page.document)), page.id).toEqual([])
     for (const one of EXAMPLE_POPUPS) {
       expect(errors(validatePage(one.document)), one.target).toEqual([])
@@ -73,8 +75,14 @@ describe('예제 문서', () => {
     ])
     expect(EXAMPLE_POPUPS.map((p) => (p.document.root.props as { title?: string }).title)).toEqual(['주문 삭제'])
   })
-  it('노드 id 가 문서들 사이에 겹치지 않는다 — 레이아웃과 장이 한 화면에 선다', () => {
-    const ids = docs().flatMap((doc) => nodesOf(doc).map((n) => n.id))
+  it('노드 id 가 문서 안에서 겹치지 않고, 틀(ex-l-) 밖의 id 는 문서들 사이에도 겹치지 않는다', () => {
+    for (const doc of docs()) {
+      const own = nodesOf(doc).map((n) => n.id)
+      expect(new Set(own).size, doc.root.id).toBe(own.length)
+    }
+    const ids = docs()
+      .flatMap((doc) => nodesOf(doc).map((n) => n.id))
+      .filter((id) => !id.startsWith('ex-l-'))
     expect(new Set(ids).size).toBe(ids.length)
   })
   it('다섯 그룹이 다 실린다', () => {
@@ -94,7 +102,7 @@ describe('예제 문서', () => {
     expect(rowLinks.length).toBeGreaterThan(0)
     expect(rowLinks.every(([, type, target]) => type === 'navigate' && pageOf(target) === 'order')).toBe(true)
     const order = docOf('order')
-    const navTo = (doc: AnyDocument, id: string) => actionsOf(doc, id).flatMap((a) => (a.type === 'navigate' ? [pageOf(a.target)] : []))
+    const navTo = (doc: PageDocument, id: string) => actionsOf(doc, id).flatMap((a) => (a.type === 'navigate' ? [pageOf(a.target)] : []))
     // 상세 «수정» → 등록 · «삭제» → 팝업
     expect(navTo(order, 'ex-od-edit')).toEqual(['order-form'])
     expect(actionsOf(order, 'ex-od-del')).toEqual([{ type: 'openModal', target: EXAMPLE_POPUPS[0]!.target }])
@@ -106,7 +114,7 @@ describe('예제 문서', () => {
     expect(navTo(popup, 'ex-pd-ok')).toEqual(['orders'])
     expect(actionsOf(popup, 'ex-pd-cancel')).toEqual([{ type: 'closeModal' }])
     // 왼쪽 메뉴 → 대시보드 · 목록 · 등록
-    expect(['ex-l-go-dash', 'ex-l-go-orders', 'ex-l-go-new'].flatMap((id) => navTo(EXAMPLE_LAYOUT, id))).toEqual([
+    expect(['ex-l-go-dash', 'ex-l-go-orders', 'ex-l-go-new'].flatMap((id) => navTo(docOf('dashboard'), id))).toEqual([
       'dashboard',
       'orders',
       'order-form',
@@ -166,10 +174,10 @@ describe('ThemeExamples', () => {
     expect(popupsIn(container)).toBe(0)
     expect(container.querySelector('[data-wb-examples]')!.getAttribute('data-wb-examples')).toBe('dashboard')
   })
-  it('레이아웃과 장을 한 화면에 그린다 — Slot 자리에 장', () => {
+  it('틀과 장을 한 화면에 그린다 — 틀의 가운데 칸에 장 내용', () => {
     const { container } = render(<Harness start="orders" onChange={() => {}} />)
-    const slotHost = container.querySelector('[data-wb-id="ex-l-main"]')!
-    expect(slotHost.querySelector('[data-wb-id="ex-o"]')).not.toBeNull()
+    const main = container.querySelector('[data-wb-id="ex-o"] [data-wb-id="ex-l-main"]')!
+    expect(main.querySelector('[data-wb-id^="ex-o-"]')).not.toBeNull()
     expect(container.querySelector('[data-wb-error]')).toBeNull()
   })
 })

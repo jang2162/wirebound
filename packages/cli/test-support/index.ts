@@ -14,7 +14,6 @@ export { createFakeIo, stub, type FakeIo, type FakeIoOptions, type RecordedReque
 export {
   page,
   snapshotPayload,
-  LAYOUT,
   MENU_ADMIN,
   MENU_MARKETING,
   MENU_MEMBER,

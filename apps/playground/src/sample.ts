@@ -1,42 +1,4 @@
-import type { LayoutDocument, PageDocument } from '@wirebound/schema'
-
-export const sampleLayout: LayoutDocument = {
-  version: 1,
-  root: {
-    id: 'n_lay000000001',
-    type: 'Page',
-    children: [
-      {
-        id: 'n_lay000000002',
-        type: 'Flex',
-        props: { direction: 'row', align: 'center', justify: 'between' },
-        children: [
-          { id: 'n_lay000000003', type: 'Text', props: { content: 'ACME 관리자', role: 'h3' } },
-          { id: 'n_lay000000004', type: 'Button', variant: 'ghost', props: { label: '로그아웃' } },
-        ],
-      },
-      { id: 'n_lay000000005', type: 'Divider' },
-      {
-        id: 'n_lay000000006',
-        type: 'Flex',
-        props: { direction: 'row', align: 'stretch' },
-        children: [
-          {
-            id: 'n_lay000000007',
-            type: 'Tree',
-            props: {
-              items: [
-                { label: '회원 관리', open: true, children: [{ label: '권한 관리' }] },
-                { label: '통계', children: [{ label: '일별 접속' }] },
-              ],
-            },
-          },
-          { id: 'n_lay000000008', type: 'Slot' },
-        ],
-      },
-    ],
-  },
-}
+import type { PageDocument } from '@wirebound/schema'
 
 export const samplePage: PageDocument = {
   version: 1,

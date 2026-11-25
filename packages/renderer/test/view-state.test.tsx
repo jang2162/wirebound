@@ -6,8 +6,8 @@
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { installCatalog, type LayoutDocument, type NodeVisibility, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
-import { renderComposed, renderDocument, renderNode, type NodeRenderError } from '@wirebound/renderer'
+import { installCatalog, type NodeVisibility, type PageDocument, type ViewState, type WbNode } from '@wirebound/schema'
+import { renderDocument, renderNode, type NodeRenderError } from '@wirebound/renderer'
 
 beforeAll(() => {
   installCatalog()
@@ -109,22 +109,5 @@ describe('상태마다 숨은 노드를 안 그린다', () => {
       'n_in',
     ])
     expect(ids(renderNode({ id: 'n_wrap', type: 'Section', children: [card] }, { viewState: 's_admin' }))).toEqual(['n_wrap'])
-  })
-
-  it('레이아웃은 페이지의 상태를 따르지 않는다 — 레이아웃에는 상태 목록이 없어 기본으로 판정한다', () => {
-    const layout: LayoutDocument = {
-      version: 2,
-      root: {
-        id: 'l_root',
-        type: 'Page',
-        children: [
-          text('l_base', { mode: 'only', states: ['default'] }),
-          text('l_admin', { mode: 'only', states: ['s_admin'] }),
-          { id: 'l_slot', type: 'Slot' },
-        ],
-      },
-    }
-    const ids = drawn(renderComposed(layout, doc(TREE), { viewState: 's_admin' })).ids
-    expect(ids).toEqual(['l_root', 'l_base', 'l_slot', 'n_root', 'n_out', 'n_login', 'n_card', 'n_in'])
   })
 })

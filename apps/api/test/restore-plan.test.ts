@@ -18,7 +18,6 @@ const PAGE_A = '44444444-4444-4444-8444-444444444444'
 const PAGE_B = '55555555-5555-4555-8555-555555555555'
 const COMMENT_A = '66666666-6666-4666-8666-666666666666'
 const COMMENT_B = '77777777-7777-4777-8777-777777777777'
-const LAYOUT_A = '88888888-8888-4888-8888-888888888888'
 const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 /**
@@ -29,6 +28,8 @@ const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 function doc(text: string, version = CURRENT_DOCUMENT_VERSION): PageDocument {
   return {
     version,
+    // 판 7 부터 레이아웃이 문서에 있다(봉투가 묻는다) — 옛 판 문서는 키가 없다.
+    ...(version >= 7 ? { layout: 'blank' } : {}),
     root: { id: 'n_root', type: 'Page', children: [{ id: nodeIdFor(text), type: 'Section', props: {} }] },
   } as PageDocument
 }
@@ -44,14 +45,13 @@ function payload(over: Partial<SnapshotPayload> = {}): SnapshotPayload {
     capturedAt: '2026-08-12T00:00:00.000Z',
     menu: [],
     pages: [],
-    layouts: [],
     comments: [],
     ...over,
   }
 }
 
 function current(over: Partial<RestoreCurrentState> = {}): RestoreCurrentState {
-  return { menu: [], pages: [], layouts: [], comments: [], ...over }
+  return { menu: [], pages: [], comments: [], ...over }
 }
 
 function menuNode(id: string, over: Partial<{ parentId: string | null; title: string; sortOrder: number }> = {}) {
@@ -250,22 +250,6 @@ describe('메뉴·페이지·코멘트의 변경 판정', () => {
       comments: [{ id: COMMENT_A, pageId: PAGE_A, body: '지금' }],
     })
     expect(kinds(planOf(p, c).steps)).toEqual(['update-comment'])
-  })
-})
-
-describe('레이아웃', () => {
-  it('레이아웃 id 집합이 다르면 계획을 내지 않는다 (409)', () => {
-    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', schema: doc('x') as never }] })
-    const c = current({ layouts: [] })
-
-    const outcome = planRestore(p, c)
-    expect(outcome.kind).toBe('layout-mismatch')
-  })
-
-  it('레이아웃 id 집합이 같으면 레이아웃은 아무 단계도 내지 않는다', () => {
-    const p = payload({ layouts: [{ id: LAYOUT_A, name: 'L', schema: doc('x') as never }] })
-    const c = current({ layouts: [{ id: LAYOUT_A }] })
-    expect(kinds(planOf(p, c).steps)).toEqual([])
   })
 })
 

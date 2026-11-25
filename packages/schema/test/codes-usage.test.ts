@@ -39,7 +39,7 @@ const sources: UsageSource[] = [
       },
     ],
   },
-  { kind: 'layout', id: 'l1', title: '기본 틀', nodes: [{ id: 'n_lroot', type: 'Page', children: [affix('n_l', 'WAIT')] }] },
+  { kind: 'page', id: 'l1', title: '셋째 쪽', nodes: [{ id: 'n_lroot', type: 'Page', children: [affix('n_l', 'WAIT')] }] },
   {
     kind: 'module',
     id: 'm1',
@@ -50,12 +50,12 @@ const sources: UsageSource[] = [
 ]
 
 describe('codeUsage', () => {
-  it('그룹 — 페이지 둘 · 레이아웃 · 모듈 · 구역 · 숨은 노드까지', () => {
+  it('그룹 — 페이지 셋 · 모듈 · 구역 · 숨은 노드까지', () => {
     const hits = codeUsage(sources, 'ORDER_STATUS')
     expect(hits.map((hit) => [hit.kind, hit.id, hit.nodes.map((n) => n.nodeId)])).toEqual([
       ['page', 'p1', ['n_a', 'n_hidden', 'n_sel', 'n_sel2']],
       ['page', 'p2', ['n_inzone']],
-      ['layout', 'l1', ['n_l']],
+      ['page', 'l1', ['n_l']],
       ['module', 'm1', ['n_m']],
     ])
   })

@@ -167,7 +167,11 @@ describe('옛 문서 — 이미 저장된 중첩 Page', () => {
       const rewritten = await restore()
       expect(rewritten.statusCode, rewritten.body).toBe(200)
       // 복원은 옛 판 문서를 지금 판으로 옮겨 쓴다(`services/restore.ts` 의 `currentVersionPages`) — 중첩 Page 는 그대로다.
-      expect((await openPage(ctx, fx)).body.schema).toEqual({ ...oldDocument(fx.rootId), version: CURRENT_DOCUMENT_VERSION })
+      expect((await openPage(ctx, fx)).body.schema).toEqual({
+        ...oldDocument(fx.rootId),
+        version: CURRENT_DOCUMENT_VERSION,
+        layout: 'blank',
+      })
 
       // create — 페이지를 지운 뒤 되살린다.
       const gone = await ctx.app.inject({
@@ -180,7 +184,11 @@ describe('옛 문서 — 이미 저장된 중첩 Page', () => {
       expect(created.statusCode, created.body).toBe(200)
       expect((created.json() as { summary: { pages: { created: number } } }).summary.pages.created).toBe(1)
       // 복원은 옛 판 문서를 지금 판으로 옮겨 쓴다(`services/restore.ts` 의 `currentVersionPages`) — 중첩 Page 는 그대로다.
-      expect((await openPage(ctx, fx)).body.schema).toEqual({ ...oldDocument(fx.rootId), version: CURRENT_DOCUMENT_VERSION })
+      expect((await openPage(ctx, fx)).body.schema).toEqual({
+        ...oldDocument(fx.rootId),
+        version: CURRENT_DOCUMENT_VERSION,
+        layout: 'blank',
+      })
 
       // 되살린 뒤의 무관한 편집도 된다.
       const after = await patchOps(ctx, fx, [{ op: 'replace', path: '/root/children/0/props', value: { content: '되살린 뒤' } }])

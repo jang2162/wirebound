@@ -9,7 +9,7 @@
  * 예외는 `PageDetail.schema`다. 문서 스키마는 서버가 아니라 `@wirebound/schema`가
  * 소유하는 단일 진실이므로 그 타입을 그대로 쓴다.
  */
-import type { PageDocument, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
+import type { PageDocument, PageLayout, PatchOp, ValidationIssue, ViewState, WbNode } from '@wirebound/schema'
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 
 /** 프로젝트 멤버의 역할. `owner` > `editor` > `viewer`(README "권한(역할)"). */
@@ -213,7 +213,13 @@ export interface TreePage {
    */
   viewStates?: ViewState[]
   /**
-   * 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(트리 응답 — `apps/api/src/services/menu-tree.ts` 의 `TreePage`). 메뉴 트리 줄의 «팝업» 표지 ·
+   * 페이지 레이아웃(트리 응답 — `apps/api/src/services/menu-tree.ts` 의 `TreePage`). 서브페이지 틀의 내비(`@wirebound/schema` 의 `buildLayoutNav`)가
+   * 쓴다. `http-client.ts` 의 트리 읽기는 늘 채운다 — 이 칸이 없는 응답(레이아웃을 모르는 서버)은 `kind` 에서 짓는다. 가짜 api 의 트리처럼 채우지
+   * 않은 값은 빈 레이아웃으로 읽는다.
+   */
+  layout?: PageLayout
+  /**
+   * 페이지의 종류 — 팝업 레이아웃이면 `popup`(트리 응답 — `apps/api/src/services/menu-tree.ts` 의 `TreePage`). 메뉴 트리 줄의 «팝업» 표지 ·
    * 상호작용 탭의 대상 고르개가 닫힌 페이지에서 쓴다. 없으면 화면 페이지로 읽는다.
    */
   kind?: 'page' | 'popup'
@@ -588,7 +594,7 @@ export interface ExportPagePlan {
    * `페이지 경로` 칸에 그대로 적는다.
    */
   target: string
-  /** 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`. 없으면 화면(옛 서버). */
+  /** 페이지의 종류 — 문서의 레이아웃이 `popup` 이면 `popup`(서버의 `pageKindOf`). 없으면 화면(옛 서버). */
   kind?: 'page' | 'popup'
 }
 

@@ -114,7 +114,7 @@ const THROWING_DOC = pageDoc({
  *   `props: null`인 노드를 담은 응답이 `getPage`를 그대로 지난다 — `api/http-client.ts`).
  *   편집의 낙관적 적용은 검증 전 문서를 스토어에 싣는다 — 두 번째 경로가 될 수 있다.
  *
- * 둘 다 `editor`가 비지 않은 타입이어야 뜻이 있다. `Page`·`Slot`처럼 `editor`가 빈
+ * 둘 다 `editor`가 비지 않은 타입이어야 뜻이 있다. `Page`처럼 `editor`가 빈
  * 컴포넌트를 고르면 `readProp`이 한 번도 불리지 않는다.
  *
  * **이 둘이 없어도 하중이 0은 아니다.** `?.`를 걷어내면

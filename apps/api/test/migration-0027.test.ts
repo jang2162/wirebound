@@ -194,7 +194,6 @@ describe('0027 — 걷은 시스템 테마', () => {
       capturedAt: new Date().toISOString(),
       menu: [],
       pages: [],
-      layouts: [],
       comments: [],
       theme: { themeId: 'system-saas-marketing', version: '1.0.0', tokens: { 'commerce.only': '#123456' } },
     }

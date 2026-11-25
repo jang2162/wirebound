@@ -1,20 +1,20 @@
 export const PACKAGE_NAME = '@wirebound/schema'
 
 export type {
-  AnyDocument,
   CodeRef,
   Interaction,
   InteractionAction,
   InteractionTrigger,
-  LayoutDocument,
   NodeVisibility,
   PageDocument,
+  PageLayout,
   ViewState,
   WbNode,
 } from './node'
 export {
   DEFAULT_VIEW_STATE,
   NODE_ALIAS_MAX,
+  PAGE_LAYOUTS,
   VIEW_STATE_DEPTH_MAX,
   VIEW_STATE_DESCRIPTION_MAX,
   VIEW_STATE_NAME_MAX,
@@ -73,7 +73,6 @@ export { MODULE_NAME_MAX, countModuleNodes, moduleNodesForSave } from './module/
 export type { IssueSeverity, ValidationCode, ValidationIssue } from './validate'
 export { ISSUE_SEVERITY, partitionIssues } from './validate'
 export {
-  assertValidLayout,
   assertValidPage,
   checkViewStateRemoval,
   unknownVisibilityStates,
@@ -81,7 +80,6 @@ export {
   isRootType,
   nestedPagesUnderRoot,
   ROOT_TYPES,
-  validateLayout,
   validatePage,
 } from './validate'
 
@@ -89,6 +87,7 @@ export {
   DocumentEnvelopeSchema,
   InteractionSchema,
   NODE_ID_PATTERN,
+  PAGE_LAYOUT_SINCE_VERSION,
   PageEnvelopeSchema,
   ViewStatesSchema,
   VisibilitySchema,
@@ -173,7 +172,10 @@ export type { Migration } from './migrate'
 export { CURRENT_DOCUMENT_VERSION, MIGRATIONS, migrateDocument, migratePageDocument } from './migrate'
 export { cloneJsonValue } from './clone'
 export type { PageKind } from './new-page'
-export { newPageDocument, PAGE_KINDS, pageKindOf } from './new-page'
+export { newPageDocument, PAGE_KINDS, pageKindOf, pageLayoutOf } from './new-page'
+export { legacyPageLayout, liftPageLayout } from './migrate-page-layout'
+export type { LayoutNav, LayoutNavItem, LayoutNavMenu, LayoutNavPage } from './layout-nav'
+export { buildLayoutNav } from './layout-nav'
 export type { LiftResult } from './migrate-document'
 export { MigrationError, liftStateRegions } from './migrate-document'
 export type { LiftedTreeItem, LiftTreeDocumentResult, LiftTreeResult } from './migrate-tree-items'

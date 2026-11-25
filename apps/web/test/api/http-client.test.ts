@@ -150,7 +150,7 @@ const treeNode: TreeMenuNode = {
   id: 'm1',
   title: '회원관리',
   sortOrder: 0,
-  pages: [{ id: 'pg1', title: '목록', sortOrder: 0 }],
+  pages: [{ id: 'pg1', title: '목록', sortOrder: 0, layout: 'subpage', kind: 'page' }],
   children: [{ id: 'm2', title: '권한', sortOrder: 0, pages: [], children: [] }],
 }
 /** `PATCH .../ops` 성공 응답. `inverse`는 **서버가** 만든 것이다(설계서 「정방향 흐름」). */
@@ -1418,6 +1418,48 @@ describe('createHttpClient', () => {
     const result = await client.getTree('p1')
 
     expect(result).toEqual([treeNode])
+  })
+
+  it('트리 읽기는 레이아웃이 없는 페이지(레이아웃을 모르는 서버)에 kind 에서 지은 layout 을 채운다 — 둘 다(getTree · readTree)', async () => {
+    const page = (id: string, extra: Record<string, unknown>) => ({ id, title: id, sortOrder: 0, ...extra })
+    const menu = [
+      {
+        id: 'm1',
+        title: '메뉴',
+        sortOrder: 0,
+        pages: [page('a', {}), page('b', { kind: 'popup' }), page('c', { kind: 'page', layout: 'subpage' })],
+        children: [],
+      },
+    ]
+    const layouts = (read: TreeMenuNode[]) => read[0]!.pages.map((p) => p.layout)
+    expect(layouts(await createHttpClient(stubFetch(jsonResponse(200, { menu })).fetchImpl).getTree('p1'))).toEqual([
+      'blank',
+      'popup',
+      'subpage',
+    ])
+    expect(layouts((await createHttpClient(stubFetch(jsonResponse(200, { menu, rev: 0 })).fetchImpl).readTree('p1')).menu)).toEqual([
+      'blank',
+      'popup',
+      'subpage',
+    ])
+  })
+
+  it('트리 페이지의 layout 이 모르는 값이거나 kind 와 짝이 아니면 ApiError', async () => {
+    const withPage = (extra: Record<string, unknown>) => ({
+      menu: [{ id: 'm1', title: '메뉴', sortOrder: 0, pages: [{ id: 'a', title: 'a', sortOrder: 0, ...extra }], children: [] }],
+    })
+    const codes: string[] = []
+    for (const extra of [{ layout: 'modal' }, { layout: 'subpage', kind: 'popup' }, { layout: 'popup', kind: 'page' }]) {
+      const error = await createHttpClient(stubFetch(jsonResponse(200, withPage(extra))).fetchImpl)
+        .getTree('p1')
+        .catch((e: unknown) => e)
+      codes.push(asApiError(error).code)
+    }
+    expect(codes).toEqual(['internal', 'internal', 'internal'])
+    // 대조 — 짝이 맞으면 받는다.
+    await expect(
+      createHttpClient(stubFetch(jsonResponse(200, withPage({ layout: 'popup', kind: 'popup' }))).fetchImpl).getTree('p1'),
+    ).resolves.toBeDefined()
   })
 
   // **아래 셋은 매 렌더마다 주소가 된다.** 관문이 없으면(진짜 `<App />`로 잰 값):

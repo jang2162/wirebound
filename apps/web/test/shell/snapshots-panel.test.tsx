@@ -398,14 +398,14 @@ describe('복원', () => {
       getProject: async () => project('owner'),
       listSnapshots: list,
       restoreSnapshot: async () => {
-        throw new ApiError(409, 'conflict', '레이아웃 구성이 스냅샷과 다릅니다 (스냅샷 1개, 현재 2개). 복원하지 않았습니다')
+        throw new ApiError(409, 'conflict', '스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (1명)')
       },
     })
 
     await openConfirm(client)
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
 
-    const alert = await screen.findByText(/레이아웃 구성이 스냅샷과 다릅니다/)
+    const alert = await screen.findByText(/스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다/)
     expect(alert).toBeTruthy()
     // **실패한 복원이 목록을 바꿀 수 없다.**
     expect(list).toHaveBeenCalledTimes(1)
@@ -1188,13 +1188,13 @@ describe('복원 뒤 재동기화', () => {
     await openConfirm({
       getPage,
       restoreSnapshot: async () => {
-        throw new ApiError(409, 'conflict', '레이아웃 구성이 스냅샷과 다릅니다')
+        throw new ApiError(409, 'conflict', '스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다')
       },
     })
     expect(calls()).toBe(1)
 
     fireEvent.click(screen.getByRole('button', { name: '되돌린다' }))
-    await within(panel()).findByText(/레이아웃 구성이 스냅샷과 다릅니다/)
+    await within(panel()).findByText(/스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다/)
 
     expect(calls()).toBe(1)
     expect(canvasRootId()).toBe('n-old')

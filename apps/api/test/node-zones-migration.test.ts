@@ -9,16 +9,7 @@
  * 지난다 · 상태 보임 · 코멘트 번호 · 별칭은 그대로다 · `down` 은 행이 있으면 거절하고 비었으면 내려간다.
  */
 import { randomUUID } from 'node:crypto'
-import {
-  installCatalog,
-  partitionIssues,
-  validateLayout,
-  validatePage,
-  walkNodes,
-  type LayoutDocument,
-  type PageDocument,
-  type WbNode,
-} from '@wirebound/schema'
+import { installCatalog, partitionIssues, validatePage, walkNodes, type PageDocument, type WbNode } from '@wirebound/schema'
 import { SnapshotPayloadSchema } from '@wirebound/themes'
 import { Migrator, NO_MIGRATIONS, sql } from 'kysely'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -322,10 +313,10 @@ describe('0028 — 문서 판 2 → 3', () => {
   it('판 3 페이지 · 레이아웃 · 두 모듈 표 · 스냅샷', async () => {
     expect(await pageRow(seeded.pageV3)).toEqual({ schema: V3_PAGE, schema_version: 3 })
 
-    const layout = (await sql<{ schema: LayoutDocument }>`select schema from layouts where id = ${seeded.layoutId}`.execute(db)).rows[0]!
-      .schema
+    const layout = (
+      await sql<{ schema: { version: number; root: WbNode } }>`select schema from layouts where id = ${seeded.layoutId}`.execute(db)
+    ).rows[0]!.schema
     expect(layout.version).toBe(3)
-    expect(partitionIssues(validateLayout(layout)).errors).toEqual([])
     expect(buttonsOf(find(layout.root, 'l_ef'))).toEqual(FORM_BUTTONS.EntryForm)
 
     const nodes = (await sql<{ nodes: WbNode[] }>`select nodes from modules where id = ${seeded.moduleId}`.execute(db)).rows[0]!.nodes
@@ -342,7 +333,9 @@ describe('0028 — 문서 판 2 → 3', () => {
 
     const payload = (await sql<{ payload: unknown }>`select payload from snapshots where id = ${seeded.snapshotId}`.execute(db)).rows[0]!
       .payload
-    const parsed = SnapshotPayloadSchema.safeParse(payload)
+    // 그 판 payload 의 `layouts` 는 지금 규격(판 5)에 없다 — 걷고 읽는다(레이아웃 문서는 아래에서 날것으로 본다).
+    const { layouts: _layouts, ...rest } = payload as Record<string, unknown>
+    const parsed = SnapshotPayloadSchema.safeParse(rest)
     expect(parsed.success).toBe(true)
     const [v2, v1, v3] = parsed.data!.pages
     expect(v2!.schema).toEqual({ ...(await pageRow(seeded.pageV2)).schema, root: v2!.schema.root })

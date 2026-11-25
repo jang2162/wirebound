@@ -189,12 +189,6 @@ export function Canvas(props: {
   /** 편집 모드 && `canEdit` — 셸의 그 값. 손잡이(`./canvas-drag-handle.tsx`)가 이것으로 선다. */
   editable: boolean
 }): ReactElement | null {
-  /**
-   * **`renderComposed`를 쓰지 않는다.** *"기본 레이아웃이 `Page > Slot`이라 결과가
-   * 같다"*는 **성립하지 않는다** — 합성은 레이아웃 루트와 `Slot`
-   * **두 노드를 더 그리고**, 그 id는 페이지 문서에 없어 `./canvas-pick.ts` 의 `nodeIdAt`이 유령 노드를
-   * 고르게 된다. 측정과 그 결과는 `packages/renderer/test/compose-identity.test.tsx`에 있다.
-   */
   const theme = useProjectTheme()
   // `useToken` 의 값 — 참조 기본값을 푼 값(`tokenValues`). 반쯤 친 값처럼 검사에 걸리는 토큰은 기본값으로 선다.
   const tokens = useMemo(() => (theme.manifest === null ? {} : tokenValues(theme.manifest, theme.tokens)), [theme.manifest, theme.tokens])

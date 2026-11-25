@@ -1,22 +1,24 @@
 import { liftStateRegions, MigrationError } from './migrate-document'
+import { liftPageLayout } from './migrate-page-layout'
 import { liftTreeItems } from './migrate-tree-items'
-import type { AnyDocument, PageDocument } from './node'
+import type { PageDocument } from './node'
 
 /**
- * 지금 문서 판. 판 6 — `Tree` 의 항목이 계층(`{ label, open?, children? }`)이다(판 5 는 글 목록 + 깊이 · 자료 표가 `DataGrid` · 판 4 는 `Field`
- * 라벨 + 값 구역 · 판 3 은 노드 구역 · `TabPanel`).
+ * 지금 문서 판. 판 7 — 페이지 문서에 레이아웃(`layout` — 빈 · 팝업 · 서브페이지)이 있다(판 6 은 `Tree` 의 항목이 계층 · 판 5 는 글 목록 + 깊이 ·
+ * 자료 표가 `DataGrid` · 판 4 는 `Field` 라벨 + 값 구역 · 판 3 은 노드 구역 · `TabPanel`).
  *
  * **판 2 → 3 · 3 → 4 · 4 → 5 단계는 런타임 사슬에 없다** — 저장된 문서는 DB 마이그레이션(`apps/api` 의 `0028-node-zones` · `0029-compose-field` ·
  * `0032-list-data-grid`)이 한 번 옮겼고, 판 4 이하를 들고 오는 입구(페이지 JSON 가져오기 · 클립보드)는 거절된다. **판 5 → 6 은 사슬에 있다** — 새 노드
  * id 를 짓지 않는 순수 함수라(`migrate-tree-items.ts`) 판 5 로 내보낸 페이지 JSON · 클립보드 봉투가 그대로 들어온다. 판 5 라고 적힌 문서에 이미 판 6
- * 꼴인 트리 항목은 사슬이 그대로 남긴다(DB 마이그레이션의 같은 함수는 기본이 버림 — 그 머리말).
+ * 꼴인 트리 항목은 사슬이 그대로 남긴다(DB 마이그레이션의 같은 함수는 기본이 버림 — 그 머리말). **판 6 → 7 도 사슬에 있다** — 뿌리 타입에서
+ * 레이아웃을 짓는 순수 함수다(`migrate-page-layout.ts` — DB 마이그레이션 `0037-page-layout` 이 같은 함수를 부른다).
  */
-export const CURRENT_DOCUMENT_VERSION = 6
+export const CURRENT_DOCUMENT_VERSION = 7
 
 export interface Migration {
   from: number
   to: number
-  migrate: (doc: AnyDocument) => AnyDocument
+  migrate: (doc: PageDocument) => PageDocument
 }
 
 /**
@@ -26,15 +28,16 @@ export interface Migration {
 export const MIGRATIONS: Migration[] = [
   { from: 1, to: 2, migrate: (doc) => liftStateRegions(doc).doc },
   { from: 5, to: 6, migrate: (doc) => liftTreeItems(doc).doc },
+  { from: 6, to: 7, migrate: (doc) => liftPageLayout(doc) },
 ]
 
 /** 문서를 목표 버전까지 올린다. 가져오기·스냅샷 복원·읽기가 모두 이 경로를 탄다. */
-export function migrateDocument<T extends AnyDocument>(
+export function migrateDocument<T extends PageDocument>(
   doc: T,
   migrations: Migration[] = MIGRATIONS,
   target: number = CURRENT_DOCUMENT_VERSION,
 ): T {
-  let current: AnyDocument = structuredClone(doc)
+  let current: PageDocument = structuredClone(doc)
 
   if (current.version > target) {
     throw new Error(`지원하지 않는 문서 버전: ${current.version}`)
@@ -48,9 +51,8 @@ export function migrateDocument<T extends AnyDocument>(
     current = { ...step.migrate(current), version: step.to }
   }
 
-  // 마이그레이션은 문서 종류(페이지/레이아웃)를 절대 바꾸지 않는다 — 버전만 올린다.
-  // Migration.migrate가 AnyDocument -> AnyDocument로 넓게 타입되어 있어 컴파일러는
-  // 이 함수가 입력과 같은 종류를 반환한다는 사실을 알 수 없으므로 캐스트가 필요하다.
+  // Migration.migrate가 PageDocument -> PageDocument로 넓게 타입되어 있어 컴파일러는
+  // 이 함수가 입력의 좁힌 타입(T)을 돌려준다는 사실을 알 수 없으므로 캐스트가 필요하다.
   return current as T
 }
 

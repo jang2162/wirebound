@@ -4,8 +4,8 @@ import { BODY_ZONE, placementsOf, type ComponentDef, type ComponentPlace } from 
 import { checkNodeAction, checkViewStateAction, isPageTargetAction, isTargetlessAction, isViewStateAction } from './interaction/check'
 import { getComponent } from './component/registry'
 import { aliasNote } from './display'
-import { DocumentEnvelopeSchema, NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
-import { DEFAULT_VIEW_STATE, type LayoutDocument, type PageDocument, type ViewState, type WbNode } from './node'
+import { NODE_ID_PATTERN, PageEnvelopeSchema } from './envelope'
+import { DEFAULT_VIEW_STATE, type PageDocument, type PageLayout, type ViewState, type WbNode } from './node'
 import { walkNodes } from './tree'
 import { zoneList, zonePointer } from './zones'
 import { getKoreanErrorMap } from './locale'
@@ -36,7 +36,6 @@ export type ValidationCode =
    * `Page`다. 이 규칙을 들이기 전에 저장된 문서에 이미 선 중첩 `Page`는 저장 경계가 거절 사유로 세지 않는다(`excuseStandingNestedPages`).
    */
   | 'nested-page'
-  | 'slot-count'
   | 'bad-document'
   /**
    * 상호작용의 `target`이 가리키는 노드가 **문서에 없다**(설계서 「모델」(상호작용)의 *"타겟 존재 여부"*).
@@ -77,6 +76,12 @@ export type ValidationCode =
    * 모른다(lint 의 `broken-code-ref`). 표에서 항목을 지워도 문서는 저장된다.
    */
   | 'invalid-code-ref'
+  /**
+   * 레이아웃과 뿌리 타입이 짝이 아니다 — 팝업 레이아웃의 뿌리는 `Popup`, 빈 · 서브페이지 레이아웃의 뿌리는 `Page` 다. 경로는 `/layout`. 판정
+   * («팝업인가»)은 `layout` 하나가 하고 뿌리 `Popup` 은 그 짝이다 — 둘이 어긋난 문서가 저장 경계를 못 지나게 이 검사가 묶는다. **뿌리 타입을
+   * 판정으로 읽는 자리는 이 검사와 판 6 규칙(`migrate-page-layout.ts`)뿐이다** — `test/page-layout-census.test.ts` 가 센다.
+   */
+  | 'layout-root-mismatch'
 
 /**
  * 이슈가 편집·저장을 **막는가**.
@@ -129,7 +134,6 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'duplicate-id': 'error',
   'bad-root': 'error',
   'nested-page': 'error',
-  'slot-count': 'error',
   'bad-document': 'error',
   'missing-interaction-target': 'warning',
   'invalid-interaction-target': 'warning',
@@ -137,6 +141,7 @@ export const ISSUE_SEVERITY: Record<ValidationCode, IssueSeverity> = {
   'view-state-missing': 'warning',
   'state-cases-left': 'error',
   'invalid-code-ref': 'error',
+  'layout-root-mismatch': 'error',
 }
 
 export interface ValidationIssue {
@@ -200,8 +205,8 @@ function ignoredVariantMessage(def: ComponentDef, variant: string): string {
 }
 
 /**
- * 뿌리에만 서는 타입 — 페이지의 «종류» 가 뿌리 타입이다(`Page` = 화면 · `Popup` = 팝업). 둘 다 뿌리 밖에 서면 `nested-page` 다. 레이아웃 뿌리는
- * `Page` 뿐이다(`validateLayout`).
+ * 뿌리에만 서는 타입 — `Page`(빈 · 서브페이지 레이아웃) · `Popup`(팝업 레이아웃 — `layout-root-mismatch` 가 짝을 본다). 둘 다 뿌리 밖에 서면
+ * `nested-page` 다.
  */
 export const ROOT_TYPES: readonly string[] = ['Page', 'Popup']
 
@@ -215,15 +220,31 @@ export function validatePage(doc: PageDocument): ValidationIssue[] {
   if (envelopeIssues.length > 0) return envelopeIssues
 
   const issues = validateTree(doc.root, ROOT_TYPES, doc.viewStates)
+  const mismatch = layoutRootMismatch(doc)
+  if (mismatch !== null) issues.push(mismatch)
   // 뿌리가 숨으면 그 상태의 화면이 통째로 빈다 — 보임은 뿌리 아래 노드에만 둔다(속성 패널도 뿌리에는 칸을 안 세운다).
   if (doc.root.visibility !== undefined) {
     issues.push(makeIssue('bad-root', doc.root.id, '/root/visibility', '페이지 뿌리에는 상태 보임을 둘 수 없습니다'))
   }
-  const slots = countSlots(doc.root)
-  if (slots > 0) {
-    issues.push(makeIssue('slot-count', null, '/root', `페이지에는 Slot을 둘 수 없습니다 (${slots}개 발견)`))
-  }
   return issues
+}
+
+/** 레이아웃의 화면 이름 — 이슈 문장이 쓴다. */
+const LAYOUT_NAMES: Record<PageLayout, string> = { blank: '빈', popup: '팝업', subpage: '서브페이지' }
+
+/** `layout-root-mismatch` — 레이아웃이 없는 문서(판 6 이하 — 봉투가 판 7 에서 필수로 본다)는 짝을 묻지 않는다. */
+function layoutRootMismatch(doc: PageDocument): ValidationIssue | null {
+  if (doc.layout === undefined) return null
+  const wantsPopup = doc.layout === 'popup'
+  if (wantsPopup === (doc.root.type === 'Popup')) return null
+  return makeIssue(
+    'layout-root-mismatch',
+    null,
+    '/layout',
+    wantsPopup
+      ? `팝업 레이아웃의 뿌리는 Popup 입니다 (뿌리: ${doc.root.type})`
+      : `${LAYOUT_NAMES[doc.layout]} 레이아웃의 뿌리는 Page 입니다 (뿌리: ${doc.root.type})`,
+  )
 }
 
 /**
@@ -314,26 +335,12 @@ export function unknownVisibilityStates(doc: PageDocument): { nodeId: string; pa
   return out
 }
 
-const LAYOUT_ROOT_TYPES: readonly string[] = ['Page']
-
-export function validateLayout(doc: LayoutDocument): ValidationIssue[] {
-  const envelopeIssues = validateEnvelope(doc, DocumentEnvelopeSchema)
-  if (envelopeIssues.length > 0) return envelopeIssues
-
-  const issues = validateTree(doc.root, LAYOUT_ROOT_TYPES)
-  const slots = countSlots(doc.root)
-  if (slots !== 1) {
-    issues.push(makeIssue('slot-count', null, '/root', `레이아웃에는 Slot이 정확히 하나여야 합니다 (${slots}개 발견)`))
-  }
-  return issues
-}
-
 /**
  * 문서 봉투(버전·루트 형태)를 검사한다. 트리 순회(`walkNodes`)보다 먼저 돌아야 한다 —
  * root가 null이거나 형태가 깨져 있으면 walkNodes가 그대로 터지기 때문이다.
  * 실패하면 봉투 이슈만 담아 즉시 반환하고, 노드 단위 검증은 시도하지 않는다.
  */
-function validateEnvelope(doc: unknown, schema: typeof DocumentEnvelopeSchema): ValidationIssue[] {
+function validateEnvelope(doc: unknown, schema: typeof PageEnvelopeSchema): ValidationIssue[] {
   const parsed = schema.safeParse(doc, { error: getKoreanErrorMap() })
   if (parsed.success) return []
 
@@ -387,11 +394,6 @@ export function assertValidPage(doc: PageDocument): void {
   throwOnFirstIssue(validatePage(doc))
 }
 
-/** `assertValidPage`와 대칭인 레이아웃 버전. */
-export function assertValidLayout(doc: LayoutDocument): void {
-  throwOnFirstIssue(validateLayout(doc))
-}
-
 /**
  * 이슈 목록의 첫 **오류**를 메시지로 만들어 던진다. 오류가 없으면 아무 일도 하지 않는다.
  *
@@ -406,7 +408,7 @@ function throwOnFirstIssue(issues: ValidationIssue[]): void {
   }
 }
 
-/** `viewStates` — 그 문서의 상태 목록(`setViewState`의 대상을 대조한다). 레이아웃 · 프리셋 묶음은 없다(기본만 맞다). */
+/** `viewStates` — 그 문서의 상태 목록(`setViewState`의 대상을 대조한다). 프리셋 묶음은 없다(기본만 맞다). */
 function validateTree(root: WbNode, rootTypes: readonly string[], viewStates?: readonly ViewState[]): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   /**
@@ -612,12 +614,4 @@ function checkInteractions(
   }
 
   return issues
-}
-
-function countSlots(root: WbNode): number {
-  let count = 0
-  for (const { node } of walkNodes(root)) {
-    if (node.type === 'Slot') count += 1
-  }
-  return count
 }

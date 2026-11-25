@@ -134,13 +134,13 @@ describe('공통코드 화면', () => {
         title: '과목관리',
         nodes: [select('n_s1', ['검색 폼', '과목분류 필드']), select('n_s2', ['교수법 필드'])],
       },
-      { kind: 'layout', id: 'l1', title: '기본 틀', nodes: [select('n_s3', ['머리', '카드', '탭', '분류 필드'])] },
+      { kind: 'module', id: 'm1', title: '기본 틀', nodes: [select('n_s3', ['머리', '카드', '탭', '분류 필드'])] },
     ]
     await open(board)
     const usage = await screen.findByRole('list', { name: '사용처 목록' })
     expect([...usage.querySelectorAll('summary')].map((summary) => summary.textContent)).toEqual([
       `페이지 ${isolate('과목관리')}2`,
-      `레이아웃 ${isolate('기본 틀')}1`,
+      `모듈 ${isolate('기본 틀')}1`,
     ])
     const lines = [...usage.querySelectorAll('.wb-shell-codes-usage-node')].map((line) => line.textContent)
     expect(lines).toEqual([
@@ -150,14 +150,14 @@ describe('공통코드 화면', () => {
     ])
     expect(new Set(lines).size).toBe(lines.length)
     expect(lines.join('')).not.toContain('n_s')
-    // 페이지 줄은 링크(그 노드로) · 레이아웃 줄은 글이다.
+    // 페이지 줄은 링크(그 노드로) · 모듈 줄은 글이다.
     expect(
       within(usage)
         .getAllByRole('link')
         .map((link) => link.getAttribute('href')),
     ).toEqual([`/projects/${PROJECT_ID}/pages/${PAGE_ID}?node=n_s1`, `/projects/${PROJECT_ID}/pages/${PAGE_ID}?node=n_s2`])
     expect(screen.getByRole('region', { name: '사용처' }).querySelector('.wb-shell-codes-key')?.textContent).toBe(
-      `«${isolate('주문 상태')}» · 페이지 1 · 레이아웃 1 · 노드 3`,
+      `«${isolate('주문 상태')}» · 페이지 1 · 모듈 1 · 노드 3`,
     )
   })
 

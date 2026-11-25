@@ -1,13 +1,13 @@
 /**
  * **예제 페이지 — 주문 관리**(설계 `docs/superpowers/specs/2026-11-02-theme-preview-and-project-cards-design.md` 「«예제 페이지» 보기」). 테마
- * 미리보기가 «실제 화면에서 어떻게 보이나» 를 보이는 가상의 관리자 화면이다. 장 넷과 팝업 하나가 같은 레이아웃(왼쪽 메뉴 · 위쪽 머리 · Slot)을
- * 쓰고 문서의 상호작용(`navigate` · `openModal` · `closeModal`)으로 서로 이어진다 — 이음은 `ThemeExamples` 가 받아 장을 바꾼다.
+ * 미리보기가 «실제 화면에서 어떻게 보이나» 를 보이는 가상의 관리자 화면이다. 장 넷이 같은 틀(왼쪽 메뉴 · 위쪽 머리 — `shell`)을 뿌리 아래에
+ * 감싸 넣고, 팝업 하나와 함께 문서의 상호작용(`navigate` · `openModal` · `closeModal`)으로 서로 이어진다 — 이음은 `ThemeExamples` 가 받아 장을 바꾼다.
  *
  * 문서는 사용자 데이터가 아니다(DB 에 안 들어간다). 지금 카탈로그 검증을 지나고 다섯 그룹을 다 싣는다 — `test/examples.test.tsx` 가 잠근다.
  * 글은 흔한 관리자 화면의 말이고 실제 회사 · 사람 이름을 쓰지 않는다. 노드 id 는 장마다 접두(`ex-l` · `ex-d` · `ex-o` · `ex-od` · `ex-of` ·
- * `ex-pd`)를 둔다 — 레이아웃과 페이지가 한 화면에 함께 그려진다.
+ * `ex-pd`)를 둔다 — 틀(`ex-l`)은 장마다 같은 id 다.
  */
-import { CURRENT_DOCUMENT_VERSION, type Interaction, type LayoutDocument, type PageDocument, type WbNode } from '@wirebound/schema'
+import { CURRENT_DOCUMENT_VERSION, type Interaction, type PageDocument, type WbNode } from '@wirebound/schema'
 
 export type ExamplePageId = 'dashboard' | 'orders' | 'order' | 'order-form'
 
@@ -48,7 +48,11 @@ const field = (id: string, label: string, pieces: WbNode[], extra: Partial<WbNod
 }
 const options = (labels: readonly string[], selected?: string) =>
   labels.map((label) => (label === selected ? { label, selected: true } : { label }))
-const page = (id: string, children: WbNode[]): PageDocument => ({ version: CURRENT_DOCUMENT_VERSION, root: { id, type: 'Page', children } })
+const page = (id: string, children: WbNode[]): PageDocument => ({
+  version: CURRENT_DOCUMENT_VERSION,
+  layout: 'blank',
+  root: { id, type: 'Page', children: [shell(children)] },
+})
 
 /** 주문 한 줄 — 목록 · 대시보드의 표가 쓴다. */
 interface OrderRow {
@@ -120,65 +124,61 @@ function orderGrid(prefix: string, rows: readonly OrderRow[], zones: WbNode['zon
   }
 }
 
-/** 레이아웃 — 왼쪽 메뉴(`Link` · `Button` — 카탈로그에 메뉴 컴포넌트가 없다) · 위쪽 머리 · 가운데 Slot. */
-export const EXAMPLE_LAYOUT: LayoutDocument = {
-  version: CURRENT_DOCUMENT_VERSION,
-  root: {
-    id: 'ex-l',
-    type: 'Page',
+/**
+ * 장의 틀 — 왼쪽 메뉴(`Link` · `Button` — 카탈로그에 메뉴 컴포넌트가 없다) · 위쪽 머리 · 가운데 장 내용. 장 문서마다 뿌리 아래에 같은 노드를
+ * 감싸 넣는다(노드 id 는 장마다 같다 — 한 화면에는 장 하나만 선다).
+ */
+function shell(content: WbNode[]): WbNode {
+  return {
+    id: 'ex-l-shell',
+    type: 'Flex',
+    props: { align: 'stretch', wrap: true },
     children: [
       {
-        id: 'ex-l-shell',
-        type: 'Flex',
-        props: { align: 'stretch', wrap: true },
+        id: 'ex-l-menu',
+        type: 'Section',
+        props: { compact: true },
+        weight: 1,
         children: [
+          text('ex-l-brand', '주문 관리', 'h3'),
+          { id: 'ex-l-menu-line', type: 'Divider', props: { direction: 'horizontal' } },
           {
-            id: 'ex-l-menu',
-            type: 'Section',
-            props: { compact: true },
-            weight: 1,
-            children: [
-              text('ex-l-brand', '주문 관리', 'h3'),
-              { id: 'ex-l-menu-line', type: 'Divider', props: { direction: 'horizontal' } },
-              {
-                id: 'ex-l-nav',
-                type: 'Flex',
-                props: { direction: 'column', align: 'start' },
-                children: [
-                  link('ex-l-go-dash', '대시보드', TARGET.dashboard),
-                  link('ex-l-go-orders', '주문 목록', TARGET.orders),
-                  button('ex-l-go-new', '주문 등록', { variant: 'primary', interactions: go(TARGET['order-form']) }),
-                ],
-              },
-            ],
-          },
-          {
-            id: 'ex-l-main',
+            id: 'ex-l-nav',
             type: 'Flex',
-            props: { direction: 'column' },
-            weight: 4,
+            props: { direction: 'column', align: 'start' },
             children: [
-              {
-                id: 'ex-l-head',
-                type: 'Flex',
-                props: { justify: 'between', align: 'center' },
-                children: [
-                  text('ex-l-title', '쇼핑몰 관리자', 'h2'),
-                  {
-                    id: 'ex-l-user',
-                    type: 'Flex',
-                    props: { align: 'center' },
-                    children: [text('ex-l-user-name', '운영자 님', 'caption'), button('ex-l-logout', '로그아웃', { variant: 'ghost' })],
-                  },
-                ],
-              },
-              { id: 'ex-l-slot', type: 'Slot' },
+              link('ex-l-go-dash', '대시보드', TARGET.dashboard),
+              link('ex-l-go-orders', '주문 목록', TARGET.orders),
+              button('ex-l-go-new', '주문 등록', { variant: 'primary', interactions: go(TARGET['order-form']) }),
             ],
           },
         ],
       },
+      {
+        id: 'ex-l-main',
+        type: 'Flex',
+        props: { direction: 'column' },
+        weight: 4,
+        children: [
+          {
+            id: 'ex-l-head',
+            type: 'Flex',
+            props: { justify: 'between', align: 'center' },
+            children: [
+              text('ex-l-title', '쇼핑몰 관리자', 'h2'),
+              {
+                id: 'ex-l-user',
+                type: 'Flex',
+                props: { align: 'center' },
+                children: [text('ex-l-user-name', '운영자 님', 'caption'), button('ex-l-logout', '로그아웃', { variant: 'ghost' })],
+              },
+            ],
+          },
+          ...content,
+        ],
+      },
     ],
-  },
+  }
 }
 
 const stat = (id: string, title: string, value: string, note: string): WbNode => ({
@@ -431,6 +431,7 @@ const orderForm = page('ex-of', [
 
 const deletePopup: PageDocument = {
   version: CURRENT_DOCUMENT_VERSION,
+  layout: 'popup',
   root: {
     id: 'ex-pd',
     type: 'Popup',

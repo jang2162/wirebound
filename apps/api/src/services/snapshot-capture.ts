@@ -11,12 +11,11 @@
  * 0. `readCaptureFingerprint` — **수집 전** 지문.
  * 1. `listMenuNodes` — 메뉴.
  * 2. `listPages` — 페이지(문서 포함, **마이그레이션 없이** — `@wirebound/themes`의 `snapshot/payload.ts` 「저장된 문서를 그대로 담는다」 절).
- * 3. `listLayouts` — 레이아웃 **전부**(프로젝트의 레이아웃이 하나라는 보장이 없다).
- * 4. `listProjectComments` — 코멘트.
- * 5. `readCaptureFingerprint` — **수집 후** 지문. **그 문장의 `clock_timestamp()`가
+ * 3. `listProjectComments` — 코멘트.
+ * 4. `readCaptureFingerprint` — **수집 후** 지문. **그 문장의 `clock_timestamp()`가
  *    `capturedAt`이 된다**(아래 "시각" 절).
- * 6. 두 지문이 다르면 `'fingerprint-mismatch'`. **여기서 끝난다.**
- * 7. payload를 조립하고 `SnapshotPayloadSchema`로 파싱해 규격을 확인한다.
+ * 5. 두 지문이 다르면 `'fingerprint-mismatch'`. **여기서 끝난다.**
+ * 6. payload를 조립하고 `SnapshotPayloadSchema`로 파싱해 규격을 확인한다.
  *
  * **이 함수는 아무것도 쓰지 않는다.** 새 실패 갈래마다 *"이 갈래는 무엇을 되돌리는가"*를
  * 묻는다(*"실패했다고 말하는데 조작은 일어났다"*를 막으려고) — 이 갈래의 답은 **"되돌릴 것이 없다"**이다 — 쓰기는 라우트가 이 함수의 결과를
@@ -55,7 +54,6 @@
 import type { DbHandle } from '../db/tx'
 import { readCodeTable } from '../repos/codes'
 import { listProjectComments } from '../repos/comments'
-import { listLayouts } from '../repos/layouts'
 import { listMenuNodes } from '../repos/menu'
 import { listPages } from '../repos/pages'
 import { findProjectTheme } from '../repos/projects'
@@ -93,7 +91,6 @@ export async function captureSnapshot(db: DbHandle, projectId: string, hooks?: C
 
   if (hooks?.afterPages) await hooks.afterPages()
 
-  const layouts = await listLayouts(db, projectId)
   const comments = await listProjectComments(db, projectId)
   const binding = await findProjectTheme(db, projectId)
   const codes = await readCodeTable(db, projectId)
@@ -124,11 +121,6 @@ export async function captureSnapshot(db: DbHandle, projectId: string, hooks?: C
       schemaVersion: page.schemaVersion,
       schema: page.schema,
       headSeq: page.headSeq,
-    })),
-    layouts: layouts.map((layout) => ({
-      id: layout.id,
-      name: layout.name,
-      schema: layout.schema,
     })),
     comments: comments.map((comment) => ({
       id: comment.id,

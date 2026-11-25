@@ -26,7 +26,7 @@ const SERVER_REFUSALS: Record<string, string[]> = {
   ],
   'children-not-allowed': ["Divider은 자식을 담을 수 없습니다 ('구분선')", 'Divider은 자식을 담을 수 없습니다'],
   'nul-byte': ['문서에 NUL 문자(U+0000)를 포함할 수 없습니다'],
-  'bad-path': ['경로는 /root · /viewStates 아래이거나 /version이어야 합니다'],
+  'bad-path': ['경로는 /root · /viewStates 아래이거나 /layout · /version이어야 합니다'],
   'unsupported-version': ['지원하지 않는 문서 버전: 3', '지원하지 않는 문서 버전: 4'],
 }
 
@@ -44,7 +44,7 @@ describe('refusalHead', () => {
       'invalid-props': ['List의 props가 올바르지 않습니다'],
       'children-not-allowed': ['Divider은 자식을 담을 수 없습니다'],
       'nul-byte': ['문서에 NUL 문자'],
-      'bad-path': ['경로는 /root · /viewStates 아래이거나 /version이어야 합니다'],
+      'bad-path': ['경로는 /root · /viewStates 아래이거나 /layout · /version이어야 합니다'],
       'unsupported-version': ['지원하지 않는 문서 버전'],
     })
   })

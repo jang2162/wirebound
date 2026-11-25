@@ -174,7 +174,6 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       db.selectFrom('revisions').select(['id', 'page_id', 'seq']).where('page_id', 'in', pageIds).orderBy('id').execute(),
     ),
     snapshots: await db.selectFrom('snapshots').select(['id', 'tag']).where('project_id', '=', projectId).orderBy('id').execute(),
-    layouts: await db.selectFrom('layouts').selectAll().where('project_id', '=', projectId).orderBy('id').execute(),
     members: await db
       .selectFrom('project_members')
       .selectAll()

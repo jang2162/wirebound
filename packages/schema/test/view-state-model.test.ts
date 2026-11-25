@@ -5,7 +5,6 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest'
 import { CATALOG_TYPES, installCatalog } from '../src/component/catalog/index'
-import { DocumentEnvelopeSchema, PageEnvelopeSchema } from '../src/envelope'
 import {
   DEFAULT_VIEW_STATE,
   VIEW_STATE_DESCRIPTION_MAX,
@@ -15,7 +14,7 @@ import {
   type PageDocument,
   type WbNode,
 } from '../src/index'
-import { checkViewStateRemoval, partitionIssues, validateLayout, validatePage } from '../src/validate'
+import { checkViewStateRemoval, partitionIssues, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -105,17 +104,6 @@ describe('viewStates — 상태 목록', () => {
     expect(issues.length).toBeGreaterThan(0)
     expect(issues.every((issue) => issue.code === 'bad-document' && issue.severity === 'error')).toBe(true)
     expect(issues.every((issue) => issue.path.startsWith('/viewStates'))).toBe(true)
-  })
-
-  it('레이아웃은 상태 목록을 받지 않는다', () => {
-    const layout = {
-      version: 1,
-      root: { id: ROOT, type: 'Page', children: [{ id: 'n_slot', type: 'Slot' }] },
-      viewStates: [ADMIN],
-    }
-    expect(validateLayout(layout as never).map((issue) => issue.code)).toEqual(['bad-document'])
-    expect(DocumentEnvelopeSchema.safeParse(layout).success).toBe(false)
-    expect(PageEnvelopeSchema.safeParse(layout).success).toBe(true)
   })
 })
 

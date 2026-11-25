@@ -255,7 +255,7 @@ export interface ApiClient {
    * **`description`을 싣지 않는다** — 설계서 「설계서 화면 구조」가 그 편집을 우측 패널의 "페이지 설명" 탭에
    * 두기로 했고, 트리에서 만드는 자리는 제목만 묻는다.
    */
-  /** 페이지를 만든다. `kind: 'popup'` 이면 팝업 페이지(뿌리 `Popup`)다 — 없으면 화면. */
+  /** 페이지를 만든다. `kind: 'popup'` 이면 팝업 페이지(레이아웃 `popup` · 뿌리 `Popup`)다 — 없으면 빈 화면(레이아웃 `blank`). */
   createPage(projectId: string, body: { menuNodeId: string; title: string; kind?: 'page' | 'popup' }): Promise<PageDetail>
   /**
    * 페이지의 제목·설명·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
@@ -492,7 +492,7 @@ export interface ApiClient {
   ): Promise<CodeItem>
   /** 항목을 지운다. editor 이상. */
   deleteCodeItem(projectId: string, key: string, value: string): Promise<void>
-  /** 그 그룹(· 항목)을 쓰는 페이지 · 레이아웃 · 모듈과 노드(서버가 센다 — `@wirebound/schema` 의 `codeUsage`). viewer 도 읽는다. */
+  /** 그 그룹(· 항목)을 쓰는 페이지 · 모듈과 노드(서버가 센다 — `@wirebound/schema` 의 `codeUsage`). viewer 도 읽는다. */
   codeUsage(projectId: string, group: string, item?: string, options?: ReadOptions): Promise<UsageHit[]>
   /** 그룹 키마다 사용 수(`{ [key]: { group, items: { [value]: n } } }`). viewer 도 읽는다. */
   codeUsageCounts(projectId: string, options?: ReadOptions): Promise<CodeUsageCounts>

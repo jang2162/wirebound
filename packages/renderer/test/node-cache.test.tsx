@@ -111,11 +111,6 @@ describe('캐시가 안 서는 렌더', () => {
     expect(renderNode(node, options)).not.toBe(renderNode(node, options))
   })
 
-  it('slot 을 받는 렌더는 매번 새로 그린다', () => {
-    const node = text('n_a', '가')
-    expect(renderNode(node, { slot: <i /> })).not.toBe(renderNode(node, { slot: <i /> }))
-  })
-
   it('오류가 난 서브트리는 기억하지 않는다 — `onNodeError` 를 렌더마다 받는다', () => {
     const broken: WbNode = { id: 'n_x', type: 'NoSuchThing' }
     const root: WbNode = { id: 'n_root', type: 'Page', children: [text('n_a', '가'), broken] }

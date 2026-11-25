@@ -79,8 +79,8 @@ describe('buildMenuTree (순수 함수, DB 없이)', () => {
     const result = buildMenuTree(nodes, pages)
 
     expect(result[0]?.pages).toEqual([
-      { id: 'p1', title: '하나', sortOrder: 0, viewStates: [], kind: 'page' },
-      { id: 'p2', title: '둘', sortOrder: 1, viewStates: [], kind: 'page' },
+      { id: 'p1', title: '하나', sortOrder: 0, viewStates: [], layout: 'blank', kind: 'page' },
+      { id: 'p2', title: '둘', sortOrder: 1, viewStates: [], layout: 'blank', kind: 'page' },
     ])
   })
 
@@ -184,15 +184,15 @@ describe('GET /api/projects/:projectId/tree', () => {
             title: '회원관리',
             sortOrder: 0,
             pages: [
-              { id: p1.id, title: '목록', sortOrder: 0, viewStates: [], kind: 'page' },
-              { id: p2.id, title: '상세', sortOrder: 1, viewStates: [], kind: 'page' },
+              { id: p1.id, title: '목록', sortOrder: 0, viewStates: [], layout: 'blank', kind: 'page' },
+              { id: p2.id, title: '상세', sortOrder: 1, viewStates: [], layout: 'blank', kind: 'page' },
             ],
             children: [
               {
                 id: child.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0, viewStates: [], kind: 'page' }],
+                pages: [{ id: p3.id, title: '권한 목록', sortOrder: 0, viewStates: [], layout: 'blank', kind: 'page' }],
                 children: [],
               },
             ],
@@ -272,8 +272,8 @@ describe('GET /api/projects/:projectId/tree', () => {
       const page = body.menu[0]?.pages[0]
       expect(page).toBeDefined()
       // schema가 없다는 것만으로는 "혹시 다른 이름으로 새는가"를 못 잡는다 — 페이지
-      // 응답의 키 집합 전체를 고정해, id·title·sortOrder · viewStates(상태 목록 — 메뉴 트리의 상태 줄) · kind(화면 · 팝업) 외에는 아무것도 없음을 본다.
-      expect(Object.keys(page as object).sort()).toEqual(['id', 'kind', 'sortOrder', 'title', 'viewStates'])
+      // 응답의 키 집합 전체를 고정해, id·title·sortOrder · viewStates(상태 목록 — 메뉴 트리의 상태 줄) · layout(페이지 레이아웃) · kind(화면 · 팝업) 외에는 아무것도 없음을 본다.
+      expect(Object.keys(page as object).sort()).toEqual(['id', 'kind', 'layout', 'sortOrder', 'title', 'viewStates'])
     })
   })
 
@@ -292,7 +292,14 @@ describe('GET /api/projects/:projectId/tree', () => {
         method: 'PUT',
         url: `/api/projects/${project.id}/pages/${stated.id}/schema`,
         cookies: owner.cookie,
-        payload: { schema: { version: CURRENT_DOCUMENT_VERSION, viewStates: states, root: { id: 'n_root', type: 'Page', children: [] } } },
+        payload: {
+          schema: {
+            version: CURRENT_DOCUMENT_VERSION,
+            layout: 'blank',
+            viewStates: states,
+            root: { id: 'n_root', type: 'Page', children: [] },
+          },
+        },
       })
       expect(put.statusCode, put.body).toBe(200)
 
@@ -351,6 +358,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
       // Page 하나만 넣으면 카탈로그 게이트를 진짜로 통과시키는지 검증하지 못한다.
       const schema = {
         version: CURRENT_DOCUMENT_VERSION,
+        layout: 'blank',
         root: {
           id: 'n_root',
           type: 'Page',
@@ -401,7 +409,7 @@ describe('완료 판정: 한 줄기 시나리오', () => {
                 id: childMenu.id,
                 title: '권한',
                 sortOrder: 0,
-                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0, viewStates: [], kind: 'page' }],
+                pages: [{ id: page.id, title: '권한 목록', sortOrder: 0, viewStates: [], layout: 'blank', kind: 'page' }],
                 children: [],
               },
             ],

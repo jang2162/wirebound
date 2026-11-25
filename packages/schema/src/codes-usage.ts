@@ -1,5 +1,5 @@
 /**
- * 공통코드의 사용처 — 그룹 · 항목을 가리키는 노드를 페이지 · 레이아웃 · 모듈에서 찾는다. 서버(`GET …/codes/usage`) · CLI · MCP · 번들의
+ * 공통코드의 사용처 — 그룹 · 항목을 가리키는 노드를 페이지 · 모듈에서 찾는다. 서버(`GET …/codes/usage`) · CLI · MCP · 번들의
  * «공통코드» 장이 이 한 벌을 부른다 — 걷는 자리가 갈리면 화면마다 사용 수가 다르다.
  *
  * 화면 상태로 숨은 노드도 센다(숨은 상태의 화면도 고칠 곳이다). 노드 걷기는 `walkNodes`(구역 포함 — `zones.ts` 의 `childLists`) 하나다.
@@ -10,10 +10,10 @@ import type { WbNode } from './node'
 import { walkNodes } from './tree'
 
 export interface UsageSource {
-  kind: 'page' | 'layout' | 'module'
+  kind: 'page' | 'module'
   id: string
   title: string
-  /** 뿌리들 — 페이지 · 레이아웃은 `[root]`, 모듈은 저장된 노드 묶음. */
+  /** 뿌리들 — 페이지는 `[root]`, 모듈은 저장된 노드 묶음. */
   nodes: readonly WbNode[]
 }
 
@@ -26,7 +26,7 @@ export interface UsageHit {
 
 /**
  * 사용처의 노드 하나. `name` 은 표시 이름이고(`nodeDisplayName`), 같은 이름이 한 페이지에 여럿일 때 사람이 가를 단서가 `type` 과 `trail` 이다 —
- * `trail` 은 그 노드의 조상의 표시 이름(뿌리 쪽부터 · 페이지 · 레이아웃의 뿌리 `Page` 는 뺀다 — 모든 줄에 같은 글이라 아무것도 안 가른다).
+ * `trail` 은 그 노드의 조상의 표시 이름(뿌리 쪽부터 · 페이지 뿌리 `Page` 는 뺀다 — 모든 줄에 같은 글이라 아무것도 안 가른다).
  */
 export interface UsageNode {
   nodeId: string

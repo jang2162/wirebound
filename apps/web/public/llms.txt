@@ -60,7 +60,7 @@ Arguments: none.
 
 ### code_usage
 
-Nodes in pages, layouts and modules that point at a common code group (or one item). Count before deleting.
+Nodes in pages and modules that point at a common code group (or one item). Count before deleting.
 
 - `group` (string, required) — Group key from `list_codes`, e.g. `ORDER_STATUS`.
 - `item` (string, optional) — Optional code value; only nodes pointing at that item.
@@ -75,8 +75,9 @@ Change the common code table: add, rename, reorder, (de)activate and delete grou
 
 A page is a JSON document. Edits are JSON Patch against it; `nodes[].path` from `get_page` is the JSON Pointer of each node.
 
-- `version` (integer, required) — Document format version. The server stores and returns version 6.
-- `root` (node, required) — The root node — a `Page` (a screen) or a `Popup` (a popup page). A page’s kind is its root type.
+- `version` (integer, required) — Document format version. The server stores and returns version 7.
+- `layout` (string, optional) — The frame around the page content — one of `blank`, `popup`, `subpage` (the theme draws it; `subpage` adds the menu bars, breadcrumb and page title). Required. `popup` pairs with a `Popup` root and the others with a `Page` root — change both in one patch.
+- `root` (node, required) — The root node — a `Page` (blank or subpage layout) or a `Popup` (popup layout). Whether a page is a popup is its `layout`.
 - `viewStates` (array, optional) — Optional named screen states (`{ id, name, parent?, description? }`), at most 20, names 1–30 characters, nesting at most 3 deep, `description` free text up to 2000 characters (omit it rather than send a blank one). Nodes refer to them from `visibility`.
 
 ### Node
@@ -132,14 +133,6 @@ Zones: `body` (children) "내용"; `footer` (zones.footer) "바닥", create with
 
 - `title`: string, default "팝업"
 - `size`: "small" | "medium" | "large", default "medium"
-
-#### Slot
-
-Where a layout inserts the page content. Layout documents only. Editor label: 슬롯.
-
-Zones: none.
-
-No props.
 
 #### Section
 
@@ -518,7 +511,7 @@ Zones: `body` (children) "내용".
 - `GET /api/projects/:projectId/pages/:pageId/revisions` (viewer) — Edit history, newest first (`?limit=`, `?beforeSeq=`).
 - `GET /api/projects/:projectId/pages/:pageId/comments` (viewer) — Comments on the page, oldest first.
 - `POST /api/projects/:projectId/pages/:pageId/comments` (editor) — Add a comment to a node: `{ nodeId, body }`. May number the node, which changes the document.
-- `GET /api/projects/:projectId/snapshot` (viewer) — Read-only dump of the whole project: menu, pages with their stored documents, layouts, comments, theme binding.
+- `GET /api/projects/:projectId/snapshot` (viewer) — Read-only dump of the whole project: menu, pages with their stored documents, comments, theme binding, common codes.
 - `GET /api/projects/:projectId/snapshots` (viewer) — Saved snapshots (tags), without their payload.
 - `GET /api/projects/:projectId/theme` (viewer) — The project's theme binding and token values.
 - `GET /api/projects/:projectId/assets` (viewer) — The project's uploaded images (`id` is what a Placeholder's `image` prop holds), used bytes and limits.

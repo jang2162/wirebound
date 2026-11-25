@@ -11,7 +11,7 @@ import {
   stateLineage,
   WEIGHT_MAX,
   WEIGHT_MIN,
-  type AnyDocument,
+  type PageDocument,
   type CodeIndex,
   type ComponentDef,
   type InteractionTrigger,
@@ -39,8 +39,6 @@ import { ViewHost } from './view-host'
 import { warnUnusedViewKeys } from './view-keys'
 
 export interface RenderOptions {
-  /** Slot 자리에 넣을 내용. compose가 채운다. */
-  slot?: ReactNode
   /**
    * 노드 렌더에 실패할 때마다 불린다. 앱이 배너 등으로 알릴 때 쓴다.
    *
@@ -516,7 +514,7 @@ const NO_CODES: object = {}
  * 때마다 문서 전체(노드 200 이면 긴 작업 두 번 · 각 68ms)를 다시 그리던 비용이 길 위의 노드로 줄어든다(`apps/web/build-test/canvas-preview.test.ts` «노드 200»).
  *
  * **캐시가 서는 판은 «그린 것이 노드 · 테마 · 화면 상태만으로 정해지는» 판이다.** 상호작용 런타임을 켠 렌더(`interaction` — 핸들러가 문서 `root` 를 닫는다 · 겹layer 가
- * 노드를 숨기고 props 를 덮는다)와 `slot` 을 받는 렌더(레이아웃 — 같은 노드가 주입한 엘리먼트에 따라 갈린다)는 안 쓴다 — `null`. 오류가 난 서브트리도 기억하지 않는다
+ * 노드를 숨기고 props 를 덮는다)는 안 쓴다 — `null`. 오류가 난 서브트리도 기억하지 않는다
  * (`renderNodeIn`).
  *
  * **노드 객체를 제자리에서 고치지 마라** — 고치면 캐시가 옛 모양을 돌려준다. 문서는 불변으로 다룬다(스토어의 편집은 새 객체를 만든다).
@@ -525,7 +523,7 @@ const NO_CODES: object = {}
  * 이 노드는 그 객체 그대로다.
  */
 function nodeCacheFor(node: unknown, options: Options, room: WeightRoom | undefined): WeakMap<object, ReactElement> | null {
-  if (options.interaction !== undefined || options.slot !== undefined) return null
+  if (options.interaction !== undefined) return null
   if (typeof node !== 'object' || node === null) return null
   const theme: object = options.theme ?? NO_THEME
   let byCodes = NODE_CACHE.get(theme)
@@ -769,7 +767,6 @@ function renderNodeUncached(root: WbNode, node: WbNode, options: Options, room: 
         zones,
         zoneItems,
         items,
-        slot: options.slot ?? null,
         ...(field === undefined
           ? {}
           : { field: options.copy === undefined ? field : { ...field, name: `${field.name} (${options.copy.row}행)` } }),
@@ -927,7 +924,7 @@ const TRIGGERS_OF: Record<string, InteractionTrigger[]> = (() => {
  * (로딩 중) 낙관적 패치가 `/root`를 지운 중간 상태가 들어올 수 있다. 어느 쪽이든
  * `renderNode`의 모양 가드가 루트 자리에 폴백을 그린다.
  */
-export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): ReactElement {
+export function renderDocument(doc: PageDocument, options: RenderOptions = {}): ReactElement {
   warnUnusedViewKeys(options.theme)
   const root = doc?.root as WbNode
   return withAssets(
@@ -941,17 +938,16 @@ export function renderDocument(doc: AnyDocument, options: RenderOptions = {}): R
 }
 
 /** 문서의 상태 목록 — 레이아웃 · 검증 전 문서(배열이 아님)는 빈 목록. 원소의 모양은 판정(`stateLineage`)이 견딘다. */
-function documentStates(doc: AnyDocument): readonly ViewState[] {
+function documentStates(doc: PageDocument): readonly ViewState[] {
   const states: unknown = (doc as { viewStates?: unknown } | null | undefined)?.viewStates
   return Array.isArray(states) ? (states.filter((state) => state !== null && typeof state === 'object') as ViewState[]) : []
 }
 
 /**
- * `viewState`가 그 문서의 목록(`viewStates`)에 있으면 그대로, 아니면 `null`(기본). 레이아웃에는 목록이 없어 늘 `null`이다 —
- * `renderComposed`가 같은 옵션으로 두 문서를 그려도 레이아웃은 기본으로 판정한다. 검증 전 문서의 목록(배열이 아님 · 원소가 객체가
+ * `viewState`가 그 문서의 목록(`viewStates`)에 있으면 그대로, 아니면 `null`(기본). 검증 전 문서의 목록(배열이 아님 · 원소가 객체가
  * 아님)도 던지지 않고 «없음»으로 읽는다.
  */
-function knownViewState(doc: AnyDocument, viewState: string | null | undefined): string | null {
+function knownViewState(doc: PageDocument, viewState: string | null | undefined): string | null {
   if (typeof viewState !== 'string') return null
   const states: unknown = (doc as { viewStates?: unknown } | null | undefined)?.viewStates
   if (!Array.isArray(states)) return null

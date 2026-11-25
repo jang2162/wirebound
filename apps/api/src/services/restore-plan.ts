@@ -56,14 +56,13 @@
  *
  * ---
  *
- * # 막는 갈래 넷 — 전부 **쓰기 전에** 판정한다
+ * # 막는 갈래 셋 — 전부 **쓰기 전에** 판정한다
  *
- * 복원은 *"부분 성공을 만들지 않는다"*(`services/restore.ts`의 머리말)이므로 거절은 첫 쓰기보다 앞서야 한다. 넷 다 값만 보고
+ * 복원은 *"부분 성공을 만들지 않는다"*(`services/restore.ts`의 머리말)이므로 거절은 첫 쓰기보다 앞서야 한다. 셋 다 값만 보고
  * 판정할 수 있어 여기 있다(작성자 존재 확인만은 DB 질문이라 `restore.ts`가 한다).
  *
  * | 갈래 | 뜻 |
  * |---|---|
- * | `layout-mismatch` | 레이아웃 id 집합이 다르다 |
  * | `unsupported-version` | 살아남는 페이지의 문서 버전이 이 프로세스보다 크다 |
  * | `invalid-document` | 만들 페이지의 문서가 카탈로그 검증에 걸린다 |
  * | `dangling-reference` | payload 안에서 참조가 끊겨 있다 — 그대로 쓰면 FK 위반으로 500이 된다 |
@@ -96,7 +95,6 @@ export interface RestoreCurrentState {
     schemaVersion: number
     schema: PageDocument
   }>
-  layouts: Array<{ id: string }>
   comments: Array<{ id: string; pageId: string; body: string }>
 }
 
@@ -147,7 +145,6 @@ export interface UnsupportedVersionPage {
 
 export type RestorePlanOutcome =
   | { kind: 'plan'; plan: RestorePlan }
-  | { kind: 'layout-mismatch'; snapshot: string[]; current: string[] }
   | { kind: 'unsupported-version'; pages: UnsupportedVersionPage[] }
   | { kind: 'invalid-document'; pageId: string; title: string; issues: ValidationIssue[] }
   | { kind: 'dangling-reference'; references: string[] }
@@ -227,13 +224,6 @@ export function planRestore(payload: SnapshotPayload, current: RestoreCurrentSta
     if (!snapshotPageIds.has(comment.pageId)) dangling.push(`코멘트 ${comment.id}의 페이지 ${comment.pageId}`)
   }
   if (dangling.length > 0) return { kind: 'dangling-reference', references: dangling }
-
-  // ── 레이아웃 id 집합이 다르면 복원하지 않는다. 개수를 조용히 맞추려 들지 않는다.
-  const snapshotLayoutIds = [...payload.layouts.map((layout) => layout.id)].sort()
-  const currentLayoutIds = [...current.layouts.map((layout) => layout.id)].sort()
-  if (snapshotLayoutIds.join(',') !== currentLayoutIds.join(',')) {
-    return { kind: 'layout-mismatch', snapshot: snapshotLayoutIds, current: currentLayoutIds }
-  }
 
   // ── 페이지의 문서를 **쓸 것인가**부터 정한다. 아래 버전 검사와 7·8단계가 이 판정
   //    하나를 공유한다 — 두 번 판정하면 *"막는 기준"*과 *"쓰는 기준"*이 갈린다.

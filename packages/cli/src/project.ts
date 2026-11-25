@@ -110,9 +110,10 @@ export async function fetchLintTheme(io: Io, access: ProjectAccess): Promise<Lin
   if (manifest === null || manifest === undefined) {
     return { kind: 'unavailable', reason: '프로젝트가 아직 테마를 고정하지 않았습니다' }
   }
-  // manifest 검증은 컴포넌트 이름을 카탈로그로 본다.
+  // manifest 검증은 컴포넌트 이름을 카탈로그로 본다. 서버가 준 것은 저장된 판이라 서버의 다시 읽기(`readWbtheme` 의 `stored`)와 같은
+  // 판정으로 본다 — 카탈로그가 뒤에 걷은 타입(`Slot` · `List`)의 선언으로 그 판에 고정한 프로젝트의 테마 규칙을 잃지 않는다.
   prepareCatalog()
-  const checked = validateManifest(manifest)
+  const checked = validateManifest(manifest, { stored: true })
   if (checked.manifest === null) {
     return { kind: 'unavailable', reason: `서버가 준 manifest 가 규격과 다릅니다: ${checked.issues[0]?.message ?? '알 수 없는 형식 오류'}` }
   }

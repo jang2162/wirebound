@@ -238,7 +238,7 @@ export async function replaceCodeTable(db: DbHandle, projectId: string, table: C
 }
 
 /**
- * 사용처를 셀 원천 — 페이지 · 레이아웃의 문서와 프로젝트 모듈의 노드(개인 모듈은 남의 것이라 뺀다). 걷는 함수는 `@wirebound/schema` 의
+ * 사용처를 셀 원천 — 페이지의 문서와 프로젝트 모듈의 노드(개인 모듈은 남의 것이라 뺀다). 걷는 함수는 `@wirebound/schema` 의
  * `codeUsage` · `codeUsageCounts` 하나다.
  */
 export async function codeUsageSources(db: DbHandle, projectId: string): Promise<UsageSource[]> {
@@ -250,13 +250,6 @@ export async function codeUsageSources(db: DbHandle, projectId: string): Promise
     .orderBy('sort_order')
     .orderBy('id')
     .execute()
-  const layouts = await db
-    .selectFrom('layouts')
-    .select(['id', 'name', 'schema'])
-    .where('project_id', '=', projectId)
-    .orderBy('created_at')
-    .orderBy('id')
-    .execute()
   const modules = await db
     .selectFrom('modules')
     .select(['id', 'name', 'nodes'])
@@ -266,7 +259,6 @@ export async function codeUsageSources(db: DbHandle, projectId: string): Promise
     .execute()
   return [
     ...pages.map((page) => ({ kind: 'page' as const, id: page.id, title: page.title, nodes: [page.schema.root] })),
-    ...layouts.map((layout) => ({ kind: 'layout' as const, id: layout.id, title: layout.name, nodes: [layout.schema.root] })),
     ...modules.map((module) => ({ kind: 'module' as const, id: module.id, title: module.name, nodes: module.nodes as WbNode[] })),
   ]
 }

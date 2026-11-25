@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { chromium, type Browser, type Frame, type Page } from 'playwright-core'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { CATALOG_TYPES } from '@wirebound/schema'
 
 const repoRoot = process.cwd()
 const KIT = resolve(repoRoot, 'packages/theme-kit')
@@ -99,7 +100,8 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     const kinds = await frame.evaluate(
       () => new Set([...document.querySelectorAll('[data-wb-component]')].map((el) => el.getAttribute('data-wb-component'))).size,
     )
-    expect(kinds).toBe(37)
+    // 갤러리는 카탈로그의 타입마다 칸 하나를 그린다 — 수는 카탈로그에서 읽는다(타입을 걷거나 더하면 따라온다).
+    expect(kinds).toBe(CATALOG_TYPES.length)
   })
 
   it('테마 뷰가 쓰인다 — SDK 한 벌', async () => {

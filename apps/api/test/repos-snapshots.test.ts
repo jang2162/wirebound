@@ -25,7 +25,6 @@ function emptyPayload(overrides?: Partial<SnapshotPayload>): SnapshotPayload {
     capturedAt: '2026-08-12T00:00:00.000Z',
     menu: [],
     pages: [],
-    layouts: [],
     comments: [],
     ...overrides,
   }
@@ -47,7 +46,7 @@ describe('payload 규격', () => {
    * 않는다**: 규격의 shape에서 자원 이름을 뽑아 센다(`SNAPSHOT_RESOURCES`).
    */
   it('자원은 여섯이고 겹layer가 없다', () => {
-    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['codes', 'comments', 'layouts', 'menu', 'pages', 'theme'])
+    expect([...SNAPSHOT_RESOURCES].sort()).toEqual(['codes', 'comments', 'menu', 'pages', 'theme'])
   })
 
   it('선언되지 않은 절(겹layer 등)은 그 자체로 거부된다', () => {
@@ -441,7 +440,7 @@ describe('readCaptureFingerprint', () => {
 
       const parsed = JSON.parse((await readCaptureFingerprint(ctx.db, project.id)).fingerprint) as Record<string, unknown>
 
-      expect(Object.keys(parsed).sort()).toEqual(['codes', 'comments', 'layouts', 'menu_nodes', 'pages', 'theme'])
+      expect(Object.keys(parsed).sort()).toEqual(['codes', 'comments', 'menu_nodes', 'pages', 'theme'])
     })
   })
 })

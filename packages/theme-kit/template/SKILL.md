@@ -5,7 +5,7 @@ description: wirebound 설계서 테마를 짠다 — 컴포넌트 뷰(tsx) · C
 
 # wirebound 테마 작성 지침
 
-이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 37 종 — `Page` · `Popup` · `Slot` ·
+이 프로젝트는 wirebound 설계서의 **테마**다. 설계서의 페이지는 컴포넌트 노드의 트리이고(카탈로그 36 종 — `Page` · `Popup` ·
 `Section` · `Flex` · `Grid` · `Card` · `Tabs` · `TabPanel` · `DataGrid` · `GridColumnGroup` · `GridColumn` · `GridRow` · `GridCell` ·
 `Pagination` · `Tree` · `KeyValue` · `SearchForm` · `EntryForm` · `FormTable` · `Field` ·
 `Input` · `TextArea` · `Select` · `DateInput` · `TimeInput` · `CheckboxGroup` · `RadioGroup` · `Chip` · `Affix` · `FileAttach` · `Button` ·
@@ -55,7 +55,7 @@ export const CardView = view(({ props, variant, states, children }) => {
 - 뷰가 받는 것: `props`(기본값이 채워진 카탈로그 props) · `states`(`disabled` · `loading` 처럼 참인 상태 이름들) ·
   `variant`(노드의 variant — 테마에 없는 값이면 그 컴포넌트의 `defaultVariant`) · `children`(이미 그린 몸통의 자식) · `zones`(이름 붙은
   구역마다 그린 것 — 빈 구역은 `null`) · `items`(몸통 자식 하나씩 — `{ nodeId, type, index, props, element, content, items, copy }`) ·
-  `zoneItems`(이름 붙은 구역의 자식 하나씩 — 구역 이름 → `items` 와 같은 꼴) · `slot`(`Slot` 에 들어갈 내용) ·
+  `zoneItems`(이름 붙은 구역의 자식 하나씩 — 구역 이름 → `items` 와 같은 꼴) ·
   `nodeId` · `type` · `field`(`Field` 값 칸의 입력 조각일 때만 — `{ name, required }`: 조각이 하나면 라벨, 여럿이면 «라벨 + 별칭(없으면 차례)».
   입력 조각의 뷰를 지으면 `name` 을 접근 이름(`aria-label`)으로, `required` 면 `aria-required` 를 단다 — 입력 칸만 훑는 보조 기술은 필드의
   묶음 이름을 지나지 않는다).

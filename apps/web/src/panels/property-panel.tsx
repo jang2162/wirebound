@@ -531,7 +531,7 @@ export function PropertyPanel(props: {
   return (
     <>
       {/* **머리 카드** — 타입 · 별칭 · 위치 · 별칭 칸 · 꺼진 이유(`./node-head.tsx`). 꺼진 위젯의 이유를 이 패널이 자기 자리에서 말한다 — 별칭 칸은
-          어느 컴포넌트에나 서므로 위젯이 없는 판이 없다(편집할 속성이 없는 `Page` · `Slot` 도 꺼진 별칭 칸의 이유를 여기서 말한다). **별칭 칸은 칸들
+          어느 컴포넌트에나 서므로 위젯이 없는 판이 없다(편집할 속성이 없는 `Page` 도 꺼진 별칭 칸의 이유를 여기서 말한다). **별칭 칸은 칸들
           위다**(설계서 「설계서 화면 구조」의 노드 별칭) — props 가 아니라 노드 봉투의 필드이고 어느 컴포넌트에나 선다. 칸을 떠날 때 커밋하는 길은
           글 칸과 같다(`TextControl`) — 편집은 `aliasOps` 하나. */}
       <NodeHead
@@ -579,7 +579,7 @@ export function PropertyPanel(props: {
         {variantRow}
       </NodeHead>
       {fields.length === 0 && variantField === null && (
-        // `Page`·`Slot`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
+        // `Page`처럼 `editor`가 빈 컴포넌트가 있다. 아무것도 그리지 않으면
         // "아직 고르지 않았다"와 구분되지 않는다.
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       )}

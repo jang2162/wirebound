@@ -1,4 +1,4 @@
-/** **구조 그룹 기본 뷰.** `Page`·`Popup`·`Slot`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`·`TabPanel`. 옮긴 규칙은 `./index.ts` 머리말. */
+/** **구조 그룹 기본 뷰.** `Page`·`Popup`·`Section`·`Flex`·`Grid`·`Card`·`Tabs`·`TabPanel`. 옮긴 규칙은 `./index.ts` 머리말. */
 import type { CSSProperties } from 'react'
 import { componentRule, nodeVar, partRule, WEIGHT_VAR, zeroRule } from '../css-tools'
 import { view } from '../define'
@@ -41,12 +41,6 @@ export const PopupView = view(({ nodeId, props, children }) => (
     </div>
     <div data-wb-part="body">{children}</div>
     <Zone name="footer" data-wb-part="footer" />
-  </Root>
-))
-
-export const SlotView = view(({ slot }) => (
-  <Root as="div" data-wb-structure="default">
-    {slot}
   </Root>
 ))
 

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { installCatalog } from '../src/component/catalog/index'
-import type { LayoutDocument, PageDocument } from '../src/node'
-import { ISSUE_SEVERITY, assertValidLayout, assertValidPage, partitionIssues, validateLayout, validatePage } from '../src/validate'
+import type { PageDocument } from '../src/node'
+import { ISSUE_SEVERITY, assertValidPage, partitionIssues, validatePage } from '../src/validate'
 
 beforeAll(() => {
   installCatalog()
@@ -71,15 +71,6 @@ describe('validatePage', () => {
     expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'duplicate-id', nodeId: 'n_000000000002' }))
   })
 
-  it('페이지에 Slot이 있으면 slot-count', () => {
-    const doc = page({
-      id: 'n_000000000001',
-      type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'Slot' }],
-    })
-    expect(validatePage(doc)).toContainEqual(expect.objectContaining({ code: 'slot-count' }))
-  })
-
   it('invalid-props · children-not-allowed 문장은 별칭이 있으면 타입 뒤에 별칭을 붙인다 — 없으면 그대로다(L-125)', () => {
     const doc = page({
       id: 'n_000000000001',
@@ -125,38 +116,6 @@ describe('validatePage', () => {
   })
 })
 
-describe('validateLayout', () => {
-  function layout(root: LayoutDocument['root']): LayoutDocument {
-    return { version: 1, root }
-  }
-
-  it('Slot이 정확히 하나면 통과한다', () => {
-    const doc = layout({
-      id: 'n_000000000001',
-      type: 'Page',
-      children: [{ id: 'n_000000000002', type: 'Slot' }],
-    })
-    expect(validateLayout(doc)).toEqual([])
-  })
-
-  it('Slot이 없으면 slot-count', () => {
-    const doc = layout({ id: 'n_000000000001', type: 'Page' })
-    expect(validateLayout(doc)).toContainEqual(expect.objectContaining({ code: 'slot-count' }))
-  })
-
-  it('Slot이 둘이면 slot-count', () => {
-    const doc = layout({
-      id: 'n_000000000001',
-      type: 'Page',
-      children: [
-        { id: 'n_000000000002', type: 'Slot' },
-        { id: 'n_000000000003', type: 'Slot' },
-      ],
-    })
-    expect(validateLayout(doc)).toContainEqual(expect.objectContaining({ code: 'slot-count' }))
-  })
-})
-
 describe('assertValidPage', () => {
   /**
    * **이름이 *"`error`가 있으면"*이다 — *"이슈가 있으면"*이 아니다.**
@@ -177,24 +136,6 @@ describe('assertValidPage', () => {
   it('올바른 문서면 던지지 않는다', () => {
     const doc = page({ id: 'n_000000000001', type: 'Page' })
     expect(() => assertValidPage(doc)).not.toThrow()
-  })
-})
-
-describe('assertValidLayout', () => {
-  it('assertValidLayout은 Slot이 정확히 하나인 레이아웃을 통과시킨다', () => {
-    const doc: LayoutDocument = {
-      version: 1,
-      root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type: 'Slot' }] },
-    }
-    expect(() => assertValidLayout(doc)).not.toThrow()
-  })
-
-  it('assertValidLayout은 Slot이 없으면 첫 이슈를 메시지에 담아 던진다', () => {
-    const doc: LayoutDocument = {
-      version: 1,
-      root: { id: 'n_000000000001', type: 'Page', children: [] },
-    }
-    expect(() => assertValidLayout(doc)).toThrow(/slot-count/)
   })
 })
 
@@ -326,11 +267,6 @@ describe('ValidationIssue.severity', () => {
     }
     expect(issues.find((issue) => issue.code === 'ignored-variant')?.severity).toBe('warning')
     expect(issues.find((issue) => issue.code === 'unknown-type')?.severity).toBe('error')
-  })
-
-  it('validateLayout이 낸 이슈도 severity를 단다', () => {
-    const issues = validateLayout({ version: 1, root: { id: 'n_000000000001', type: 'Page' } })
-    expect(issues.map((issue) => issue.severity)).toEqual(['error'])
   })
 
   it('봉투 이슈(bad-document)도 severity를 단다', () => {

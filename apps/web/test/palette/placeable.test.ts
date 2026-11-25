@@ -6,7 +6,7 @@
  * **분모를 손으로 적지 않는다** — `listComponents()` 를 훑어 `validatePage` 를 실제로 통과하는 것을 계산한다. 카탈로그에 컴포넌트가 늘면
  * 여기서 죽는다 — 그것이 «갈래 표를 손으로 두지 않는다»는 판단을 지키는 자리다.
  *
- * 변조: `nested-page` 검사를 떼면 첫 케이스가 죽는다. 둘째 케이스(`Slot` 이 없다 · 나머지가 있다)는 안 죽는다 — 대조군이다.
+ * 변조: `nested-page` 검사를 떼면 첫 케이스가 죽는다. 둘째 케이스(뿌리 `Popup` 이 없다 · 나머지가 있다)는 안 죽는다 — 대조군이다.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -33,7 +33,7 @@ function placeableTypes(): string[] {
       const node = createNode(def.type, () => `n-probe-${made++}`)
       if (node === null) return false
       const version = CURRENT_DOCUMENT_VERSION
-      if (!validatePage({ version, root: node }).some((issue) => issue.code === 'bad-root')) return false
+      if (!validatePage({ version, layout: 'blank', root: node }).some((issue) => issue.code === 'bad-root')) return false
       // 설 자리가 정해진 타입(`TabPanel` · 그리드의 열 · 행 · 칸)은 그 자리에 놓아 잰다 — 하단 판이 그 타입을 «그 부모 안에 넣을 것» 으로 보이는
       // 것과 같다. 설 자리의 부모도 설 자리가 있으면(칸 → 행 → 그리드) 겹으로 감싼다.
       let placed: WbNode = node
@@ -44,7 +44,7 @@ function placeableTypes(): string[] {
           ...(host.zone === BODY_ZONE ? { children: [placed] } : { zones: { [host.zone]: [placed] } }),
         }
       }
-      return validatePage({ version, root: { id: 'r', type: 'Page', children: [placed] } }).length === 0
+      return validatePage({ version, layout: 'blank', root: { id: 'r', type: 'Page', children: [placed] } }).length === 0
     })
     .map((def) => def.type)
 }
@@ -54,9 +54,9 @@ describe('placeableGroups', () => {
     expect(placeable()).not.toContain('Page')
   })
 
-  it('대조군 — 레이아웃 전용 Slot 은 여전히 없고 일반 타입(Section · Text)은 있다', () => {
+  it('대조군 — 뿌리 Popup 은 여전히 없고 일반 타입(Section · Text)은 있다', () => {
     const types = placeable()
-    expect(types).not.toContain('Slot')
+    expect(types).not.toContain('Popup')
     expect(types).toEqual(expect.arrayContaining(['Section', 'Text']))
     expect(types.length).toBeGreaterThan(10)
   })
@@ -66,11 +66,11 @@ describe('placeableGroups', () => {
     expect(placeable().length).toBeGreaterThan(0)
   })
 
-  it('페이지에 둘 수 없는 타입은 목록에 없다 — 뿌리 · 레이아웃 전용', () => {
+  it('페이지에 둘 수 없는 타입은 목록에 없다 — 뿌리', () => {
     const blocked = listComponents()
       .map((def) => def.type)
       .filter((type) => !placeableTypes().includes(type))
-    expect(blocked).toEqual(['Page', 'Popup', 'Slot'])
+    expect(blocked).toEqual(['Page', 'Popup'])
     for (const type of blocked) expect(placeable(), type).not.toContain(type)
   })
 

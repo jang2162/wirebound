@@ -426,7 +426,7 @@ function navItems(options: ExportBundleOptions, paths: readonly string[], at: st
 
 /**
  * «공통코드» 장 — 그룹마다 항목 표와 그 그룹을 쓰는 페이지(링크). 사용처는 `codeUsage`(서버 · 화면과 같은 한 벌)를 번들의 페이지에 돌린다 — 번들에는
- * 레이아웃 · 모듈이 없어 페이지만 센다. 런타임이 없는 정적 글이다(스크립트가 꺼져도 읽힌다).
+ * 모듈이 없어 페이지만 센다. 런타임이 없는 정적 글이다(스크립트가 꺼져도 읽힌다).
  */
 function codesHtml(options: ExportBundleOptions, paths: readonly string[], codes: CodeTable, lang: string): string {
   const sources = options.pages.map(({ title, document: page }, index) => ({

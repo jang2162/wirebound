@@ -82,7 +82,7 @@ const TREE: TreeMenuNode[] = [
 
 /** 문서 봉투. 버전은 스키마가 가진 현재 값을 그대로 쓴다 — 마이그레이션은 이 하네스의 몫이 아니다. */
 export function pageDoc(root: WbNode): PageDocument {
-  return { version: CURRENT_DOCUMENT_VERSION, root }
+  return { version: CURRENT_DOCUMENT_VERSION, layout: root.type === 'Popup' ? 'popup' : 'blank', root }
 }
 
 /** `Page > Text` 문서 하나. 캔버스 케이스가 노드 하나만 필요할 때 쓴다. */

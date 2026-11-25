@@ -117,7 +117,7 @@ export const TOOLS: readonly ToolSpec[] = [
         ops: {
           type: 'array',
           description:
-            'RFC 6902 JSON Patch 연산 목록 (add·remove·replace·move·test — copy 는 받지 않습니다). 경로는 /root 아래(get_page 응답의 nodes[].path 가 그 포인터입니다) · 화면 상태 목록 /viewStates 아래 · /version 입니다.',
+            'RFC 6902 JSON Patch 연산 목록 (add·remove·replace·move·test — copy 는 받지 않습니다). 경로는 /root 아래(get_page 응답의 nodes[].path 가 그 포인터입니다) · 화면 상태 목록 /viewStates 아래 · 페이지 레이아웃 /layout(blank · subpage · popup — popup 은 뿌리 Popup 과 짝이라 /root/type 과 한 묶음으로 바꿉니다) · /version 입니다.',
           items: { type: 'object' },
         },
       },
@@ -172,7 +172,7 @@ export const TOOLS: readonly ToolSpec[] = [
   {
     name: 'code_usage',
     description:
-      '공통코드 그룹(· 항목)을 가리키는 노드를 페이지 · 레이아웃 · 모듈마다 돌려줍니다. 항목을 지우거나 바꾸기 전에 고칠 곳을 셉니다. ' +
+      '공통코드 그룹(· 항목)을 가리키는 노드를 페이지 · 모듈마다 돌려줍니다. 항목을 지우거나 바꾸기 전에 고칠 곳을 셉니다. ' +
       '화면 상태로 숨은 노드 · 구역 안 노드도 셉니다.',
     inputSchema: {
       type: 'object',

@@ -21,7 +21,7 @@ export interface CodeTableListing {
 }
 
 export interface CodeUsageHit {
-  kind: 'page' | 'layout' | 'module'
+  kind: 'page' | 'module'
   id: string
   title: string
   /** `type` · `trail`(조상의 표시 이름)은 같은 이름의 노드를 가르는 단서다 — 서버 계약 그대로(`UsageNode`). */

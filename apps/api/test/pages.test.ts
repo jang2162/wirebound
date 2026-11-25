@@ -46,6 +46,7 @@ async function createProjectWithPage(ctx: TestContext, owner: SignedUpUser) {
 function docWithText(content = '안녕') {
   return {
     version: CURRENT_DOCUMENT_VERSION,
+    layout: 'blank',
     root: { id: 'n_root', type: 'Page', children: [{ id: 'n_text', type: 'Text', props: { content } }] },
   }
 }
@@ -672,6 +673,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
 
       const doc = {
         version: CURRENT_DOCUMENT_VERSION,
+        layout: 'blank',
         root: {
           id: 'n_root',
           type: 'Page',
@@ -820,7 +822,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       })
     })
 
-    it('Slot을 포함하면 422', async () => {
+    it('걷힌 Slot 을 포함하면 422 unknown-type', async () => {
       await withApi(async (ctx) => {
         const owner = await signup(ctx)
         const { project, page } = await createProjectWithPage(ctx, owner)
@@ -837,7 +839,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
           },
         })
         expect(res.statusCode).toBe(422)
-        expect(res.json().error.issues[0].code).toBe('slot-count')
+        expect(res.json().error.issues[0].code).toBe('unknown-type')
       })
     })
 
@@ -1103,7 +1105,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
       })
     })
 
-    it('그 revision의 ops는 replace /root와 replace /version 둘이다', async () => {
+    it('그 revision의 ops는 replace /root · add /layout · replace /version 셋이다', async () => {
       await withApi(async (ctx) => {
         const owner = await signup(ctx)
         const { project, page } = await createProjectWithPage(ctx, owner)
@@ -1118,6 +1120,7 @@ describe('PUT /api/projects/:projectId/pages/:pageId/schema', () => {
         // 생략하지 않는다는 규칙도 여기서 고정된다 — 빼면 배열 길이가 1이 된다.
         expect(rows[0]?.ops).toEqual([
           { op: 'replace', path: '/root', value: doc.root },
+          { op: 'add', path: '/layout', value: doc.layout },
           { op: 'replace', path: '/version', value: doc.version },
         ])
       })

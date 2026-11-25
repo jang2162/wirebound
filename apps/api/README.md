@@ -95,6 +95,16 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 값을 얻는다. 옮기는 자리는 `0028` 과 같다. 트리를 옮긴 페이지만 `head_seq` · `structure_seq` 를 올린다(`0031` 과 같은 까닭). 내리기는 항목을
 위에서 아래로 편 글 목록과 가장 깊은 단(`depth`)으로 되돌린다 — 판 5 화면은 `i % depth` 로 단을 지어 계층을 다시 못 낸다(펼침도 버린다).
 
+**`0037-page-layout` 은 문서를 판 7 로 올린다.** 페이지 문서에 레이아웃(`layout`)을 채운다 — 뿌리 `Popup` 이면 `popup`, 그 밖은 `blank`(판 6 의
+화면 그대로). 규칙은 `@wirebound/schema` 의 `migrate-page-layout.ts` 가 갖고 런타임 사슬에도 있다. 옮기는 자리는 `pages` 와 `snapshots.payload` 의
+`pages[]` 다. 있던 경로가 안 바뀌어 `head_seq` 를 안 올린다. 내리기는 `layout` 을 지우고 판 6 으로 — 빈 · 서브페이지의 구별을 잃는다. 편집 이력(`revisions`)의 `ops` · `inverse` 에서도
+`/layout` 연산을 걷고(내린 판의 경로 검사가 모른다), 둘 다 빈 revision 은 지운다.
+
+**`0038-drop-layouts` 는 레이아웃 표를 걷는다.** `projects.default_layout_id` 와 `layouts` 를 걷고 판 4 이하 스냅샷 payload 의 `layouts` 키를 뺀다 — 판 숫자는 그대로다(복원이 판 숫자로
+테마 바인딩 · 공통코드 표의 갈래를 가른다 — `services/restore-plan.ts` 11 · 12단계). 내리기는 표 · 칼럼을 빈 채로 다시 세우고 판 5 payload 를 판 4 로
+내리며 모든 payload 에 `layouts: []` 를 싣는다 — 레이아웃 행은 다시 짓지 않는다(옛 판의 복원은 빈 집합끼리
+견줘 맞는다. 행을 지으면 그 복원이 409 로 막히고 그 아래 `down` 들이 레이아웃 수로 멈춘다).
+
 **`migrate:down` 은 계정을 안 건드린다.** 시딩이 마이그레이션 **파일 안**이 아니라 CLI
 진입점에 있기 때문이다 — 계정을 마이그레이션 파일로 만들면 롤백이 남의
 계정을 지우게 된다(`src/db/seed-user.ts` 의 머리말이 그 판정을 든다).
@@ -308,7 +318,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 | `forbidden` | 403 | 로그인은 했지만 이 작업에 필요한 역할이 아님 |
 | `not-found` | 404 | 대상이 없음, **또는 프로젝트 멤버가 아님**(설계서 「권한 모델」 — 비멤버에게 프로젝트 존재 여부를 숨긴다) |
 | `snapshot-gone` | 404 | **복원(`POST …/snapshots/:snapshotId/restore`)에서 그 스냅샷이 없다** — 연쇄 삭제 안전망이 상한을 넘어 지워졌다. **가드를 지난 멤버(owner)에게만 난다**: 프로젝트가 없거나 멤버가 아닌 요청은 가드가 `not-found` 로 먼저 끝내 같은 응답이다(상태 · 본문 · 헤더) — 비멤버가 그 프로젝트에 그 스냅샷이 있는지 알 수 없다. 가드를 지난 뒤 잠금을 기다리는 사이 빠지거나 내려간 사람도 같다 — 복원은 어느 갈래로 끝나든 커밋 순간의 권한을 다시 본다(아래 「복원의 오류 표」). 웹의 스냅샷 상자는 이 코드일 때만 «이미 지워졌습니다 · 목록을 다시 받는다» 를 하고, `not-found` 404 는 서버 문장을 그대로 그리며 목록을 다시 받지 않는다. 스냅샷 한 개 조회(`GET …/snapshots/:snapshotId`)의 «없는 스냅샷» 은 `not-found` 다 |
-| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 다섯 갈래**(지문 불일치·안전망 태그 중복·레이아웃 불일치·코멘트 작성자 없음·테마 패키지 없음), **같은 테마 패키지 판 재업로드**, **테마 바인딩의 `rev` 불일치**(본문에 `current` — 아래 «테마 패키지와 프로젝트 테마») 등 |
+| `conflict` | 409 | 유니크 제약 위반, 마지막 owner 제거 시도, 자식이 있는 메뉴 삭제 시도, **스냅샷 태그 중복**, **스냅샷 수집 중 프로젝트 변경**, **복원의 네 갈래**(지문 불일치·안전망 태그 중복·코멘트 작성자 없음·테마 패키지 없음), **같은 테마 패키지 판 재업로드**, **테마 바인딩의 `rev` 불일치**(본문에 `current` — 아래 «테마 패키지와 프로젝트 테마») 등 |
 | `locked` | **423** | **다른 사용자가 편집 중인 노드**(설계서 「소프트 잠금」)를 건드렸다. `message`가 누가 잡고 있는지 말한다. **`conflict`(409)와 갈라 둔 것이 계약이다** — 아래 *"소프트 잠금"* 참고 |
 | `rate-limited` | **429** + `Retry-After` | **로그인 시도가 너무 많다**(`POST /api/auth/login` · `POST /api/auth/password` — 둘이 같은 기록에 센다). 비밀번호를 견주지 않았다 — 옳은 비밀번호도 이 답이다. `Retry-After`(초) 뒤에 풀린다 — 서버에 손이 닿는 사람이 명령으로 먼저 풀 수 있다. 규칙은 아래 «로그인 시도 제한» |
 | `too-large` | **413** | **그림 파일이 한도(`ASSET_FILE_MAX_BYTES`)를 넘었다**(`POST …/assets`) — 문장이 한도와 그 파일의 크기를 말한다(«그림은 5 MB 까지 올릴 수 있습니다(이 파일 7.2 MB)»). 본문은 읽기 전에 끊긴다(`content-length`). 다른 라우트의 본문 상한은 위 `bad-request` 413 이다 |
@@ -387,7 +397,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/menu` | POST | editor | `{ parentId?, title }` | 201 `{ id, projectId, parentId, title, sortOrder }` — **트리 응답과 다른 모양이다**(`children`·`pages`가 없다) |
 | `/api/projects/:projectId/menu/:nodeId` | PATCH | editor | `{ title?, parentId?, sortOrder?, base? }`(`base` 밖 하나 이상) — **`base`는 고치기 전 제목**(`{ title }` — 규칙은 페이지의 바탕과 같다, 아래 «페이지 메타의 충돌 모델». 자리 옮기기와 한 본문이면 400) | 200 `{ id, projectId, parentId, title, sortOrder }`(POST와 같은 키) · **409** `menu-title-changed`(바탕이 지금 제목과 다르다) |
 | `/api/projects/:projectId/menu/:nodeId` | DELETE | editor | — 또는 `{ cascade: true, expect: { menuIds, pageIds } }` | 본문 없음: 204(자식 메뉴·페이지가 있으면 409). 연쇄: 200 `{ deleted: { menus, pages }, safetySnapshot: { id, tag } }` · id 집합이 다르면 **409** `menu-subtree-changed`(아래 «메뉴 연쇄 삭제») |
-| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description?, kind? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 기본 스키마는 빈 `Page`다. `kind: 'popup'` 이면 뿌리 `Popup`(제목 = `title` · 바닥 `[취소][저장]` — «취소» 는 «팝업 닫기» 를 든다 · `@wirebound/schema` 의 `newPageDocument`) |
+| `/api/projects/:projectId/pages` | POST | editor | `{ menuNodeId, title, description?, layout?, kind? }` | 201 **페이지 여덟 키**(아래 "페이지 응답 형태"). 문서는 `layout`(`blank` · `popup` · `subpage`)으로 짓는다 — 없으면 `kind` 에서(`kind: 'popup'` 이면 `popup`, 그 밖은 `blank`). 빈 · 서브페이지는 빈 `Page`, `popup` 은 뿌리 `Popup`(제목 = `title` · 바닥 `[취소][저장]` — «취소» 는 «팝업 닫기» 를 든다 · `@wirebound/schema` 의 `newPageDocument`). `kind: 'popup'` 과 팝업 아닌 `layout`(또는 그 반대)을 함께 보내면 400 |
 | `/api/projects/:projectId/pages/import` | POST | editor | `{ menuNodeId, file, title? }` | 201 `{ page, comments: { inserted, dangling }, ignoredLayoutRef?, warnings? }` — **페이지 JSON(설계서 「페이지 JSON」)으로 새 페이지를 만든다**(아래 "페이지 JSON 가져오기"). 봉투 위반·모르는 버전·NUL 400, 메뉴 없음 404, 카탈로그 **오류** 422 |
 | `/api/projects/:projectId/pages/:pageId` | GET | viewer | — | 200 페이지(스키마 포함, 최신 버전으로 마이그레이션되어 옴). `headSeq`가 다음 편집의 `baseSeq`다 |
 | `/api/projects/:projectId/pages/:pageId` | PATCH | editor | `{ title?, description?, menuNodeId?, sortOrder?, base? }`(하나 이상, `schema`는 여기서 못 바꾼다) — **`base`는 고치기 전 값**(아래 «페이지 메타의 충돌 모델») | 200 **페이지 여덟 키**(POST·GET과 같다) · **409** `page-meta-changed`(바탕이 지금 값과 다르다) |
@@ -419,7 +429,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 | `/api/projects/:projectId/codes/:key/items` | POST | **editor** | `{ value, name, active? }` | 201 `{ item }`. 코드값 1~40자 · 받지 않는 글자는 400, 겹친 값 409 `code-key-taken`, 그룹당 200 개 넘으면 400, 없는 그룹 404 |
 | `/api/projects/:projectId/codes/:key/items/:value` | PATCH | **editor** | `{ name?, sortOrder?, active? }`(하나 이상) | 200 `{ item }`. **`value` 는 못 바꾼다**(본문에 실으면 400). 없는 그룹 · 항목 404 |
 | `/api/projects/:projectId/codes/:key/items/:value` | DELETE | **editor** | — | 204. 없는 그룹 · 항목 404 |
-| `/api/projects/:projectId/codes/usage` | GET | viewer | 질의 `group`(필수) · `item` | 200 `{ usage: [{ kind: 'page' \| 'layout' \| 'module', id, title, nodes: [{ nodeId, name, type, trail }] }] }` — 그 그룹(· 항목)을 가리키는 노드. `name` · `trail` 은 표시 이름(구조 트리 줄과 같은 이름 — 묶인 노드는 표의 이름)이고 `trail` 은 조상의 이름(뿌리 쪽부터 · 페이지 · 레이아웃의 뿌리 `Page` 는 뺀다)이다 — 같은 이름의 노드를 가르는 단서. 숨은 상태의 노드 · 구역 안 노드도 센다. 개인 모듈은 안 센다 |
+| `/api/projects/:projectId/codes/usage` | GET | viewer | 질의 `group`(필수) · `item` | 200 `{ usage: [{ kind: 'page' \| 'module', id, title, nodes: [{ nodeId, name, type, trail }] }] }` — 그 그룹(· 항목)을 가리키는 노드. `name` · `trail` 은 표시 이름(구조 트리 줄과 같은 이름 — 묶인 노드는 표의 이름)이고 `trail` 은 조상의 이름(뿌리 쪽부터 · 페이지 뿌리 `Page` 는 뺀다)이다 — 같은 이름의 노드를 가르는 단서. 숨은 상태의 노드 · 구역 안 노드도 센다. 개인 모듈은 안 센다 |
 | `/api/projects/:projectId/codes/usage-counts` | GET | viewer | — | 200 `{ counts: { [key]: { group, items: { [value]: n } } } }` — 그룹 목록이 한 번에 받는 사용 수 |
 | `/api/projects/:projectId/assets` | POST | **editor**(세션 · 그 프로젝트의 토큰) | 본문 = 그림 바이트 그대로(multipart 아님 · `Content-Type` 은 안 믿는다) · 머리 `X-Asset-Name`(파일 이름 · `encodeURIComponent` · 선택) | 201 `{ id, name, mime, size, width, height, createdAt }` — `id` 는 바이트의 sha256. **이미 이 프로젝트에 있으면 200 · 같은 답**(한도를 안 센다). 413 `too-large` · 415 `unsupported-media` · 422(`issues[].code` `asset-dimensions`) · 409 `asset-quota` — 아래 "그림" |
 | `/api/projects/:projectId/assets` | GET | viewer | — | 200 `{ assets: [위와 같은 모양], usedBytes, limitBytes, fileLimitBytes }` — 최근 것 먼저 |
@@ -907,7 +917,7 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
   404(«스냅샷을 찾을 수 없습니다» — 복원은 `snapshot-gone`, 상세는 `not-found`)다 — 지우기는 프로젝트 행을 쥔 뒤라, 이미 그 스냅샷으로 복원하는 중이면 그 복원이 끝난 뒤에 지운다.
 - **지우는 것** — 페이지마다 코멘트(키 있는 것은 묘비를 남긴다) → 페이지 행(이력은 CASCADE · 마지막 번호를 `page_seq_floors` 에 남긴다) →
   메뉴(깊은 것부터) → 남은 형제의 `sortOrder` 를 당긴다.
-- **잠금 · 권한** — 복원과 같은 잠금(프로젝트 행 → 메뉴 → 페이지 → 레이아웃 → 코멘트)을 쥔 뒤 권한을 다시 보고(editor) 집합을 견준다.
+- **잠금 · 권한** — 복원과 같은 잠금(프로젝트 행 → 메뉴 → 페이지 → 코멘트)을 쥔 뒤 권한을 다시 보고(editor) 집합을 견준다.
   그래서 복원 중에는 기다리고, 기다리는 사이 멤버에서 빠진 사람은 지금 목록이 아니라 거절을 받는다.
 - **지웠으면 `menu-changed`를 낸다**(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 409 · 400 은 안 낸다.
 
@@ -975,8 +985,8 @@ PATCH /pages/:id   응답 그대로 → 400 인식할 수 없는 키: "id", "sch
   트리 밖 참조(`page:…`)와 화면 상태 바꾸기(`setViewState`)의 대상(상태 id — 노드가 아니다)은 그대로 둔다.
 - **파일의 트리에 없는 노드를 가리키는 코멘트는 버리지 않고 넣는다.** 그 수가 응답의
   `comments.dangling`이고, 들어간 뒤 화면은 그것을 *"사라진 노드"* 무리로 보인다.
-- **`layoutRef`는 쓰지 않는다** — 페이지가 레이아웃을 고르는 경로가 없다
-  (`pages`에 레이아웃 컬럼이 없다). 조용히 버리지 않고 응답의 `ignoredLayoutRef`로 말한다.
+- **`layoutRef`는 쓰지 않는다** — 레이아웃은 파일의 문서(`schema.layout`)에서 온다. 조용히 버리지 않고 응답의
+  `ignoredLayoutRef`로 말한다.
 - **문서 쓰기는 편집 파이프라인을 지난다** — 가져오기 하나가 revision 하나를 남기고,
   그 역은 **빈 페이지**로 되돌린다.
 - **한 트랜잭션이다.** 어느 갈래에서 끊기든 페이지도 문서도 코멘트도 남지 않는다 —
@@ -1183,7 +1193,7 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
   "menu": [
     {
       "id": "…", "title": "회원관리", "sortOrder": 0,
-      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ], "kind": "page" } ],
+      "pages": [ { "id": "…", "title": "목록", "sortOrder": 0, "viewStates": [ { "id": "s_login", "name": "로그인" }, { "id": "s_admin", "name": "관리자", "parent": "s_login" } ], "layout": "subpage", "kind": "page" } ],
       "children": [
         { "id": "…", "title": "권한", "sortOrder": 0, "pages": [], "children": [] }
       ]
@@ -1195,30 +1205,18 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 `rev`는 메뉴 트리 판 번호다(위 «실시간»의 «트리 쓰기는 `menu-changed`를 낸다») — 아무도 트리를 안 바꾼 프로젝트는 0 이다. 번호와 행은
 한 스냅숏에서 읽는다.
 
-페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`·`kind`만 있다 — `schema`는 실리지 않는다(트리는
+페이지 항목에는 `id`·`title`·`sortOrder`·`viewStates`·`layout`·`kind`만 있다 — `schema`는 실리지 않는다(트리는
 목록을 훑는 용도이고, 스키마를 포함하면 프로젝트가 커질수록 응답이 무거워진다). `viewStates` 는 문서의 화면 상태 목록(`parent` 포함 —
-메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다. `kind` 는
-페이지의 종류다 — 문서 뿌리가 `Popup` 이면 `popup`, 그 밖은 `page`(메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 읽는다).
+메뉴 트리가 열리지 않은 페이지의 상태 줄을 짓는다)이고 상태가 없는 페이지는 `[]`, 모양이 틀린 항목은 뺀다. 많아야 20개다. `layout` 은
+페이지 레이아웃(`blank` · `popup` · `subpage` — 문서의 `layout`)이다(서브페이지 틀의 GNB · LNB · 브레드크럼브가 팝업을 거른다). `kind` 는 그것에서 짓는
+페이지의 종류다 — 팝업 레이아웃이면 `popup`, 그 밖은 `page`(메뉴 트리 줄의 «팝업» 표지 · 상호작용 탭의 대상 고르개가 닫힌 페이지에서 읽는다).
 페이지 본문(스키마 포함)이 필요하면 `GET /api/projects/:projectId/pages/:pageId`를
 따로 호출한다.
 
 ### 레이아웃
 
-**프로젝트를 만들면 기본 레이아웃이 함께 생긴다**(같은 트랜잭션). 그 문서는 `Page`
-하나와 `Slot` 하나다.
-
-- **레이아웃을 편집하는 엔드포인트는 없다.** 레이아웃은 `Slot`을
-  담는 그릇이다(설계서 「레이아웃」의 레이아웃 에디터는 없다 — 아래 "이 서버가 만들지 않은 것").
-- **저장된 `schema`를 그리는 코드는 없다 — 캔버스는 페이지 문서만 그린다.**
-  쓰는 자리는 프로젝트 생성 하나다.
-  `renderComposed`로 합치면 레이아웃의 루트 `Page`와 `Slot`이 **노드 둘을 더 그려**
-  페이지 문서에 없는 `data-wb-id`가 DOM에 섞인다(`packages/renderer/test/compose-identity.test.tsx`).
-  그리는 코드가 생기는 것은 레이아웃 에디터가 올 때이고, 그쪽은 **선택 모델부터** 정해야 한다.
-- `projects.default_layout_id`와 `layouts.project_id`가 **서로를 가리키는 순환**이라
-  `default_layout_id`가 nullable이다. 생성은 프로젝트 → 레이아웃 → 프로젝트 UPDATE
-  세 문장으로 닫는다.
-- 마이그레이션 0007 **이전에 만들어진 프로젝트**는 `default_layout_id`가 `NULL`로
-  남는다(마이그레이션이 만들어 주지 않는다). 그런 프로젝트에 레이아웃을 주는 경로는 없다.
+페이지 레이아웃(`blank` · `popup` · `subpage`)은 **페이지 문서의 필드**(`schema.layout`)다 — 바꾸는 것은 문서 편집(`/layout` — 위 «편집 파이프라인»)이고
+따로 라우트 · 표가 없다. 레이아웃 문서 · `layouts` 표 · `projects.default_layout_id` 는 없다(마이그레이션 `0038-drop-layouts` 가 걷었다).
 
 ### 스냅샷 응답 형태
 
@@ -1240,7 +1238,6 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 | `capturedAt` | 캡처 시각(ISO) — **Postgres의 `clock_timestamp()`**이고, 뜻은 *"캡처가 payload의 내용을 그대로임을 마지막으로 확인한 순간"*이다. **`snapshots.created_at`과 같은 값이다**(서버가 이 값을 그 컬럼에 심는다) |
 | `menu` | 메뉴 노드 평평한 목록(`parentId`가 구조를 나른다) |
 | `pages` | 페이지 + **저장된 문서 그대로** + `headSeq`(설계서 「스냅샷」의 요구) |
-| `layouts` | 레이아웃 **전부**(프로젝트당 하나라고 가정하지 않는다) |
 | `comments` | 코멘트 + 그 시점의 작성자 이름 |
 | `theme` | 프로젝트의 테마 바인딩 `{ themeId, version, tokens }` 또는 `null`(판 3 부터 — 아래 «테마는 참조로 얼린다») |
 
@@ -1252,9 +1249,11 @@ Chrome(route — 첫 게시를 서버에 보내 커밋시키고, 그 사이 상�
 수단 자체를 잃는다(그 페이지의 `GET`은 여전히 400이다).
 
 **테마는 참조로 얼린다 — 판 3.** 테마 내용이 아니라 프로젝트의 바인딩 `theme: { themeId, version, tokens }`(바인딩이 비었으면 `null`)을
-싣는다 — 패키지는 지우지 않으므로 참조로 충분하다. 레이아웃은 테마를 가리키지 않는다. 판 2 payload 에는 `theme` 가 없다(규격에서 선택이다).
+싣는다 — 패키지는 지우지 않으므로 참조로 충분하다. 판 2 payload 에는 `theme` 가 없다(규격에서 선택이다).
 판 1 payload(`themes` 절 · `layouts[].themeId`가 있다)는 마이그레이션 0018 이 판 2 로 옮긴다 — 규격이 `z.strictObject`라 옮기지 않으면 못 읽는다.
 캡처의 지문은 바인딩 칸(토큰은 해시)과 `theme_rev` 도 덮는다 — 수집 도중 바인딩을 저장하면 409 다.
+
+**레이아웃 표는 싣지 않는다 — 판 5.** 판 4 이하 payload 의 `layouts`(프로젝트마다의 `Page > Slot` 문서)는 마이그레이션 `0038-drop-layouts` 가 걷는다(판 숫자는 그대로 — 지금 규격은 `layouts` 없는 판 4 이하를 읽는다). 페이지 레이아웃은 `pages[].schema.layout` 으로 실린다.
 
 **`payloadBytes`는 `octet_length(payload::text)`다** — DB가 들고 있는 문서의 옥텟 수이고,
 생성·목록·상세 셋이 같은 식을 쓴다. 설계서 「열린 질문」의 스냅샷 보관 정책을 닫을 관측이라 **크기 상한은
@@ -1306,13 +1305,6 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 - **되살아난 페이지는 `head_seq` 0에서 다시 시작한다.** 이력은 되살아나지 않는다(지워질 때
   CASCADE가 데려갔다). 복원이 되살릴 수 있는 것은 **문서**다.
 
-#### 레이아웃 개수가 다르면 복원하지 않는다
-
-`layouts`에는 `project_id` 유니크가 없어 프로젝트에 레이아웃이 둘 이상일 수 있다. *"하나를
-찾아 payload의 하나로 덮는다"*로 짜면 그런 프로젝트에서 **하나를 조용히 버린다.** 레이아웃을
-만들거나 지우는 것은 설계서 「레이아웃」의 레이아웃 에디터가 할 일이므로, **id 집합이 다르면 409로 끊고
-조용히 맞추지 않는다.**
-
 #### 미지원 버전 탈출구 — **만들지 않는다**
 
 설계서 「스키마 마이그레이션」의 열린 항목(미지원 버전 문서의 복구 경로)을 스냅샷 복원이 떠맡지 **않는다.** 근거는
@@ -1360,7 +1352,6 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 | `payloadVersion`이 이 서버보다 크다 | 400 | 이 서버가 읽을 수 없는 스냅샷 형식입니다 (형식 N, 지원 M) |
 | 복원 도중 프로젝트가 바뀌었다 | 409 | 복원하는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요 |
 | 안전망 태그가 이미 있다 | 409 | 복원 전 상태를 저장할 태그(…)가 이미 있습니다. 다시 시도해 주세요 |
-| 레이아웃 id 집합이 다르다 | 409 | 레이아웃 구성이 스냅샷과 다릅니다 … 복원하지 않았습니다 |
 | 코멘트 작성자가 더 이상 없다 | 409 | 스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (N명) |
 | 판 3 이 가리킨 테마 패키지가 없다 | 409 | 스냅샷의 테마 패키지가 이 서버에 없습니다: id@version — 복원하지 않았습니다 |
 | 미지원 문서 버전 | 400 | 지원하지 않는 문서 버전이라 복원할 수 없습니다: 제목(현재\|스냅샷 버전 N) |
@@ -1377,7 +1368,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 
 #### 복원은 자기가 쓰는 동안 남이 못 고치게 한다
 
-트랜잭션 안에서 **프로젝트 행과 메뉴·페이지·레이아웃·코멘트 행을 `FOR UPDATE`로 잠근
+트랜잭션 안에서 **프로젝트 행과 메뉴·페이지·코멘트 행을 `FOR UPDATE`로 잠근
 뒤** 캡처를 부른다(잠그기 **전에** 읽으면 *"서버가 값을 읽어 밀어붙인다"*가 성립한다).
 
 **무엇이 막히는지 실측했다**(실제 커밋하는 두 커넥션, 음성 대조 포함).
@@ -1546,7 +1537,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
    `ops` · `inverse`가 둘 다 문서 통째라 한 조회가 수백 MB 일 수 있다. 되돌리기의 두 조회는
    `fields=inverse`로 `ops`를 빼 그 반만 받는다.
 
-**ops 의 경로는 `/root` · `/viewStates`(화면 상태 목록 — 노드 밖의 문서 경로) 아래이거나 정확히 `/version`이다** — 그 밖은
+**ops 의 경로는 `/root` · `/viewStates`(화면 상태 목록 — 노드 밖의 문서 경로) 아래이거나 정확히 `/layout`(페이지 레이아웃) · `/version`이다** — 그 밖은
 400 이다(`http/patch-ops.ts`의 `PatchPath`). `/viewStates/…` 편집의 모양은 6단계의 봉투 검증이 본다.
 
 **연산은 `add` · `remove` · `replace` · `move` · `test` 다섯이다.** `test`는 문서를 안 바꾸고 그 자리의 값이 같은지만 잰다 — 다르거나
@@ -1561,7 +1552,7 @@ CASCADE가 그 페이지의 이력을 함께 데려간다. 그래서 복원은 *
 판정을 탄다. 6단계가 편집 전후 문서로 보므로 `PUT …/schema` · 스냅샷 복원도 같다. 편집 전부터 목록 밖이던 보임은 막지 않는다(lint 의 몫).
 
 **`PUT .../schema`가 만든 revision도 같은 방식으로 되돌린다 — 예외가 아니다.** 그
-revision의 `ops`는 문서의 필드마다 하나씩이다 — `[replace /root, (add | remove /viewStates), replace /version]`
+revision의 `ops`는 문서의 필드마다 하나씩이다 — `[replace /root, (add | remove /layout), (add | remove /viewStates), replace /version]`
 (`@wirebound/schema`의 `replaceDocumentOps` — 가져오기 · 스냅샷 복원과 `PUT`의 방송도 같은 함수다. 받은 문서에 상태 목록이
 있으면 `add`, 없는데 저장된 문서에 있으면 `remove`). `inverse`에도 `/version`이
 남지만, 그것을 그대로 `PATCH .../ops`로 되보내면 200이다. undo가 싣는 `/version`은
@@ -1855,11 +1846,6 @@ id 를 실으면 **아무도 안 빠진다.** 쿠키 없이 토큰만 든 요청
 
 - **서버 리베이스**: `baseSeq`가 어긋나면 서버가 리베이스를 시도하지 않고 곧바로 409를 낸다
   (위 "편집 파이프라인"). 리베이스는 클라이언트가 한다(설계서 「정방향 흐름」).
-- **레이아웃 편집**: 레이아웃 문서를 만들고 고치는 엔드포인트. 프로젝트마다 기본
-  레이아웃(`Page` 하나 + `Slot` 하나) 하나가 자동으로 생길 뿐, 그것을 바꿀 방법이 없다.
-  설계서 「테이블 정의」가 적은 `pages.layout_id`도 없다 — 페이지가 레이아웃을 고르는 경로가 없다.
-- **복원이 되돌리지 않는 것**: **레이아웃 생성·삭제**(개수가 다르면 409로 끊는다 — 설계서 「레이아웃」의
-  레이아웃 에디터가 올 때 함께 연다).
 - **API 토큰의 만료·회전**: 설계서 「권한 모델」에 그 줄이 없어 근거 없이 정하지 않았다(위 "API 토큰").
 
 ## 명령 요약

@@ -438,10 +438,6 @@ function restoreOutcomeToApiError(outcome: Exclude<RestoreOutcome, { kind: 'rest
       return conflict('복원하는 동안 프로젝트가 바뀌었습니다. 다시 시도해 주세요')
     case 'safety-tag-taken':
       return conflict(`복원 전 상태를 저장할 태그(${outcome.tag})가 이미 있습니다. 다시 시도해 주세요`)
-    case 'layout-mismatch':
-      return conflict(
-        `레이아웃 구성이 스냅샷과 다릅니다 (스냅샷 ${outcome.snapshot.length}개, 현재 ${outcome.current.length}개). 복원하지 않았습니다`,
-      )
     case 'missing-author':
       return conflict(`스냅샷의 코멘트를 남긴 사용자가 더 이상 없습니다 (${outcome.authorIds.length}명)`)
     case 'missing-theme':

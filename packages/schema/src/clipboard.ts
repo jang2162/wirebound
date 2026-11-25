@@ -138,7 +138,8 @@ export function inspectNodesEnvelope(
   const checked = DocumentEnvelopeSchema.safeParse({ version: document.version, root: document.root })
   if (!checked.success) return { kind: 'rejected', reason: '노드의 모양이 맞지 않습니다.' }
   // 맨 위 노드가 설 자리(`misplaced-component` — `TabPanel`)는 감싼 뿌리가 아니라 붙일 자리가 정한다 — 붙인 뒤 문서의 검증이 본다.
-  const first = partitionIssues(validatePage(checked.data)).errors.find(
+  // 감싼 뿌리가 `Page` 라 빈 레이아웃으로 잰다 — 판 7 봉투가 `layout` 을 묻는다(노드 묶음은 레이아웃과 무관하다).
+  const first = partitionIssues(validatePage({ ...checked.data, layout: 'blank' })).errors.find(
     (issue) => !(issue.code === 'misplaced-component' && /^\/root\/children\/\d+$/.test(issue.path)),
   )
   if (first !== undefined) return { kind: 'rejected', reason: first.message }

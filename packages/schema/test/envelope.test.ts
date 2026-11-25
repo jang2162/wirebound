@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { installCatalog, resetRegistry, validateLayout, validatePage } from '../src/index'
+import { installCatalog, resetRegistry, validatePage } from '../src/index'
 import { DocumentEnvelopeSchema, WbNodeSchema } from '../src/envelope'
 
 beforeAll(() => {
@@ -224,20 +224,5 @@ describe('validatePage — bad-document의 nodeId 해석', () => {
     const issues = validatePage(doc as never)
     const issue = issues.find((i) => i.path === '/root/children/0/marker')
     expect(issue?.nodeId).toBeNull()
-  })
-})
-
-describe('validateLayout — 봉투 게이트', () => {
-  it('봉투가 깨지면 bad-document를 낸다', () => {
-    const issues = validateLayout({ version: 1, root: { id: null, type: 'Page' } } as never)
-    expect(issues[0]?.code).toBe('bad-document')
-  })
-
-  it('봉투를 통과한 정상 레이아웃에는 이슈가 없다', () => {
-    const layout = {
-      version: 1,
-      root: { id: 'n_000000000001', type: 'Page', children: [{ id: 'n_000000000002', type: 'Slot' }] },
-    }
-    expect(validateLayout(layout)).toEqual([])
   })
 })

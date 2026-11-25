@@ -43,11 +43,13 @@
  * `test-support/fixtures.ts` 의 그 칩에서 `code` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-10-cc-report.md`).
  * 코멘트 토큰을 들이며 «글» 만 다시 지었다 — 코멘트 칸의 줄이 번호 닻(`id="wb-marker-<노드 id>"` — 토큰이 그 번호로 오는 자리)을 단다. 코멘트가 없는
  * 페이지 · 시트는 그대로다(다시 재는 법: `bundle/shell.tsx` 의 `CommentTab` 에서 `id` 를 떼고 해시하면 앞 값이 선다 — `docs/superpowers/plans/2026-11-11-tk-report.md`).
+ * 카탈로그에서 `Slot` 을 걷으며 «슬롯» 장을 뺐다 — 남은 장 HTML · `index.html` 은 목차(장 넷 → 셋)만 달라 다시 지었고 시트는 그대로다(다시 재는 법: 장 하나를
+ * 더 넣고 해시하면 목차가 다시 늘어 값이 바뀐다 — `docs/superpowers/plans/2026-11-25-ly2-report.md`).
  */
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { exportBundle, type BundlePage, type BundleTheme } from '../src/bundle/index'
-import { broadFixture, brokenFixture, EMPTY_MANIFEST, SAMPLE_PAGE, slotFixture } from '../test-support/fixtures'
+import { broadFixture, brokenFixture, EMPTY_MANIFEST, SAMPLE_PAGE } from '../test-support/fixtures'
 
 const THEME: BundleTheme = {
   ref: { themeId: 'test', version: '0.0.0' },
@@ -64,7 +66,6 @@ const THEME: BundleTheme = {
 function pages(): BundlePage[] {
   return [
     { title: '넓은 표본', document: broadFixture(), description: '설명', target: 'page:넓은' },
-    { title: '슬롯', document: slotFixture() },
     { title: '글', document: SAMPLE_PAGE, comments: [{ nodeId: 'n_text', body: '코멘트', authorName: '갑', createdAt: '2026-01-01' }] },
     { title: '깨진 문서', document: brokenFixture() },
   ]
@@ -83,19 +84,17 @@ function digest(withTheme: boolean): Record<string, string> {
 /** 상태 없는 페이지의 해시(파일마다 sha256 앞 16자) — 지은 때는 머리말. */
 const BEFORE = {
   plain: {
-    'index.html': 'ebdc496710f6b83e',
-    'pages/넓은-표본.html': '1c4cbaf5bb10306b',
-    'pages/슬롯.html': '8f223165d94d90d6',
-    'pages/글.html': 'c4aeb6bc5b0d7710',
-    'pages/깨진-문서.html': '1e6593b7b432956c',
+    'index.html': '57971df664af2a5a',
+    'pages/넓은-표본.html': 'd3f9228e6ff2f166',
+    'pages/글.html': '3c57529a0b5b606c',
+    'pages/깨진-문서.html': 'c150d92dc536c2bf',
     'assets/views.css': '556341d0b9e1bbc4',
   },
   themed: {
-    'index.html': '4e93060ac265781e',
-    'pages/넓은-표본.html': '50102e11ed7df659',
-    'pages/슬롯.html': '5a47bcdcb93ed712',
-    'pages/글.html': '2c70d28e00b44d47',
-    'pages/깨진-문서.html': 'e071fd4ffcfbad1c',
+    'index.html': '1c35814ab3bb58f4',
+    'pages/넓은-표본.html': 'e7223e65a3f79f4e',
+    'pages/글.html': 'eff974ff79c0fecc',
+    'pages/깨진-문서.html': 'e8249eb7e8b5a746',
     'assets/views.css': '556341d0b9e1bbc4',
     'assets/theme/theme.js': 'e0bf77dea1cc3295',
     'assets/theme/theme.css': '174b2602178ea0cd',

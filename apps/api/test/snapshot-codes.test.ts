@@ -59,7 +59,7 @@ describe('스냅샷 · 공통코드', () => {
       const fx = await fixture(ctx)
       expect(await fx.table()).toEqual(AT_SNAPSHOT)
       const payload = await fx.payloadOf(await fx.snapshot('v1'))
-      expect(payload.payloadVersion).toBe(4)
+      expect(payload.payloadVersion).toBe(5)
       expect(payload.codes).toEqual(AT_SNAPSHOT)
     })
   })

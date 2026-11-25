@@ -14,10 +14,8 @@ import {
   partitionIssues,
   propSchema,
   requireComponent,
-  validateLayout,
   validatePage,
   walkNodes,
-  type LayoutDocument,
   type PageDocument,
   type WbNode,
 } from '@wirebound/schema'
@@ -476,10 +474,10 @@ describe('0029 — 문서 판 3 → 4', () => {
   it('판 4 페이지 · 레이아웃 · 두 모듈 표 · 스냅샷(판 2 · 3 · 4 문서와 레이아웃)', async () => {
     expect(await pageRow(seeded.pageV4)).toEqual({ schema: V4_PAGE, schema_version: 4 })
 
-    const layout = (await sql<{ schema: LayoutDocument }>`select schema from layouts where id = ${seeded.layoutId}`.execute(db)).rows[0]!
-      .schema
+    const layout = (
+      await sql<{ schema: { version: number; root: WbNode } }>`select schema from layouts where id = ${seeded.layoutId}`.execute(db)
+    ).rows[0]!.schema
     expect(layout.version).toBe(4)
-    expect(partitionIssues(validateLayout(layout)).errors).toEqual([])
     expect(piecesOf(layout.root, 'l_f')).toEqual([{ type: 'Input', props: { placeholder: '검색어' } }])
 
     const nodes = (await sql<{ nodes: WbNode[] }>`select nodes from modules where id = ${seeded.moduleId}`.execute(db)).rows[0]!.nodes
@@ -494,7 +492,9 @@ describe('0029 — 문서 판 3 → 4', () => {
 
     const payload = (await sql<{ payload: unknown }>`select payload from snapshots where id = ${seeded.snapshotId}`.execute(db)).rows[0]!
       .payload
-    const parsed = SnapshotPayloadSchema.safeParse(payload)
+    // 그 판 payload 의 `layouts` 는 지금 규격(판 5)에 없다 — 걷고 읽는다(레이아웃 문서는 아래에서 날것으로 본다).
+    const { layouts, ...rest } = payload as { layouts: { schema: { version: number } }[] }
+    const parsed = SnapshotPayloadSchema.safeParse(rest)
     expect(parsed.success).toBe(true)
     const [v3, v2, v4] = parsed.data!.pages
     expect(v3!.schema.version).toBe(4)
@@ -506,7 +506,7 @@ describe('0029 — 문서 판 3 → 4', () => {
     expect(find(v2!.schema.root, 'n_ef2').zones!.actions).toHaveLength(2)
     expect(piecesOf(v2!.schema.root, 'n_f2')).toEqual([{ type: 'Select' }])
     expect(v4).toMatchObject({ schemaVersion: 4, schema: V4_PAGE })
-    expect(parsed.data!.layouts[0]!.schema.version).toBe(4)
+    expect(layouts[0]!.schema.version).toBe(4)
   })
 
   it('넓힌 표본 — 실제 DB 에서 up 을 한 번 더 돌려도 다섯 표의 글자가 같다', async () => {

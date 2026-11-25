@@ -1,6 +1,6 @@
 /**
  * **공통코드 화면의 몸**(`routes/codes.tsx`) — 왼쪽 그룹 목록(이름 · 키 · 항목 수 · 사용 수), 오른쪽 고른 그룹의 항목 표(차례 · 코드값 · 이름 ·
- * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 · 레이아웃 · 모듈마다 접는 묶음 — 줄은 타입 · 노드 이름 · 조상 이름, 누르면 에디터가 그
+ * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 · 모듈마다 접는 묶음 — 줄은 타입 · 노드 이름 · 조상 이름, 누르면 에디터가 그
  * 페이지를 열고 그 노드를 고른다).
  *
  * - **주소가 고른 것을 든다** — `?group=<키>`(없거나 모르는 키면 첫 그룹) · `?item=<코드값>`(사용처를 그 항목으로 좁힌다). 바꿀 때는 `replace`.
@@ -38,7 +38,7 @@ export const NO_MATCH = '맞는 그룹이 없습니다'
 export const DELETE_PREVIEW = 5
 export const BREAKS_REFERENCES = '참조가 끊깁니다 — 그 노드는 묶을 때의 글과 끊김 표지로 남습니다.'
 
-const KIND_TEXT: Record<UsageHit['kind'], string> = { page: '페이지', layout: '레이아웃', module: '모듈' }
+const KIND_TEXT: Record<UsageHit['kind'], string> = { page: '페이지', module: '모듈' }
 
 interface Table {
   groups: CodeGroup[]
@@ -68,9 +68,9 @@ export function trailText(node: UsageNode): string {
   return [...(node.trail.length > TRAIL_SHOWN ? ['…'] : []), ...near].join(' › ')
 }
 
-/** 사용처 머리의 요약 — «페이지 N · 레이아웃 N · 모듈 N · 노드 M»(없는 종류는 뺀다). */
+/** 사용처 머리의 요약 — «페이지 N · 모듈 N · 노드 M»(없는 종류는 뺀다). */
 export function usageSummary(hits: readonly UsageHit[]): string {
-  const kinds = (['page', 'layout', 'module'] as const)
+  const kinds = (['page', 'module'] as const)
     .map((kind) => [kind, hits.filter((hit) => hit.kind === kind).length] as const)
     .filter(([, count]) => count > 0)
     .map(([kind, count]) => `${KIND_TEXT[kind]} ${count}`)
@@ -83,7 +83,7 @@ export function groupMatches(group: CodeGroup, find: string): boolean {
   return needle === '' || group.name.toLocaleLowerCase().includes(needle) || group.key.toLocaleLowerCase().includes(needle)
 }
 
-/** 사용처 줄 — 페이지면 에디터로 가는 주소, 레이아웃 · 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
+/** 사용처 줄 — 페이지면 에디터로 가는 주소, 모듈은 에디터에서 그 노드를 여는 길이 없어 글만이다. */
 export function usageHref(projectId: string, hit: UsageHit, nodeId: string): string | null {
   return hit.kind === 'page' ? `/projects/${projectId}/pages/${hit.id}?node=${encodeURIComponent(nodeId)}` : null
 }
@@ -520,7 +520,7 @@ function UsageList(props: {
         <ul className="wb-shell-codes-usage-hits" aria-label="사용처 목록">
           {list.value.map((hit) => (
             <li className="wb-shell-codes-usage-hit" key={`${hit.kind}\n${hit.id}`}>
-              {/* 묶음 — 페이지(· 레이아웃 · 모듈) 이름과 노드 수. 처음에는 펴 둔다 — 접는 것은 훑는 사람의 몫이다. */}
+              {/* 묶음 — 페이지(· 모듈) 이름과 노드 수. 처음에는 펴 둔다 — 접는 것은 훑는 사람의 몫이다. */}
               <details className="wb-shell-codes-usage-fold" open>
                 <summary className="wb-shell-codes-usage-summary">
                   {`${KIND_TEXT[hit.kind]} ${isolate(hit.title)}`}

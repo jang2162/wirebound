@@ -18,7 +18,6 @@ const PAYLOAD = {
   capturedAt: '2026-08-16T00:00:00.000Z',
   menu: [{ id: 'm1', parentId: null, title: '관리자', sortOrder: 0 }],
   pages: [{ id: 'p1', menuNodeId: 'm1', title: '목록', schemaVersion: 4, schema: { version: 1 }, headSeq: 0 }],
-  layouts: [],
   comments: [],
 }
 

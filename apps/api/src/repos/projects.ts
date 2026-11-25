@@ -10,7 +10,6 @@ import { assertLocking } from '../db/locking'
 import { assertNoNulBytes } from '../db/nul-guard'
 import { withTransaction, type DbHandle } from '../db/tx'
 import type { ProjectRole } from '../db/types'
-import { DEFAULT_LAYOUT_NAME, defaultLayoutDocument, insertLayout } from './layouts'
 import { DEFAULT_THEME_ID, latestVisibleVersion } from './theme-packages'
 
 export interface ProjectRecord {
@@ -51,31 +50,8 @@ function isSlugUniqueViolation(error: unknown): boolean {
 }
 
 /**
- * 프로젝트를 만들고, 생성자를 owner로 넣고, **기본 레이아웃을 함께 만든다** —
- * 전부 같은 트랜잭션 안에서다.
- *
- * 셋 중 하나만 성공하는 상태가 생기면 안 된다. 주인 없는 프로젝트는 아무도 접근할 수
- * 없는 채로 영원히 남고(설계서 「권한 모델」), 레이아웃 없는 프로젝트에는
- * **레이아웃을 만들어 주는 다른 경로가 없다**(레이아웃을 만드는 라우트가 없다).
- *
- * ---
- *
- * **순환 참조를 여는 순서.** `projects.default_layout_id`와
- * `layouts.project_id`가 서로를 가리키므로 어느 쪽도 먼저 완성될 수 없다. 그래서
- * **세 문장**으로 닫는다:
- *
- * 1. `projects` INSERT — `default_layout_id`를 비워 둔다(그래서 그 컬럼이 nullable이다).
- * 2. `layouts` INSERT — 이제 `project_id`가 가리킬 행이 있다.
- * 3. `projects` UPDATE — `default_layout_id`를 채운다.
- *
- * 한 트랜잭션 안이므로 밖에서는 세 문장이 보이지 않는다. 이 순서가 아니면(레이아웃을
- * 먼저 만들려 하면) `project_id`의 NOT NULL FK를 만족시킬 수 없다.
- *
- * **이 함수는 여러 표를 함께 넣는다.** `project_members`와 기본 레이아웃이 그것이다 —
- * *"프로젝트가 만들어질 때 반드시 함께 서야 하는 것"*을 한 트랜잭션에 모으는 것이
- * 이 함수의 일이다. (`apps/api/README.md` 「계층 규칙」 절은 여러 repo를 조율하는 로직을
- * `services/`에 두라고 하는데, 이 함수는 그 예외다. 조율을 밖으로 빼면 "프로젝트 생성"이
- * 두 자리로 갈라져 한쪽만 부르는 경로가 생길 수 있어 여기 둔다.)
+ * 프로젝트를 만들고 생성자를 owner로 넣는다 — 같은 트랜잭션 안에서다. 둘 중 하나만 성공하면 주인 없는 프로젝트가 아무도 접근할 수 없는 채로
+ * 영원히 남는다(설계서 「권한 모델」).
  *
  * 조회 후 삽입하지 않는다(`repos/users.ts`의 `insertUser`와 같은 이유) — slug
  * 유니크 위반은 삽입을 시도해 보고 그 실패로 감지한다. 이 실패가 이 함수를 호출한
@@ -96,7 +72,6 @@ export async function insertProject(
       // 채우기가 채운다(`services/system-themes.ts` 의 `backfillProjectThemes`).
       const themeVersion = await latestVisibleVersion(trx, DEFAULT_THEME_ID)
 
-      // 1단계: 프로젝트. `default_layout_id`는 아직 비어 있다.
       const project = await trx
         .insertInto('projects')
         .values({
@@ -110,17 +85,6 @@ export async function insertProject(
         .executeTakeFirstOrThrow()
 
       await trx.insertInto('project_members').values({ project_id: project.id, user_id: ownerId, role: 'owner' }).execute()
-
-      // 2단계: 기본 레이아웃. 문서는 `Page` 하나와 `Slot` 하나다 — 그릇의 최소본이다. **그 `schema`를 그리는 코드는
-      // 없다** — `repos/layouts.ts`의 `defaultLayoutDocument` 주석 참고.
-      const layout = await insertLayout(trx, {
-        projectId: project.id,
-        name: DEFAULT_LAYOUT_NAME,
-        schema: defaultLayoutDocument(),
-      })
-
-      // 3단계: 순환을 닫는다.
-      await trx.updateTable('projects').set({ default_layout_id: layout.id }).where('id', '=', project.id).execute()
 
       return { ...project, role: 'owner' as const }
     })
