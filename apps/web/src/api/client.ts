@@ -5,7 +5,7 @@
  *
  * 구현은 `http-client.ts`(실제 서버)와 각 화면 테스트의 가짜 두 부류다.
  */
-import type { CodeGroup, CodeItem, PatchOp, UsageHit, WbNode } from '@wirebound/schema'
+import type { CodeGroup, CodeItem, PageLayout, PatchOp, UsageHit, WbNode } from '@wirebound/schema'
 import type {
   AdminInvite,
   AdminProject,
@@ -255,8 +255,14 @@ export interface ApiClient {
    * **`description`을 싣지 않는다** — 설계서 「설계서 화면 구조」가 그 편집을 우측 패널의 "페이지 설명" 탭에
    * 두기로 했고, 트리에서 만드는 자리는 제목만 묻는다.
    */
-  /** 페이지를 만든다. `kind: 'popup'` 이면 팝업 페이지(레이아웃 `popup` · 뿌리 `Popup`)다 — 없으면 빈 화면(레이아웃 `blank`). */
-  createPage(projectId: string, body: { menuNodeId: string; title: string; kind?: 'page' | 'popup' }): Promise<PageDetail>
+  /**
+   * 페이지를 만든다. `layout` 이 그 페이지의 레이아웃이다(`popup` 이면 뿌리 `Popup` 의 팝업 페이지) — 없으면 서버 기본값 `blank`. `kind: 'popup'` 은
+   * `layout: 'popup'` 과 같다(둘이 어긋나면 400). 에디터 «페이지 추가» 는 `subpage` 를 싣는다(`tree/use-tree-commands.tsx`).
+   */
+  createPage(
+    projectId: string,
+    body: { menuNodeId: string; title: string; kind?: 'page' | 'popup'; layout?: PageLayout },
+  ): Promise<PageDetail>
   /**
    * 페이지의 제목·설명·소속 메뉴·순서를 고친다. `updateMenu`와 같은 계약이다 — 준 키만 실린다.
    *

@@ -928,11 +928,13 @@ export function useTreeCommands(props: {
 
     // **만든 페이지로 이동한다.** 응답의 `id`가 주소에 들어간다 — 빈 문자열은
     // `SHAPES.pageDetail`이 막으므로 여기서 다시 보지 않는다. 팝업 페이지는 서버가 뿌리 `Popup`(제목 = 이 이름 · 바닥 `[취소][저장]`)으로 짓는다.
+    // **«페이지 추가» 는 서브페이지다**(설계 `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「정한 것 — 레이아웃 갈래」 1) — 서버 기본값
+    // `blank` 는 API · 에이전트의 몫이고, 사람이 고르는 입구는 사람의 기본값을 싣는다.
     let created: string | null = null
-    const pageKind = kind === 'new-popup' ? 'popup' : 'page'
+    const layout = kind === 'new-popup' ? 'popup' : 'subpage'
     void run(
       async () => {
-        const page = await api.createPage(projectId, { menuNodeId: parentId, title, ...(pageKind === 'popup' ? { kind: pageKind } : {}) })
+        const page = await api.createPage(projectId, { menuNodeId: parentId, title, layout })
         created = page.id
       },
       () => {

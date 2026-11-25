@@ -214,7 +214,7 @@ describe('메뉴·페이지 만들기', () => {
     expect(input()).toBeDefined()
   })
 
-  it('페이지 추가는 createPage를 내고 만든 페이지로 이동한다', async () => {
+  it('페이지 추가는 서브페이지 레이아웃을 실어 createPage를 내고 만든 페이지로 이동한다', async () => {
     // 응답의 `id`가 주소에 들어간다. 빈 문자열은 `SHAPES.pageDetail`이 이미 막는다.
     const api = await open()
 
@@ -223,11 +223,11 @@ describe('메뉴·페이지 만들기', () => {
     typeAndEnter('신규')
 
     await waitFor(() => expect(api.createPage).toHaveBeenCalledTimes(1))
-    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '신규' })
+    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '신규', layout: 'subpage' })
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-new'))
   })
 
-  it('팝업 페이지 추가는 종류를 실어 createPage 를 내고 만든 페이지로 이동한다', async () => {
+  it('팝업 페이지 추가는 팝업 레이아웃을 실어 createPage 를 내고 만든 페이지로 이동한다', async () => {
     const api = await open()
 
     fireEvent.click(menuButton('회원관리'))
@@ -235,7 +235,7 @@ describe('메뉴·페이지 만들기', () => {
     typeAndEnter('사용자 검색')
 
     await waitFor(() => expect(api.createPage).toHaveBeenCalledTimes(1))
-    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '사용자 검색', kind: 'popup' })
+    expect(api.createPage).toHaveBeenCalledWith('p-1', { menuNodeId: 'm-member', title: '사용자 검색', layout: 'popup' })
     await waitFor(() => expect(currentPath()).toBe('/projects/p-1/pages/pg-new'))
   })
 
