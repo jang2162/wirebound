@@ -594,7 +594,7 @@ export interface ExportPagePlan {
    * `페이지 경로` 칸에 그대로 적는다.
    */
   target: string
-  /** 페이지의 종류 — 뿌리가 `Popup` 이면 `popup`. 없으면 화면(옛 서버). */
+  /** 페이지의 종류 — 문서의 레이아웃이 `popup` 이면 `popup`(서버의 `pageKindOf`). 없으면 화면(옛 서버). */
   kind?: 'page' | 'popup'
 }
 

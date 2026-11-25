@@ -69,7 +69,7 @@ export interface ExportedPageSummary {
   title: string
   /** 이 페이지를 가리키는 설계서 「상호작용」의 타겟. 상호작용 탭의 페이지 고르개가 같은 문자열을 짓는다 · 목록 밖이면 손으로 적는다. */
   target: string
-  /** 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). 화면이 목록 줄에 «팝업» 표지를 단다. */
+  /** 페이지의 종류 — 문서의 레이아웃이 `popup` 이면 `popup`(`pageKindOf`). 화면이 목록 줄에 «팝업» 표지를 단다. */
   kind: PageKind
 }
 

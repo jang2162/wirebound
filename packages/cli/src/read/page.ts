@@ -56,7 +56,7 @@ export interface PageSummary {
   title: string
   /** 조상 메뉴의 이름들. 뿌리가 앞이다. */
   menuPath: readonly string[]
-  /** 페이지의 종류 — 문서 뿌리가 `Popup` 이면 `popup`(`pageKindOf`). */
+  /** 페이지의 종류 — 문서의 레이아웃이 `popup` 이면 `popup`(`pageKindOf`). */
   kind: PageKind
 }
 
