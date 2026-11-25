@@ -176,6 +176,11 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
             scroll: panel.scrollWidth - panel.clientWidth,
             // 공통코드에 묶인 선택지는 카드의 칩 한 줄에만 선다 — 선택지 칸(잠긴 목록)은 숨는다.
             chips: panel.querySelectorAll('.wb-shell-code-chip').length,
+            // 켬/끔 칸은 스위치 모양이다 — 칸 공용 꼴(`.wb-shell-control`)에 덮이면 흰 네모로 선다.
+            switches: [...panel.querySelectorAll('input[type="checkbox"].wb-shell-switch')].map((box) => {
+              const style = getComputedStyle(box)
+              return `${style.width}x${style.height} ${style.borderTopLeftRadius}`
+            }),
             optionsRow: [...panel.querySelectorAll('.wb-shell-prop-label')].some((label) => label.textContent === '선택지'),
           }
         })
@@ -191,16 +196,18 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
         scroll: number
         chips: number
         optionsRow: boolean
+        switches: string[]
       }
       const sel = seen.n_sel as typeof col
       // 카나리아 — 칸이 서고 세그먼트가 섰다(GridColumn 의 정렬 · 폭 · 정렬 표시 · 음영 · 번호).
       expect(col.rows).toBeGreaterThan(4)
       expect(col.segments).toBeGreaterThanOrEqual(4)
-      expect({ 라벨: col.labels, 넘침: col.past, 글넘침: col.textPast, 가로: col.scroll }).toEqual({
+      expect({ 라벨: col.labels, 넘침: col.past, 글넘침: col.textPast, 가로: col.scroll, 스위치: col.switches }).toEqual({
         라벨: [76],
         넘침: 0,
         글넘침: 0,
         가로: 0,
+        스위치: ['30pxx18px 999px'],
       })
       expect({ 넘침: sel.past, 글넘침: sel.textPast, 가로: sel.scroll, 칩: sel.chips, 선택지칸: sel.optionsRow }).toEqual({
         넘침: 0,

@@ -2677,8 +2677,9 @@
   opacity: 0.6;
 }
 
-/* 불리언 칸의 스위치 모양(`panels/controls/switch-control.tsx`) — 체크박스 그대로에 모양만. 손잡이는 배경의 둥근 점이다. */
-.wb-shell-switch {
+/* 불리언 칸의 스위치 모양(`panels/controls/switch-control.tsx`) — 체크박스 그대로에 모양만. 손잡이는 배경의 둥근 점이다. 칸 공용 꼴(`.wb-shell-control` —
+   아래에 선언돼 같은 특이도면 이긴다)을 이기려고 두 클래스로 건다. */
+.wb-shell-control.wb-shell-switch {
   appearance: none;
   width: 30px;
   height: 18px;
@@ -2690,20 +2691,20 @@
   cursor: pointer;
 }
 
-.wb-shell-switch:checked {
+.wb-shell-control.wb-shell-switch:checked {
   background: radial-gradient(circle at 21px 50%, #fff 6px, transparent 6.5px), var(--wb-shell-accent);
 }
 
-.wb-shell-switch:indeterminate {
+.wb-shell-control.wb-shell-switch:indeterminate {
   background: radial-gradient(circle at 15px 50%, #fff 6px, transparent 6.5px), #9aa4b2;
 }
 
-.wb-shell-switch:focus-visible {
+.wb-shell-control.wb-shell-switch:focus-visible {
   outline: 2px solid var(--wb-shell-accent);
   outline-offset: 2px;
 }
 
-.wb-shell-switch:disabled {
+.wb-shell-control.wb-shell-switch:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -4540,6 +4541,7 @@
 }
 
 /* 폼 격자의 둘째 칸에 서는 것들(글자 수 · 저장 · «바뀜»). */
+
 .wb-shell-page-description-count,
 .wb-shell-page-description-save,
 .wb-shell-page-meta-dirty {
@@ -4578,6 +4580,8 @@
 
 .wb-shell-page-description-save {
   align-self: flex-start;
+  /* 이름 · 설명 폼(격자)에서는 글 폭 — 칸을 채우지 않는다. */
+  justify-self: start;
 }
 
 /* 저장 성공·실패. **둘이 같은 자리를 쓰되 `role`과 색이 다르다** — 스냅샷 패널의

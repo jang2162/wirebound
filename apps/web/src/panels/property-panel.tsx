@@ -832,6 +832,67 @@ function BulkProperties(props: {
     return { value: mixed ? undefined : first, mixed }
   }
 
+  // 여럿을 고른 판도 한 노드의 판과 같은 묶음 · 차례다(`./prop-groups.ts`). 변형은 표시 묶음의 맨 앞 — 머리 카드가 없어서다.
+  const grouped = (group: PropGroup): EditorField[] => fields.filter((field) => (propGroupOf(field) ?? 'look') === group)
+  const variantRow =
+    variantField === null
+      ? null
+      : (() => {
+          const { value, mixed } = shared((node) => node.variant)
+          return (
+            <div className="wb-shell-prop" key={VARIANT_FIELD}>
+              <dt className="wb-shell-prop-label">
+                <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
+                  {variantField.label}
+                </label>
+              </dt>
+              <dd className="wb-shell-prop-value">
+                <VariantControl
+                  key={widgetKey}
+                  options={variantField.options}
+                  value={value}
+                  mixed={mixed}
+                  id={controlId(VARIANT_FIELD)}
+                  disabled={blocked}
+                  onCommit={(variant) => commitEach((running, nodeId) => variantOps(running, nodeId, variant))}
+                />
+              </dd>
+            </div>
+          )
+        })()
+  const bulkRow = (field: EditorField): ReactElement => {
+    const { value, mixed } = shared((node) => readProp(node, field.prop))
+    const list =
+      field.control === 'pairList' || field.control === 'optionList' || field.control === 'fileList' || field.control === 'treeItems'
+    return (
+      <div className="wb-shell-prop" key={field.prop}>
+        <dt className="wb-shell-prop-label">
+          <label id={`${controlId(field.prop)}-label`} htmlFor={labelTarget(field)}>
+            {field.label}
+          </label>
+        </dt>
+        <dd className="wb-shell-prop-value">
+          {/* 목록 칸은 값이 갈리면 고치지 않는다 — 한 줄을 고친 목록을 모두에 쓰면 노드마다 다른 나머지 줄이 사라진다. */}
+          {list && mixed ? (
+            <>{MIXED_PLACEHOLDER}</>
+          ) : (
+            <PropControl
+              key={widgetKey}
+              field={field}
+              def={def}
+              value={value}
+              mixed={mixed}
+              disabled={blocked}
+              onCommit={(next) => commitEach((running, nodeId) => propOps(running, nodeId, field.prop, next))}
+              onLeave={(next) => props.leave(props.nodeIds, type, (running, nodeId) => propOps(running, nodeId, field.prop, next))}
+            />
+          )}
+          <FieldHint field={field} />
+        </dd>
+      </div>
+    )
+  }
+
   return (
     <>
       {/* 여럿을 고른 머리도 한 노드의 머리 카드와 같은 상자다 — 타입 배지 · 수 · 꺼진 이유. 위치 · 별칭은 노드마다라 없다. */}
@@ -847,69 +908,14 @@ function BulkProperties(props: {
         <p className="wb-shell-panel-notice">이 컴포넌트에는 편집할 속성이 없습니다</p>
       ) : (
         <>
-          <dl className="wb-shell-props">
-            {variantField !== null &&
-              (() => {
-                const { value, mixed } = shared((node) => node.variant)
-                return (
-                  <div className="wb-shell-prop" key={VARIANT_FIELD}>
-                    <dt className="wb-shell-prop-label">
-                      <label id={`${controlId(VARIANT_FIELD)}-label`} htmlFor={controlId(VARIANT_FIELD)}>
-                        {variantField.label}
-                      </label>
-                    </dt>
-                    <dd className="wb-shell-prop-value">
-                      <VariantControl
-                        key={widgetKey}
-                        options={variantField.options}
-                        value={value}
-                        mixed={mixed}
-                        id={controlId(VARIANT_FIELD)}
-                        disabled={blocked}
-                        onCommit={(variant) => commitEach((running, nodeId) => variantOps(running, nodeId, variant))}
-                      />
-                    </dd>
-                  </div>
-                )
-              })()}
-            {fields.map((field) => {
-              const { value, mixed } = shared((node) => readProp(node, field.prop))
-              const list =
-                field.control === 'pairList' ||
-                field.control === 'optionList' ||
-                field.control === 'fileList' ||
-                field.control === 'treeItems'
-              return (
-                <div className="wb-shell-prop" key={field.prop}>
-                  <dt className="wb-shell-prop-label">
-                    <label id={`${controlId(field.prop)}-label`} htmlFor={labelTarget(field)}>
-                      {field.label}
-                    </label>
-                  </dt>
-                  <dd className="wb-shell-prop-value">
-                    {/* 목록 칸은 값이 갈리면 고치지 않는다 — 한 줄을 고친 목록을 모두에 쓰면 노드마다 다른 나머지 줄이 사라진다. */}
-                    {list && mixed ? (
-                      <>{MIXED_PLACEHOLDER}</>
-                    ) : (
-                      <PropControl
-                        key={widgetKey}
-                        field={field}
-                        def={def}
-                        value={value}
-                        mixed={mixed}
-                        disabled={blocked}
-                        onCommit={(next) => commitEach((running, nodeId) => propOps(running, nodeId, field.prop, next))}
-                        onLeave={(next) =>
-                          props.leave(props.nodeIds, type, (running, nodeId) => propOps(running, nodeId, field.prop, next))
-                        }
-                      />
-                    )}
-                    <FieldHint field={field} />
-                  </dd>
-                </div>
-              )
-            })}
-          </dl>
+          <PropGroups
+            rows={{
+              content: grouped('content').map(bulkRow),
+              look: [variantRow, ...grouped('look').map(bulkRow)],
+              layout: grouped('layout').map(bulkRow),
+              state: grouped('state').map(bulkRow),
+            }}
+          />
         </>
       )}
     </>
