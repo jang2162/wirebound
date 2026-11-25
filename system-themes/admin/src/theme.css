@@ -1830,6 +1830,15 @@
   color: var(--wb-semantic-textMuted);
   font-size: var(--wb-layout-crumbFontSize);
 }
+/*
+ * 브레드크럼브 칸은 flex 항목이라 자동 최소 폭이 그 이름의 가장 긴 낱말 폭이다 — 끊을 자리 없는 긴 이름은 줄 바꿈(`flex-wrap`) 뒤에도 본문 칸 · 창을
+ * 넘친다. `overflow-wrap: anywhere` 는 최소 폭 셈에도 들어 그 칸을 본문 칸 안에서 꺾는다. 한글은 낱말 단위로 꺾는다(`keep-all`).
+ */
+[data-wb-layout="subpage"] [data-wb-part="crumb"],
+[data-wb-layout="subpage"] [data-wb-part="crumbCurrent"] {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 [data-wb-layout="subpage"] [data-wb-part="crumbSep"] {
   color: var(--wb-text-placeholder);
 }
