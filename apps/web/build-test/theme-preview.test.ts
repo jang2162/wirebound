@@ -45,6 +45,16 @@ async function press(page: Page, nodeId: string, expected: string | null): Promi
     )
 }
 
+/** 기본테마 서브페이지 틀의 LNB 링크를 누른다 — 장 사이 이동은 틀이 한다(예제 문서에는 메뉴가 없다). */
+async function pressLnb(page: Page, title: string, expected: string): Promise<void> {
+  await preview(page).locator('[data-wb-layout-region="lnb"]').getByRole('link', { name: title, exact: true }).click()
+  await poll(
+    `LNB ${title} 뒤의 장`,
+    () => shownExample(page),
+    (shown) => shown === expected,
+  )
+}
+
 describe.skipIf(!전제.ok)('테마 미리보기 — 실브라우저', () => {
   let stack: EditorStack
   let projectId = ''
@@ -133,13 +143,13 @@ describe.skipIf(!전제.ok)('테마 미리보기 — 실브라우저', () => {
       await page.locator(`${PREVIEW_BOX} iframe`).waitFor()
       const before = await page.evaluate(() => ({ length: history.length, href: location.href }))
       await openExamples(page)
-      await press(page, 'ex-l-go-orders', 'orders')
+      await pressLnb(page, '주문 목록', 'orders')
       await press(page, 'ex-o-g-r0-no-l', 'order')
       await press(page, 'ex-od-del', null)
       await preview(page).locator('[data-wb-popup-frame]').waitFor()
       await press(page, 'ex-pd-cancel', null)
       await preview(page).locator('[data-wb-popup-frame]').waitFor({ state: 'detached' })
-      await press(page, 'ex-l-go-dash', 'dashboard')
+      await pressLnb(page, '대시보드', 'dashboard')
       await press(page, 'ex-d-all', 'orders')
       const after = await page.evaluate(() => ({ length: history.length, href: location.href }))
       expect(after).toEqual(before)

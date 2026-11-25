@@ -7,12 +7,12 @@
  * | 케이스 | 무엇이 거짓이면 죽나 |
  * | --- | --- |
  * | H1 | 창이 미리보기를 다 담는 판(1280×1500)에서 «컴포넌트» → «예제» → «주문 상세» 뒤 연 팝업의 «취소» 자리 맨 위 요소가 iframe 이 아니다 |
- * | M1 | 390 에서 긴 «주문 목록» 을 끝까지 굴린 채 왼쪽 메뉴 «대시보드» 를 누르면 · 긴 대시보드를 끝까지 굴린 채 장 이름 줄 «주문 상세» 를 누르면 새 장의 맨 위가 상자 위 끝에 안 선다 |
+ * | M1 | 390 에서 긴 «주문 목록» 을 끝까지 굴린 채 LNB «대시보드» 를 누르면 · 긴 대시보드를 끝까지 굴린 채 장 이름 줄 «주문 상세» 를 누르면 새 장의 맨 위가 상자 위 끝에 안 선다 |
  * | M1b | 390 에서 바깥 칸을 굴려 미리보기 틀 위 끝이 창 밖일 때(틀 밑 내용은 바깥 칸의 아래 여백으로 흉내) 이음으로 장을 옮겨도 틀 위 끝이 창 밖에 남는다 |
  * | M2 | 390 에서 «토큰 저장» 의 409 나란히 보기가 창 안에 안 선다 |
  * | M2b | 390 에서 «토큰 저장» 이 다른 탭의 422 를 받으면 «고칠 칸이 있습니다» 문장이 창 안에 안 선다 |
  * | M2c | 390 에서 «토큰 저장» 이 성공하면 «토큰을 저장했습니다» 문장이 창 안에 안 선다 |
- * | L1 | 예제 이음의 가운데 단추 누름이 새 탭을 연다 |
+ * | L1 | 예제 이음(문서 안 이음 · 틀 링크)의 가운데 단추 누름이 새 탭을 연다 |
  * | 기록 | Enter · Cmd · Shift 누름을 섞어도 `history.length` · 바깥 주소 · 탭 수가 그대로다 |
  * | 다른 탭의 422 | «모양» 탭에 선 채 «색» 칸이 서버에서 거절되면 그 탭 이름이 «색 — 고칠 칸 있음» · 문장이 그 칸을 말하고 창 안 · 저장 꺼짐 · 키보드로 그 탭에 닿는다 |
  */
@@ -64,6 +64,18 @@ async function tap(page: Page, nodeId: string): Promise<void> {
       const target = el.matches('a, button') ? el : el.querySelector('a, button')
       ;((target ?? el) as HTMLElement).click()
     })
+}
+
+/**
+ * 기본테마 서브페이지 틀의 LNB 링크(`LayoutLink`) — 장 사이 이동은 틀이 한다(예제 문서에는 메뉴가 없다 — `@wirebound/theme-gallery` 의
+ * `documents.ts` 머리말).
+ */
+const lnbLink = (page: Page, title: string) =>
+  preview(page).locator('[data-wb-layout-region="lnb"]').getByRole('link', { name: title, exact: true })
+
+/** LNB 링크의 `click()` — 누르기가 상자를 굴리지 않게. */
+async function tapLnb(page: Page, title: string): Promise<void> {
+  await lnbLink(page, title).evaluate((el) => (el as HTMLElement).click())
 }
 
 /** 두 프레임 · 잠깐 · 두 프레임 — iframe 높이(`ResizeObserver`)와 덮개 셈이 그려진 뒤다. */
@@ -144,7 +156,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
       // 판 카나리아 — 상자가 실제로 끝까지 굴렀다. 굴린 양은 예제 장의 길이(테마가 정한다)에 매여 글자로 크게 잡지 않는다 — 머리가 위로 밀려 숨는
       // 판을 세우기에 넉넉한 200px 이상이면 선다(기본테마 2.0.0 의 «주문 목록» 은 264px).
       expect(await page.locator(PREVIEW_BOX).evaluate((box) => box.scrollTop)).toBeGreaterThan(200)
-      await tap(page, 'ex-l-go-dash')
+      await tapLnb(page, '대시보드')
       await poll(
         '대시보드',
         () => shownExample(page),
@@ -195,7 +207,7 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
       // 판 카나리아 — 바깥 칸이 있고 틀 위 끝이 창 밖이다.
       expect(pushed).not.toBeNull()
       expect(pushed!).toBeLessThan(-100)
-      await tap(page, 'ex-l-go-dash')
+      await tapLnb(page, '대시보드')
       await poll(
         '대시보드',
         () => shownExample(page),
@@ -214,10 +226,16 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
       await page.goto(settings())
       await page.locator(`${PREVIEW_BOX} iframe`).waitFor()
       await openExamples(page)
-      const link = preview(page).locator('[data-wb-id="ex-l-go-orders"] a, a[data-wb-id="ex-l-go-orders"]').first()
-      await link.click({ button: 'middle' })
-      await page.waitForTimeout(800)
-      expect(context.pages()).toHaveLength(1)
+      // 문서 안 이음(대시보드 «전체 보기») · 틀 링크(LNB «주문 목록») 둘 다.
+      for (const link of [
+        preview(page).locator('[data-wb-id="ex-d-all"] a, a[data-wb-id="ex-d-all"]').first(),
+        lnbLink(page, '주문 목록'),
+      ]) {
+        await link.click({ button: 'middle' })
+        await page.waitForTimeout(800)
+        expect(context.pages()).toHaveLength(1)
+      }
+      expect(await shownExample(page)).toBe('dashboard')
     } finally {
       await context.close()
     }
@@ -233,14 +251,14 @@ describe.skipIf(!전제.ok)('RV-PV — 설정 미리보기의 이동 · 팝업 �
       const before = await page.evaluate(() => ({ length: history.length, href: location.href }))
       await openExamples(page)
       await pick(page, '주문 목록', 'orders')
-      await preview(page).locator('[data-wb-id="ex-l-go-dash"] a, a[data-wb-id="ex-l-go-dash"]').first().focus()
+      await lnbLink(page, '대시보드').focus()
       await page.keyboard.press('Enter')
       await poll(
         'Enter',
         () => shownExample(page),
         (shown) => shown === 'dashboard',
       )
-      const link = preview(page).locator('[data-wb-id="ex-l-go-orders"] a, a[data-wb-id="ex-l-go-orders"]').first()
+      const link = lnbLink(page, '주문 목록')
       await link.click({ modifiers: ['Meta'] })
       await poll(
         'Cmd 누름',

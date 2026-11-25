@@ -1,14 +1,15 @@
 /**
  * **예제 페이지 — 주문 관리**(설계 `docs/superpowers/specs/2026-11-02-theme-preview-and-project-cards-design.md` 「«예제 페이지» 보기」). 테마
- * 미리보기가 «실제 화면에서 어떻게 보이나» 를 보이는 가상의 관리자 화면이다. 장 넷이 같은 틀(왼쪽 메뉴 · 위쪽 머리 — `shell`)을 뿌리 아래에
- * 감싸 넣고, 팝업 하나와 함께 문서의 상호작용(`navigate` · `openModal` · `closeModal`)으로 서로 이어진다 — 이음은 `ThemeExamples` 가 받아 장을 바꾼다.
+ * 미리보기가 «실제 화면에서 어떻게 보이나» 를 보이는 가상의 관리자 화면이다. 장 넷이 팝업 하나와 함께 문서의 상호작용(`navigate` · `openModal` ·
+ * `closeModal`)으로 서로 이어진다 — 이음은 `ThemeExamples` 가 받아 장을 바꾼다.
  *
  * 문서는 사용자 데이터가 아니다(DB 에 안 들어간다). 지금 카탈로그 검증을 지나고 다섯 그룹을 다 싣는다 — `test/examples.test.tsx` 가 잠근다.
- * 글은 흔한 관리자 화면의 말이고 실제 회사 · 사람 이름을 쓰지 않는다. 노드 id 는 장마다 접두(`ex-l` · `ex-d` · `ex-o` · `ex-od` · `ex-of` ·
- * `ex-pd`)를 둔다 — 틀(`ex-l`)은 장마다 같은 id 다.
+ * 글은 흔한 관리자 화면의 말이고 실제 회사 · 사람 이름을 쓰지 않는다. 노드 id 는 장마다 접두(`ex-d` · `ex-o` · `ex-od` · `ex-of` · `ex-pd`)를
+ * 둔다 — 문서들 사이에도 겹치지 않는다.
  *
- * 장은 서브페이지 레이아웃이고 `ThemeExamples` 가 `EXAMPLE_MENU` 로 지은 내비와 함께 `LayoutFrame` 으로 감싼다 — 레이아웃 뷰를 낸 테마는 GNB ·
- * LNB 를 그 틀로 그린다. 문서 안 틀(`ex-l`)은 레이아웃 뷰가 없는 테마(SDK 기본 — 내용만)에서도 장이 이어지게 남겨 둔다.
+ * 장은 서브페이지 레이아웃이고 `ThemeExamples` 가 `EXAMPLE_MENU` 로 지은 내비와 함께 `LayoutFrame` 으로 감싼다 — 메뉴 · 머리 · 장 제목은 테마의
+ * 레이아웃 뷰가 그 틀로 그리고, 문서는 내용만 든다(설계서가 서브페이지에 그리는 꼴). 레이아웃 뷰가 없는 테마(SDK 기본 — 내용만)는 캔버스처럼 내용만
+ * 선다 — 장은 호스트의 장 이름 줄 · 문서 안 이음으로 옮긴다. 문서 안에 메뉴 틀을 두면 레이아웃 뷰를 낸 테마에서 메뉴가 두 벌 선다.
  */
 import { CURRENT_DOCUMENT_VERSION, type Interaction, type LayoutNavMenu, type PageDocument, type WbNode } from '@wirebound/schema'
 
@@ -54,7 +55,7 @@ const options = (labels: readonly string[], selected?: string) =>
 const page = (id: string, children: WbNode[]): PageDocument => ({
   version: CURRENT_DOCUMENT_VERSION,
   layout: 'subpage',
-  root: { id, type: 'Page', children: [shell(children)] },
+  root: { id, type: 'Page', children },
 })
 
 /** 주문 한 줄 — 목록 · 대시보드의 표가 쓴다. */
@@ -127,63 +128,6 @@ function orderGrid(prefix: string, rows: readonly OrderRow[], zones: WbNode['zon
   }
 }
 
-/**
- * 장의 틀 — 왼쪽 메뉴(`Link` · `Button` — 카탈로그에 메뉴 컴포넌트가 없다) · 위쪽 머리 · 가운데 장 내용. 장 문서마다 뿌리 아래에 같은 노드를
- * 감싸 넣는다(노드 id 는 장마다 같다 — 한 화면에는 장 하나만 선다).
- */
-function shell(content: WbNode[]): WbNode {
-  return {
-    id: 'ex-l-shell',
-    type: 'Flex',
-    props: { align: 'stretch', wrap: true },
-    children: [
-      {
-        id: 'ex-l-menu',
-        type: 'Section',
-        props: { compact: true },
-        weight: 1,
-        children: [
-          text('ex-l-brand', '주문 관리', 'h3'),
-          { id: 'ex-l-menu-line', type: 'Divider', props: { direction: 'horizontal' } },
-          {
-            id: 'ex-l-nav',
-            type: 'Flex',
-            props: { direction: 'column', align: 'start' },
-            children: [
-              link('ex-l-go-dash', '대시보드', TARGET.dashboard),
-              link('ex-l-go-orders', '주문 목록', TARGET.orders),
-              button('ex-l-go-new', '주문 등록', { variant: 'primary', interactions: go(TARGET['order-form']) }),
-            ],
-          },
-        ],
-      },
-      {
-        id: 'ex-l-main',
-        type: 'Flex',
-        props: { direction: 'column' },
-        weight: 4,
-        children: [
-          {
-            id: 'ex-l-head',
-            type: 'Flex',
-            props: { justify: 'between', align: 'center' },
-            children: [
-              text('ex-l-title', '쇼핑몰 관리자', 'h2'),
-              {
-                id: 'ex-l-user',
-                type: 'Flex',
-                props: { align: 'center' },
-                children: [text('ex-l-user-name', '운영자 님', 'caption'), button('ex-l-logout', '로그아웃', { variant: 'ghost' })],
-              },
-            ],
-          },
-          ...content,
-        ],
-      },
-    ],
-  }
-}
-
 const stat = (id: string, title: string, value: string, note: string): WbNode => ({
   id,
   type: 'Card',
@@ -192,7 +136,6 @@ const stat = (id: string, title: string, value: string, note: string): WbNode =>
 })
 
 const dashboard = page('ex-d', [
-  text('ex-d-title', '대시보드', 'h1'),
   {
     id: 'ex-d-stats',
     type: 'Grid',
@@ -228,7 +171,6 @@ const dashboard = page('ex-d', [
 ])
 
 const orders = page('ex-o', [
-  text('ex-o-title', '주문 목록', 'h1'),
   {
     id: 'ex-o-search',
     type: 'SearchForm',
@@ -282,7 +224,7 @@ const order = page('ex-od', [
     type: 'Flex',
     props: { justify: 'between', align: 'center', wrap: true },
     children: [
-      text('ex-od-title', '주문 상세', 'h1'),
+      text('ex-od-no', '주문번호 ORD-20261102-0128 · 2026-11-02 10:24 접수', 'caption'),
       {
         id: 'ex-od-acts',
         type: 'Flex',
@@ -298,7 +240,6 @@ const order = page('ex-od', [
       },
     ],
   },
-  text('ex-od-no', '주문번호 ORD-20261102-0128 · 2026-11-02 10:24 접수', 'caption'),
   {
     id: 'ex-od-tabs',
     type: 'Tabs',
