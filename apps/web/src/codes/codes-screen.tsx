@@ -263,7 +263,7 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                     </th>
                   </tr>
                 </thead>
-                <tbody className="wb-shell-admin-body">
+                <tbody className="wb-shell-admin-body wb-shell-codes-body">
                   {selected.items.map((item, index) => (
                     <tr
                       className="wb-shell-admin-row"
@@ -274,14 +274,16 @@ export function CodesScreen(props: { projectId: string; canEdit: boolean }): Rea
                       <td className="wb-shell-admin-cell" data-label="차례">
                         {index + 1}
                       </td>
-                      <td className="wb-shell-admin-cell wb-shell-admin-cell-email" data-label="코드값">
+                      <td className="wb-shell-admin-cell wb-shell-admin-cell-email wb-shell-codes-value" data-label="코드값">
                         {item.value}
                       </td>
                       <td className="wb-shell-admin-cell wb-shell-admin-cell-name" data-label="이름">
                         {isolate(item.name)}
                       </td>
                       <td className="wb-shell-admin-cell" data-label="사용 여부">
-                        {item.active ? '사용' : '사용 안 함'}
+                        <span className="wb-shell-codes-active" data-active={item.active ? 'true' : 'false'}>
+                          {item.active ? '사용' : '사용 안 함'}
+                        </span>
                       </td>
                       <td className="wb-shell-admin-cell" data-label="사용 수">
                         <button className="wb-shell-codes-uses" type="button" onClick={() => choose(selected.key, item.value)}>
