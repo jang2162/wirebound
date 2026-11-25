@@ -202,7 +202,7 @@ api_tokens(id, project_id, name, token_hash, user_id, last_used_at, created_at)
 menu_nodes(id, project_id, parent_id, title, sort_order, created_at)
   parent_id NULL = 루트
 
-pages(id, project_id, menu_node_id, title, sort_order, layout_id,
+pages(id, project_id, menu_node_id, title, sort_order,
       description text, schema jsonb, schema_version int,
       head_seq bigint, structure_seq bigint, updated_at)
 
@@ -239,6 +239,11 @@ project_assets(project_id, sha256, name, uploaded_by, created_at)
 
 personal_assets(owner_id, sha256, name, created_at)
   PK (owner_id, sha256) · owner_id CASCADE · sha256 → asset_blobs RESTRICT
+
+project_view_prefs(user_id, project_id, hidden_regions jsonb, updated_at)
+  PK (user_id, project_id) · user_id CASCADE · project_id CASCADE
+  hidden_regions = 이 사람이 이 프로젝트의 편집 캔버스에서 끈 레이아웃 영역 열쇠 «<레이아웃>.<영역 id>»(예 "subpage.gnb" — §4.4) · 32 개까지
+  행이 없으면 다 켠 것이다 · 멤버에서 빠져도 남는다 · 스냅샷 payload 에 없다(문서가 아니라 사람의 화면 설정이다)
 ```
 
 `pages.schema`는 materialized 상태다. 읽기는 항상 이 컬럼 하나로 끝난다. `revisions`는 append-only 이력이며, replay는 감사와 스냅샷 검증 용도로만 쓴다.
@@ -1030,6 +1035,8 @@ wirebound-export/
 
 `get_page` 의 노드 개요(`nodes[]`)는 노드마다 이름(`name` — 문장이 부르는 이름이라 별칭이 있으면 별칭 · `only` 보임 노드면 «(관리자 상태)»를 붙인다) · 별칭(`alias` — 있을 때만) · 구조 트리 줄과 같은 글(`rowLabel` — `타입 (별칭) 요약`) · 상태 보임(`visibility` — 노드 자신의 것 그대로, 있을 때만) · 공통코드 참조(`code` — 묶인 노드만: 참조 그대로 + 표로 푼 값 `resolved`(대표 글은 항목 이름 · 끊겼으면 `null`, 선택 위젯은 그릴 선택지 이름 · 고른 것 · 빠진 고른 값) — 표를 담지 않은 옛 판 payload 는 `resolved: null`)를 싣고 묶인 노드의 이름 · `rowLabel` 은 표의 이름이다. 페이지는 화면 상태 목록(`viewStates` — `parent` 로 트리 · 없으면 빈 목록)을 싣는다. 판 1 문서는 읽을 때 판 2 로 옮겨 보인다.
 
+`list_pages` 의 페이지마다와 `get_page` 의 페이지는 레이아웃(`layout` — `blank` · `popup` · `subpage`, 판 6 이하 문서는 뿌리에서 읽는다)과 그것에서 지은 종류(`kind` — `popup` 이면 `popup`, 그 밖은 `page`)를 싣는다. 레이아웃 전용 쓰기 도구도 없다 — `patch_page` 의 `/layout` 연산이고, 팝업 경계를 넘는 바꿈은 뿌리 갈아 끼우기와 한 묶음이다(§4.3 «페이지 레이아웃»). 꼴은 MCP 스킬 문서 「고칠 때」 가 가르치고 그 예를 api 케이스가 글자 그대로 저장 경계에 보낸다(`apps/api/test/page-layout-skill.test.ts`).
+
 화면 상태 전용 쓰기 도구는 없다 — `patch_page` 의 JSON Patch 로 목록(`/viewStates`)과 노드 보임(`/…/visibility`)을 고친다. 꼴(상태 더하기 · 하위 상태 더하기 · 이 상태에서만 보이기 · 상태 지우기)은 MCP 스킬 문서(`packages/mcp/skill/SKILL.md` 「화면 상태를 다룰 때」)가 가르치고, 그 예를 api 케이스가 글자 그대로 저장 경계에 보낸다(`apps/api/test/view-states-skill.test.ts`). `validate` 는 `info` 등급(«lint 규칙»)을 `infos` 로 따로 센다.
 
 `get_page` 의 코멘트(`comments[]`)는 원문(`body`) · 토큰을 푼 글(`text`) · 같은 글에 토큰의 대상을 괄호로 붙인 것(`resolved` — `회원 목록 #3 (comment:<pageId>/<nodeId>)` · 끊김은 `대체 글 (찾을 수 없음)`)을 함께 싣는다 — 에이전트가 그 대상을 다음 호출에 쓴다. `add_comment` 의 본문은 같은 토큰 꼴을 받는다(«설계서 화면 구조» 의 «코멘트 토큰» · MCP 스킬 문서 「회신할 때」).
@@ -1052,7 +1059,7 @@ wireb codes set-item <키> <값> …   항목 만들기 · 고치기(--name · -
 wireb codes delete <키> [코드값]   그룹(항목째) · 항목 지우기
 ```
 
-`wireb page get` 의 사람 출력은 코멘트 본문의 토큰을 풀린 글로만 싣고(대상 없음), `--json` 은 MCP `get_page` 와 같이 `body` · `text` · `resolved` 를 싣는다.
+`wireb page get` 의 사람 출력은 페이지 이름 뒤에 레이아웃을 말한다(«목록 · 서브페이지» · «상세 · 팝업» — 빈 레이아웃은 붙이지 않는다). `--json` 은 MCP `get_page` 와 같이 `layout` · `kind` 를 싣는다. 사람 출력은 코멘트 본문의 토큰을 풀린 글로만 싣고(대상 없음), `--json` 은 MCP `get_page` 와 같이 `body` · `text` · `resolved` 를 싣는다.
 
 터미널로 나가는 글(`--json` 포함)은 라벨 · 제목 · 코멘트 본문처럼 설계서를 고치는 누구나 넣을 수 있는 글을 싣는다 — `\n` · `\t` 를 뺀 C0 · DEL · C1(`U+009B` 는 CSI) · 줄 · 문단 구분 · 방향 제어 글자를 `\uXXXX` 글로 바꿔 낸다(`packages/cli/src/terminal-safe.ts` — `--json` 은 읽은 값이 같다). 파일에 쓰는 바이트는 안 바뀐다.
 
