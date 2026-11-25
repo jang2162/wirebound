@@ -1017,11 +1017,27 @@
 [data-wb-component="TimeInput"] > [data-wb-part="glyph"] {
   color: var(--wb-semantic-textMuted);
 }
+/*
+ * 셀렉트는 한 줄이다 — 값 글이 칸보다 길면 말줄임으로 자른다(원본 `<select>` 처럼). 꺾이면 짧은 칸(78px)에서 «제목+내용» 이 두 줄로 서 칸이 입력칸보다
+ * 높아진다. 화살표는 글자(«▾» — 서체마다 크기 · 자리가 다르다)가 아니라 두 변을 그은 쉐브론이다(흐린 글 색).
+ */
+[data-wb-component="Select"] > [data-wb-part="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 [data-wb-component="Select"]::after {
-  content: "▾";
-  margin-left: auto;
-  padding-left: var(--wb-space-2);
-  color: var(--wb-semantic-textMuted);
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  margin: -3px 2px 0 auto;
+  border-right: 1.5px solid var(--wb-semantic-textMuted);
+  border-bottom: 1.5px solid var(--wb-semantic-textMuted);
+  transform: rotate(45deg);
 }
 /* 여러 줄 입력은 줄 수(`rows`)만큼 높되 120px(간격 단위 30)보다 낮지 않다 — 한 줄 입력과 한눈에 갈린다. */
 [data-wb-component="TextArea"] {
