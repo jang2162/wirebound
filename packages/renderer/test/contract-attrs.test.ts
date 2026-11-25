@@ -53,6 +53,10 @@ const ALLOWED_OUTSIDE_CONTRACT = [
   'data-wb-popup-frame',
   // 끊긴 공통코드 참조의 표지(`src/render.tsx` 의 `CodeBrokenAttrs`) — 테마 어휘가 아니라 에디터 셸 CSS 가 경고 표지를 그리는 훅이다.
   'data-wb-code-broken',
+  // 레이아웃 틀(`src/layout-frame.tsx`) — 노드가 아니라 문서를 감싼 틀이다. 캔버스가 이 둘로 노드 자리와 틀을 가르고, SDK 기본 CSS 가 내용 상자 ·
+  // 팝업 레이아웃의 막을 그린다.
+  'data-wb-layout',
+  'data-wb-layout-content',
 ]
 
 /**
