@@ -748,14 +748,38 @@ describe('checkTheme — 레이아웃', () => {
   }
 
   /** 서브페이지 뷰(번들 원문) — `region` 은 영역 하나를 그리는 식이다(`id` · `body`). 바꿀 곳만 인자로 준다. */
-  function subpageView(change: { content?: 'none' | 'twice'; gnb?: 'plain'; extra?: boolean } = {}): string {
-    const content = change.content === 'none' ? 'null' : change.content === 'twice' ? '[props.children, props.children]' : 'props.children'
+  function subpageView(
+    change: {
+      content?: 'none' | 'twice' | 'inTitle' | 'menuOnly' | 'gnbOnly' | 'fake'
+      gnb?: 'plain' | 'orContent'
+      lnb?: 'assumed'
+      extra?: boolean
+    } = {},
+  ): string {
+    const content =
+      change.content === 'none' || change.content === 'inTitle'
+        ? 'null'
+        : change.content === 'twice'
+          ? '[props.children, props.children]'
+          : change.content === 'menuOnly'
+            ? '(props.lnb !== null ? props.children : null)'
+            : change.content === 'gnbOnly'
+              ? '(props.gnb.length > 0 ? props.children : null)'
+              : change.content === 'fake'
+                ? `h('div', { 'data-wb-layout-content': '' })`
+                : 'props.children'
+    const region = `h(rt.sdk.LayoutRegion, { id: 'gnb', as: 'nav' }, props.gnb.map((item) => h(rt.sdk.LayoutLink, { key: item.id, item })))`
     const gnb =
       change.gnb === 'plain'
         ? `h('nav', { 'data-wb-part': 'gnb' }, 'GNB')`
-        : `h(rt.sdk.LayoutRegion, { id: 'gnb', as: 'nav' }, props.gnb.map((item) => h(rt.sdk.LayoutLink, { key: item.id, item })))`
+        : change.gnb === 'orContent'
+          ? `(props.regions.gnb !== false ? ${region} : props.children)`
+          : region
+    const title = change.content === 'inTitle' ? 'props.title, props.children' : 'props.title'
+    const lnb =
+      change.lnb === 'assumed' ? `h('aside', null, props.lnb.children.map((item) => h(rt.sdk.LayoutLink, { key: item.id, item })))` : 'null'
     const extra = change.extra === true ? `h(rt.sdk.LayoutRegion, { id: 'promo' }, '광고')` : 'null'
-    return `(props) => h('div', null, ${gnb}, h(rt.sdk.LayoutRegion, { id: 'title', as: 'h1' }, props.title), ${extra},
+    return `(props) => h('div', null, ${gnb}, h(rt.sdk.LayoutRegion, { id: 'title', as: 'h1' }, ${title}), ${lnb}, ${extra},
       h('main', null, ${content}), h('footer', { 'data-wb-layout-region': 'foot' }, '바닥'))`
   }
 
@@ -825,6 +849,48 @@ describe('checkTheme — 레이아웃', () => {
     expect(formatted.lines.filter((line) => line.startsWith('⚠ 선언 밖 영역'))).toEqual([
       '⚠ 선언 밖 영역 subpage · promo — manifest 의 layouts.subpage.regions 에 없어 «보기» 메뉴가 끄지 못합니다',
     ])
+  })
+
+  /*
+   * 아래 여섯은 다 켠 판(예제 첫 장 = 메뉴에 든 페이지)에서는 계약을 지키고 다른 판에서만 어긴다 — 그린 판마다(영역 하나씩 끔 · 메뉴 밖
+   * 페이지 · 빈 내비) 세지 않으면 지난다(`docs/superpowers/plans/2026-11-25-rv-lt-report.md` F1 · F4 의 V1 · V2 · V4 · V5 · V6 과 빈 내비에서만 어기는 뷰).
+   */
+  it('끌 수 있는 영역 안에 내용을 둔 뷰는 그 영역을 끈 판에서 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'inTitle' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 title 끈 판에서 페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('메뉴에 든 페이지에서만 내용을 두는 뷰는 메뉴 밖 페이지 판 · 빈 내비 판에서 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'menuOnly' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 메뉴 밖 페이지 판에서 페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다',
+      'layout:subpage: subpage 레이아웃 뷰가 빈 내비 판에서 페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('메뉴가 있어야 내용을 두는 뷰는 빈 내비 판에서만 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'gnbOnly' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 빈 내비 판에서 페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('끈 영역 자리에 내용을 한 번 더 두는 뷰는 그 영역을 끈 판에서 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ gnb: 'orContent' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 gnb 끈 판에서 페이지 내용(children)을 2 번 두었습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('내용 상자 속성만 흉내 낸 요소는 오류다 — 문서 뿌리 노드를 센다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'fake' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 페이지 문서를 그리지 않았습니다(뿌리 노드 0 개) — 내용 상자는 children 으로만 둡니다',
+    ])
+  })
+
+  it('페이지가 메뉴에 든다고 기대는 뷰는 메뉴 밖 페이지 판에서 던져 오류다', async () => {
+    const errors = layoutErrors(await check(subpageView({ lnb: 'assumed' })))
+    expect(errors).toHaveLength(2)
+    expect(errors[0]).toMatch(/^layout:subpage: 메뉴 밖 페이지 판: 테마 레이아웃 뷰가 던졌습니다: /)
+    expect(errors[1]).toMatch(/^layout:subpage: 빈 내비 판: 테마 레이아웃 뷰가 던졌습니다: /)
   })
 
   it('던지는 레이아웃 뷰는 오류다', async () => {
