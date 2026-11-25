@@ -528,7 +528,8 @@ describe.skipIf(!전제.ok)('D1 리뷰 — 놓은 자리 = 보인 자리 · 손�
         await poll(
           'alice 캔버스에서 n_mid 가 밀린다',
           async () => (await nodeBox(page, 'n_mid')).y,
-          (y) => y > midBefore + 40,
+          // 화면 px 라 열린 배율(폭 맞춤)을 따른다 — 창 1440 · 우측 기본 346 에서 배율 60% 라 밀림이 ≈ 39px(배율 63% 에서 41px)다.
+          (y) => y > midBefore + 30,
         )
         await page.waitForTimeout(100)
         const afterShift = (await indicators(page)).map((h) => `${h.placement}:${h.axis}@${Math.round(h.rect.y)}`)
