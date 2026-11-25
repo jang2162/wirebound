@@ -1655,13 +1655,17 @@
   line-height: var(--wb-typography-body-lineHeight);
   background: var(--wb-semantic-canvas);
 }
+/*
+ * 머리는 한 줄 60px 이 기본이고 메뉴가 넘치면 메뉴 줄만 줄을 바꿔 높이가 는다 — 설계서는 모든 메뉴가 보여야 한다(가로로 굴리면 정적 판 · PPTX 캡처에서
+ * 넘친 메뉴와 고른 막대가 안 선다). 로고 · 사용자 칸 · 메뉴 한 줄의 높이는 60 에서 머리 밑선 1px 을 뺀 값이다.
+ */
 [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] {
   display: flex;
   flex: none;
-  align-items: stretch;
+  align-items: flex-start;
   gap: var(--wb-space-4);
   box-sizing: border-box;
-  height: var(--wb-layout-gnbHeight);
+  min-height: var(--wb-layout-gnbHeight);
   padding: 0 var(--wb-space-5);
   background: var(--wb-semantic-surface);
   border-bottom: 1px solid var(--wb-semantic-border);
@@ -1670,40 +1674,40 @@
   display: flex;
   flex: none;
   align-items: center;
+  height: calc(var(--wb-layout-gnbHeight) - 1px);
   color: var(--wb-semantic-primary);
   font-size: var(--wb-layout-gnbFontSize);
   font-weight: 800;
   letter-spacing: 0.02em;
 }
-/* 메뉴가 넘치면 GNB 안에서 가로로 구른다 — 글자를 자르지 않고 머리 높이도 안 는다(스크롤바를 감춘다). */
 [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] {
   flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  min-width: 0;
 }
 [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] > [data-wb-part="gnbList"] {
   display: flex;
-  gap: var(--wb-space-1);
-  height: 100%;
+  flex-wrap: wrap;
+  column-gap: var(--wb-space-1);
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* 메뉴 줄보다 긴 이름 하나는 제 줄에서 줄어 그 폭 안에서 꺾인다(낱말 단위 · 끊을 자리 없으면 아무 데서나). 다른 항목은 제 폭 그대로다. */
 [data-wb-layout="subpage"] [data-wb-part="gnbItem"] {
-  flex: none;
+  flex: 0 1 auto;
 }
 [data-wb-layout="subpage"] [data-wb-part="gnbLink"] {
   position: relative;
   display: flex;
   align-items: center;
   box-sizing: border-box;
-  height: 100%;
+  min-height: calc(var(--wb-layout-gnbHeight) - 1px);
   padding: 0 calc(var(--wb-space-unit) * 3.5);
   color: var(--wb-semantic-textMuted);
   font-size: var(--wb-layout-gnbFontSize);
   text-decoration: none;
-  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 [data-wb-layout="subpage"] [data-wb-part="gnbLink"][data-wb-current="true"] {
   color: var(--wb-semantic-primary);
@@ -1725,6 +1729,7 @@
   flex: none;
   align-items: center;
   gap: var(--wb-space-3);
+  height: calc(var(--wb-layout-gnbHeight) - 1px);
   color: var(--wb-semantic-textStrong);
   font-size: var(--wb-layout-lnbFontSize);
   white-space: nowrap;
@@ -1989,6 +1994,17 @@
  * 폭이라 표 · 폼이 넘친다. 원본(lms-skala)은 메뉴를 서랍으로 감추지만 설계서는 메뉴 구성을 보여야 해서 감추지 않는다.
  */
 @media (max-width: 640px) {
+  /* 메뉴 줄은 로고 · 사용자 칸 아래 한 줄을 다 쓴다 — 셋이 한 줄이면 메뉴 칸이 이름 하나 폭도 안 남는다. */
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] {
+    flex-wrap: wrap;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="gnbNav"] {
+    order: 1;
+    flex-basis: 100%;
+  }
+  [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="gnb"] > [data-wb-part="user"] {
+    margin-left: auto;
+  }
   [data-wb-layout="subpage"] > [data-wb-part="frame"] > [data-wb-part="body"] {
     flex-direction: column;
   }

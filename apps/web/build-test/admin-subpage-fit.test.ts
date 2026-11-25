@@ -4,6 +4,8 @@
  *
  * - 브레드크럼브 · 제목 — 끊을 자리 없는 85 자 이름이 본문 칸 안에서 꺾인다. 글자 노드 `Range` 의 오른끝을 본문 칸 끝 · 창 끝과 견준다(요소 상자는
  *   제자리에 선 채 글자만 넘친다).
+ * - GNB — 메뉴가 한 줄을 넘치면 줄을 바꿔 다 보인다. 창 1280 · 1024 · 720(PPTX 캡처 폭) · 390 × 메뉴 7 · 12 · 긴 이름, 고른 메뉴는 늘 끝이다. 링크마다
+ *   가운데의 `elementFromPoint` 가 그 링크다(잘리거나 덮이거나 창 밖이면 아니다).
  */
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -56,6 +58,16 @@ const LONG_MENU: LayoutNavMenu[] = [
   },
   { id: 'm-users', title: '사용자 관리', pages: [page('p-u', '사용자')], children: [] },
 ]
+
+const COMMON7 = ['홈페이지관리', '사용자관리', '교육운영관리', '과정관리', '통계', '게시판관리', '시스템관리']
+const MORE5 = ['권한관리', '코드관리', '접속로그관리', '설문관리', '알림관리']
+
+/** 뿌리 메뉴마다 페이지 하나 — GNB 항목이 그 수만큼 선다. 지금 페이지는 마지막 메뉴의 것. */
+function gnbMenu(names: readonly string[]): { menu: LayoutNavMenu[]; current: { id: string; title: string } } {
+  const menu = names.map((name, at) => ({ id: `m${at}`, title: name, pages: [page(`p${at}`, `${name} 목록`)], children: [] }))
+  const last = names.length - 1
+  return { menu, current: { id: `p${last}`, title: `${names[last]} 목록` } }
+}
 
 const SHORT_DOC: PageDocument = {
   version: 7,
@@ -134,6 +146,68 @@ describe.skipIf(launched.browser === null)('기본테마 서브페이지 틀 —
       expect(got.long).toBe(4)
       expect(got.lines).toBeGreaterThan(1)
       expect({ doc: got.doc, past: got.past }).toEqual({ doc: true, past: [] })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  const GNB_CASES: [string, readonly string[]][] = [
+    ['흔한 메뉴 7', COMMON7],
+    ['메뉴 12', [...COMMON7, ...MORE5]],
+    ['긴 이름', [...COMMON7.slice(0, 3), LONG, ...COMMON7.slice(3)]],
+  ]
+  const GNB_GRID = [1280, 1024, 720, 390].flatMap((width) => GNB_CASES.map(([name, names]) => [width, name, names] as const))
+
+  it.each(GNB_GRID)('GNB — 창 %ipx · %s · 고른 메뉴가 끝 — 모든 메뉴 항목이 보인다', async (width, _name, names) => {
+    const { menu, current } = gnbMenu(names)
+    const tab = await open(width, { menu, current })
+    try {
+      const got = await tab.evaluate((frame) => {
+        const gnb = document.querySelector(`${frame} > [data-wb-part="gnb"]`)!
+        const links = [...gnb.querySelectorAll('[data-wb-part="gnbLink"]')]
+        const hidden: string[] = []
+        for (const link of links) {
+          const r = link.getBoundingClientRect()
+          const x = r.left + r.width / 2
+          const y = r.top + r.height / 2
+          const hit = x >= 0 && x < window.innerWidth && y >= 0 && y < window.innerHeight ? document.elementFromPoint(x, y) : null
+          if (hit === null || hit.closest('[data-wb-part="gnbLink"]') !== link) hidden.push((link.textContent ?? '').slice(0, 12))
+        }
+        const chosen = gnb.querySelector('[data-wb-part="gnbLink"][data-wb-current="true"]')
+        const g = gnb.getBoundingClientRect()
+        const c = chosen?.getBoundingClientRect()
+        return {
+          links: links.length,
+          chosenLast: chosen !== null && chosen === links[links.length - 1],
+          // 고른 막대(`::after` · 링크 아래 2px)가 그 링크 안 · 머리 안에 선다.
+          barInside: c !== undefined && c.bottom <= g.bottom + 0.5,
+          gnbHeight: g.height,
+          hidden,
+          doc: document.documentElement.scrollWidth <= window.innerWidth,
+        }
+      }, FRAME)
+      expect(got.links).toBe(names.length)
+      expect(got.chosenLast).toBe(true)
+      expect(got.barInside).toBe(true)
+      expect(got.gnbHeight).toBeGreaterThanOrEqual(60)
+      expect({ hidden: got.hidden, doc: got.doc }).toEqual({ hidden: [], doc: true })
+    } finally {
+      await tab.close()
+    }
+  })
+
+  it('GNB — 좁은 창(390)에서는 메뉴 줄이 로고 · 사용자 칸 아래 폭 전체를 써 흔한 메뉴 7 이 두 줄에 든다', async () => {
+    const { menu, current } = gnbMenu(COMMON7)
+    const tab = await open(390, { menu, current })
+    try {
+      const rows = await tab.evaluate(
+        (frame) =>
+          new Set(
+            [...document.querySelectorAll(`${frame} [data-wb-part="gnbLink"]`)].map((link) => Math.round(link.getBoundingClientRect().top)),
+          ).size,
+        FRAME,
+      )
+      expect(rows).toBe(2)
     } finally {
       await tab.close()
     }
