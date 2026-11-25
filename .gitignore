@@ -27,6 +27,8 @@ shots/
 /compose.override.yaml
 # Orca 개인용 이슈 명령(공용 지침 `orca` 세팅)
 /.orca/issue-command
+# 에이전트 MCP 설정 — 공용 MCP 를 모두 로컬(`pick --local`)로 옮겨 작업자마다 다르다
+/.mcp.json
 
 
 # START Ruler Generated Files
@@ -45,14 +47,12 @@ shots/
 /.ruler/base/orca/99-reference.md
 /.ruler/base/override.md
 /.ruler/browser/99-reference.md
-/.ruler/codegraph/99-reference.md
 /.ruler/guideline.md
 /.ruler/komodo/99-reference.md
 /.ruler/lefthook/99-reference.md
 /.ruler/mise/99-reference.md
 /.ruler/oxc/01-formatting.md
 /.ruler/oxc/99-reference.md
-/.ruler/public-docs/99-reference.md
 /.ruler/ruler.toml
 /.ruler/ruler/00-sources.md
 /.ruler/ruler/99-reference.md
@@ -64,6 +64,7 @@ shots/
 /.ruler/skills/orca-worker/dispatch.md
 /.ruler/skills/orca-worker/worker-start.md
 /.ruler/skills/orca-worker/worktree.md
+/.ruler/web/99-reference.md
 /docs/guideline/README.md
 /docs/guideline/base/03-comments.md
 /docs/guideline/base/04-citation.md
@@ -82,9 +83,6 @@ shots/
 /docs/guideline/browser/03-cdp.md
 /docs/guideline/browser/04-shared-profile.md
 /docs/guideline/browser/05-page-scripts.md
-/docs/guideline/codegraph/00-index.md
-/docs/guideline/codegraph/01-orca-setup.md
-/docs/guideline/codegraph/SETUP.md
 /docs/guideline/komodo/00-stack.md
 /docs/guideline/komodo/01-environment.md
 /docs/guideline/komodo/02-override.md
@@ -96,15 +94,8 @@ shots/
 /docs/guideline/mise/02-pnpm.md
 /docs/guideline/mise/SETUP.md
 /docs/guideline/oxc/00-version.md
-/docs/guideline/public-docs/00-readme.md
-/docs/guideline/public-docs/01-images.md
-/docs/guideline/public-docs/02-manual.md
-/docs/guideline/public-docs/03-i18n.md
-/docs/guideline/public-docs/04-style.md
-/docs/guideline/public-docs/05-support.md
-/docs/guideline/public-docs/06-readme-template.md
-/docs/guideline/public-docs/07-release-check.md
 /docs/guideline/ruler/01-nested.md
 /docs/guideline/ruler/02-documents.md
 /docs/guideline/ruler/SETUP.md
+/docs/guideline/web/00-llms-txt.md
 # END guideline generated files
