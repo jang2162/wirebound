@@ -4372,25 +4372,28 @@
   margin: 0 0 12px;
 }
 
-/* 페이지 정보의 «종류» — 화면 · 팝업 단추 무리(`panels/page-kind.tsx`). 상태 보임의 단추 무리(`.wb-shell-visibility-modes`)와 같은 꼴이다. */
-.wb-shell-page-kind {
+/* 페이지 정보의 «레이아웃» — 빈 · 서브페이지 · 팝업 단추 무리(`panels/page-kind.tsx`). 상태 보임의 단추 무리(`.wb-shell-visibility-modes`)와 같은
+   꼴이다. 둘째부터는 왼금을 걷어 이웃과 금 하나를 나눈다(결합자 없이 — 첫 단추만 왼금을 되살린다). */
+.wb-shell-page-layout {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0;
   margin: 0 0 12px;
   font-size: 13px;
 }
 
-.wb-shell-page-kind-label {
+.wb-shell-page-layout-label {
   flex: none;
   width: 76px;
+  margin-right: 8px;
   font-size: 12px;
   color: var(--wb-shell-muted);
 }
 
-.wb-shell-page-kind-option {
+.wb-shell-page-layout-option {
   appearance: none;
   border: 1px solid var(--wb-shell-line);
+  border-left: 0;
   padding: 4px 10px;
   background: #fff;
   font: inherit;
@@ -4398,18 +4401,23 @@
   cursor: pointer;
 }
 
-.wb-shell-page-kind-option:first-of-type {
+.wb-shell-page-layout-option:first-of-type {
+  border-left: 1px solid var(--wb-shell-line);
   border-radius: 6px 0 0 6px;
 }
 
-.wb-shell-page-kind-option:last-of-type {
-  border-left: 0;
+.wb-shell-page-layout-option:last-of-type {
   border-radius: 0 6px 6px 0;
 }
 
-.wb-shell-page-kind-option[aria-checked='true'] {
+.wb-shell-page-layout-option[aria-checked='true'] {
   background: var(--wb-shell-accent);
   color: #fff;
+}
+
+.wb-shell-page-layout-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* 상호작용 탭의 «이 페이지의 상호작용» 줄(`panels/interaction-panel.tsx`) — 줄마다 누가(타입 배지 · 이름) · 문장 · 위치(부모 사슬). 줄 전체가

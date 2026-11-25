@@ -6,7 +6,7 @@
  * |---|---|
  * | 기본 폭 | 창 1280 · 1440 · 1920 에서 우측 패널이 창의 24% 를 300 ~ 380 으로 자른 폭이 아니다 · 열린 배율이 그 칸에 맞춰지지 않는다 |
  * | 탭 줄이 창 안 | 긴 Select 를 고르고 본문을 끝까지 굴리면 탭 줄이 패널 위 끝 밖으로 나간다 · 탭 줄 밑을 지나는 본문이 탭을 덮는다 |
- * | 페이지 정보 | 이름 · 종류 · 설명의 라벨이 한 열(같은 왼끝 · 76px 칸)이 아니다 · 값(입력 · 종류 단추 · 글 상자)이 한 열이 아니다 · 친 칸에 «바뀜» 이 안 선다 · 저장하면 안 걷힌다 |
+ * | 페이지 정보 | 이름 · 레이아웃 · 설명의 라벨이 한 열(같은 왼끝 · 76px 칸)이 아니다 · 값(입력 · 레이아웃 단추 · 글 상자)이 한 열이 아니다 · 친 칸에 «바뀜» 이 안 선다 · 저장하면 안 걷힌다 |
  * | 상호작용 줄 | 같은 문장의 줄 셋(그리드 셋)이 «누가» · 위치로 안 갈린다 · 숨은 상태의 그리드 줄을 눌러도 그 노드를 안 고르거나 · 화면 상태가 안 바뀌거나 · 캔버스 칸 밖이다 |
  * | 칸 배치 | 창 1280(패널 307)에서 라벨 칸이 76px 이 아니다 · 세그먼트 단추 · 값 칸이 패널 안쪽 오른끝을 넘는다(글자 노드의 `Range` 로도 잰다) · 묶인 Select 의 목록이 칩 열 개 한 번이 아니다(선택지 칸이 남는다) |
  *
@@ -238,7 +238,7 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
     }
   })
 
-  it('페이지 정보 — 이름 · 종류 · 설명이 같은 라벨-값 열이고, 친 칸에만 «바뀜» 이 선다', async () => {
+  it('페이지 정보 — 이름 · 레이아웃 · 설명이 같은 라벨-값 열이고, 친 칸에만 «바뀜» 이 선다', async () => {
     const { page, close } = await open(1280)
     try {
       await page.getByRole('tab', { name: '페이지 정보', exact: true }).click()
@@ -246,15 +246,15 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
       await title.waitFor()
       const seen = await page.evaluate(() => {
         const left = (el: Element | null) => Math.round(el!.getBoundingClientRect().left)
-        const labels = [...document.querySelectorAll('.wb-shell-page-description-field > span, .wb-shell-page-kind-label')]
+        const labels = [...document.querySelectorAll('.wb-shell-page-description-field > span, .wb-shell-page-layout-label')]
         return {
           labels: labels.map((el) => el.textContent),
           labelLeft: [...new Set(labels.map(left))],
-          labelWidth: Math.round(document.querySelector('.wb-shell-page-kind-label')!.getBoundingClientRect().width),
+          labelWidth: Math.round(document.querySelector('.wb-shell-page-layout-label')!.getBoundingClientRect().width),
           valueLeft: [
             ...new Set([
               left(document.querySelector('#wb-page-title')),
-              left(document.querySelector('.wb-shell-page-kind-option')),
+              left(document.querySelector('.wb-shell-page-layout-option')),
               left(document.querySelector('#wb-page-description')),
             ]),
           ],
@@ -264,7 +264,7 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
       // eslint-disable-next-line no-console
       console.log(`[페이지 정보 열] ${JSON.stringify(seen)}`)
       expect(seen).toEqual({
-        labels: ['페이지 이름', '종류', '페이지 설명'],
+        labels: ['페이지 이름', '레이아웃', '페이지 설명'],
         labelLeft: [seen.labelLeft[0]],
         labelWidth: 76,
         valueLeft: [seen.labelLeft[0]! + 84],

@@ -1,5 +1,5 @@
 /**
- * **팝업 페이지의 에디터 입구** — 상호작용 탭(«팝업 닫기» · 페이지 고르개) · 페이지 정보 «종류» · 메뉴 트리 줄의 «팝업» 표지. 메뉴 줄 `+` 의
+ * **팝업 페이지의 에디터 입구** — 상호작용 탭(«팝업 닫기» · 페이지 고르개) · 페이지 정보 «레이아웃» · 메뉴 트리 줄의 «팝업» 표지. 메뉴 줄 `+` 의
  * «팝업 페이지 추가» 는 `menu-crud.test.tsx` 가 잰다. 덮개 위에 띄우는 것은 `canvas/interaction-runtime.test.tsx` 가 잰다.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -120,28 +120,28 @@ describe('상호작용 탭 — 팝업 열기 · 닫기', () => {
   })
 })
 
-describe('페이지 정보 «종류»', () => {
-  it('화면 → 팝업: 레이아웃 · 뿌리 타입 · 제목(페이지 이름)을 바꾸는 묶음 하나 — 앞에 뿌리 타입 · 레이아웃의 test', async () => {
+describe('페이지 정보 «레이아웃»', () => {
+  it('빈 → 팝업: 레이아웃 · 뿌리 타입 · 제목(페이지 이름)을 바꾸는 묶음 하나 — 앞에 레이아웃 · 뿌리 타입의 test', async () => {
     const { calls, api } = editable()
     await openPage(DOC, { apiOverrides: api })
     await openTab('페이지 정보')
 
-    const group = await screen.findByRole('radiogroup', { name: '종류' })
-    expect(within(group).getByRole('radio', { name: '화면' }).getAttribute('aria-checked')).toBe('true')
+    const group = await screen.findByRole('radiogroup', { name: '레이아웃' })
+    expect(within(group).getByRole('radio', { name: '빈' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(within(group).getByRole('radio', { name: '팝업' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]!.ops).toEqual([
-      { op: 'test', path: '/root/type', value: 'Page' },
       { op: 'test', path: '/layout', value: 'blank' },
-      { op: 'add', path: '/layout', value: 'popup' },
+      { op: 'test', path: '/root/type', value: 'Page' },
+      { op: 'replace', path: '/layout', value: 'popup' },
       { op: 'replace', path: '/root/type', value: 'Popup' },
       { op: 'add', path: '/root/props', value: { title: '회원 목록' } },
     ])
     await waitFor(() => expect(within(group).getByRole('radio', { name: '팝업' }).getAttribute('aria-checked')).toBe('true'))
   })
 
-  it('팝업 → 화면: 바닥 노드를 몸통 끝으로 옮기고(지우지 않는다) 바닥 · props 를 걷는다', async () => {
+  it('팝업 → 빈: 바닥 노드를 몸통 끝으로 옮기고(지우지 않는다) 바닥 · props 를 걷는다', async () => {
     const popup: PageDocument = pageDoc({
       id: 'n-root',
       type: 'Popup',
@@ -158,13 +158,13 @@ describe('페이지 정보 «종류»', () => {
     await openPage(popup, { apiOverrides: api })
     await openTab('페이지 정보')
 
-    fireEvent.click(within(await screen.findByRole('radiogroup', { name: '종류' })).getByRole('radio', { name: '화면' }))
+    fireEvent.click(within(await screen.findByRole('radiogroup', { name: '레이아웃' })).getByRole('radio', { name: '빈' }))
 
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]!.ops).toEqual([
-      { op: 'test', path: '/root/type', value: 'Popup' },
       { op: 'test', path: '/layout', value: 'popup' },
-      { op: 'add', path: '/layout', value: 'blank' },
+      { op: 'test', path: '/root/type', value: 'Popup' },
+      { op: 'replace', path: '/layout', value: 'blank' },
       { op: 'move', from: '/root/zones/footer/0', path: '/root/children/-' },
       { op: 'move', from: '/root/zones/footer/0', path: '/root/children/-' },
       { op: 'remove', path: '/root/zones' },
