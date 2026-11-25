@@ -84,7 +84,7 @@ import { applyPreviewLook, isPreviewId, previewDocument } from './canvas-preview
 import { emptyZonesFor, type EmptyZones } from './empty-zones'
 import { usePublishCanvasDocument } from './canvas-document'
 import { CanvasDragHandle } from './canvas-drag-handle'
-import { CanvasIframe, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
+import { CanvasIframe, MIN_HEIGHT, type CanvasFrame, type CanvasSheet } from './canvas-iframe'
 import { guideOf, useLayoutGuides, type Guide, type GuideLine } from './layout-guides'
 import { useCanvasMarquee } from './use-canvas-marquee'
 import { themeFileUrl } from '../theme/bundle-loader'
@@ -130,7 +130,17 @@ const NO_MARKERS: MarkerBox[] = []
  */
 const CODE_MARK_CSS = '[data-wb-code-broken] { outline: 2px dashed #b54708; outline-offset: 2px; }'
 
-const BASE_SHEET: CanvasSheet = { id: 'base', css: `${defaultViewsCss()}\n${CODE_MARK_CSS}` }
+/**
+ * **팝업 레이아웃의 막이 캔버스 문서 높이를 다 덮는다** — SDK 기본 CSS 의 막은 제 내용 높이라, 팝업이 iframe 의 최소 높이보다 짧으면 막 아래에 바탕이
+ * 남는다. 그 바탕은 노드 밖 바탕 갈래(누르면 고름이 풀리고 · 놓으면 페이지 끝)를 타 «막은 틀이다»(설계 「캔버스」)가 깨진다 — 리뷰
+ * `docs/superpowers/plans/2026-11-25-rv-lc-report.md` L3. 캔버스에만 얹는다(번들 · PPTX 의 막은 그 판의 몫이다).
+ *
+ * iframe 높이는 «최소 높이 · 문서 높이» 의 큰 쪽이라 막을 그 최소 높이까지 세우면 늘 iframe 을 다 덮는다. `100vh` 로 세우지 않는다 — 문서 높이가 iframe
+ * 높이에 묶여, 끌기의 미리보기가 키운 문서가 줄어도 `body` 상자가 안 바뀌어 높이 관찰이 안 깨고 iframe 이 큰 채 남는다(긴 팝업에서 +10px).
+ */
+const POPUP_BACKDROP_CSS = `[data-wb-layout="popup"] { min-height: ${MIN_HEIGHT}px; }`
+
+const BASE_SHEET: CanvasSheet = { id: 'base', css: `${defaultViewsCss()}\n${CODE_MARK_CSS}\n${POPUP_BACKDROP_CSS}` }
 
 /**
  * 캔버스 iframe 머리의 시트 — `base`(SDK 기본 뷰) → `theme`(그 판의 `theme.css` — `<link>` 라 자산 경로가 파일 주소 기준으로 풀린다) →

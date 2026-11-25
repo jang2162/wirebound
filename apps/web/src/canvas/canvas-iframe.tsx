@@ -37,8 +37,8 @@ const HOLD_CSS = '@layer wb-hold { *, *::before, *::after { transition: none !im
 /** 문서마다 아직 안 실린 link 시트. */
 const pendingLinks = new WeakMap<Document, Set<HTMLLinkElement>>()
 
-/** 문서가 비었을 때의 높이. 빈 캔버스도 누를 자리가 있어야 선택을 풀 수 있다. */
-const MIN_HEIGHT = 320
+/** 문서가 비었을 때의 높이. 빈 캔버스도 누를 자리가 있어야 선택을 풀 수 있다. iframe 은 이 값과 문서 높이의 큰 쪽이다. */
+export const MIN_HEIGHT = 320
 
 export function CanvasIframe(props: {
   /**
