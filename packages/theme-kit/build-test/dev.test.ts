@@ -121,12 +121,12 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
     await expect.poll(() => shown(frame)).toBe('dashboard')
     const current = () => page.$$eval('nav[aria-label="예제 페이지"] button[aria-current="page"]', (els) => els.map((el) => el.textContent))
     expect(await current()).toEqual(['대시보드'])
-    // 대시보드 «전체 보기» — 문서 안 이음(작성자 템플릿은 레이아웃 뷰를 안 내 틀 링크가 없다).
-    await frame.click('[data-wb-id="ex-d-all"]')
+    // 대시보드 «최근 주문» 표의 첫 주문번호 — 문서 안 이음(샘플 테마는 레이아웃 뷰를 안 내 틀 링크가 없고, `Card` 뷰가 구역을 안 그려 «전체 보기» 도 없다).
+    await frame.click('[data-wb-id="ex-d-g-r0-no-l"]')
     // 판이 섰다(프레임이 그 장을 그렸다) — 셸의 값은 메시지 한 번 · 그리기 한 번 뒤에 한 번 읽어 단언한다(폴의 끝 조건에 단언할 값을 안 넣는다).
-    await expect.poll(() => shown(frame)).toBe('orders')
+    await expect.poll(() => shown(frame)).toBe('order')
     await page.evaluate(() => new Promise((done) => setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(done)), 50)))
-    expect(await current()).toEqual(['주문 목록'])
+    expect(await current()).toEqual(['주문 상세'])
     // 셸의 장 이름으로도 고른다.
     await page.click('nav[aria-label="예제 페이지"] >> text=주문 등록')
     await expect.poll(() => shown(frame)).toBe('order-form')
