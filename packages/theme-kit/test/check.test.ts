@@ -727,3 +727,108 @@ describe('checkTheme', () => {
     expect(off.focusables).toEqual([])
   })
 })
+
+/**
+ * **레이아웃 틀의 계약**(설계 `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「`wb-theme check` 가 더 볼 것」) — 레이아웃 뷰는 내용을
+ * 정확히 한 번 두고, 선언한 끌 수 있는 영역을 `LayoutRegion` 으로 감싼다. 선언 밖 영역은 경고다. 뷰는 SDK 기본 서브페이지 뷰에서 한 곳만 바꾼다.
+ */
+describe('checkTheme — 레이아웃', () => {
+  const LAYOUT_MANIFEST: ThemeManifest = {
+    ...BASE,
+    sdk: '^1.10.0',
+    layouts: {
+      subpage: {
+        regions: [
+          { id: 'gnb', label: 'GNB' },
+          { id: 'title', label: '페이지 제목' },
+          { id: 'foot', label: '바닥', toggle: false },
+        ],
+      },
+    },
+  }
+
+  /** 서브페이지 뷰(번들 원문) — `region` 은 영역 하나를 그리는 식이다(`id` · `body`). 바꿀 곳만 인자로 준다. */
+  function subpageView(change: { content?: 'none' | 'twice'; gnb?: 'plain'; extra?: boolean } = {}): string {
+    const content = change.content === 'none' ? 'null' : change.content === 'twice' ? '[props.children, props.children]' : 'props.children'
+    const gnb =
+      change.gnb === 'plain'
+        ? `h('nav', { 'data-wb-part': 'gnb' }, 'GNB')`
+        : `h(rt.sdk.LayoutRegion, { id: 'gnb', as: 'nav' }, props.gnb.map((item) => h(rt.sdk.LayoutLink, { key: item.id, item })))`
+    const extra = change.extra === true ? `h(rt.sdk.LayoutRegion, { id: 'promo' }, '광고')` : 'null'
+    return `(props) => h('div', null, ${gnb}, h(rt.sdk.LayoutRegion, { id: 'title', as: 'h1' }, props.title), ${extra},
+      h('main', null, ${content}), h('footer', { 'data-wb-layout-region': 'foot' }, '바닥'))`
+  }
+
+  function layoutBundle(manifest: ThemeManifest, subpage: string | null): string {
+    return `(() => {
+      const rt = globalThis.__wirebound_runtime__
+      const h = rt.react.createElement
+      rt.register(rt.sdk.defineTheme({ manifest: ${JSON.stringify(manifest)}, views: rt.sdk.DEFAULT_VIEWS${subpage === null ? '' : `, layouts: { subpage: ${subpage} }`} }))
+    })()`
+  }
+
+  const check = (subpage: string | null, manifest = LAYOUT_MANIFEST) =>
+    checkTheme(files(manifest, { themeJs: layoutBundle(manifest, subpage) }))
+  const layoutErrors = (report: Awaited<ReturnType<typeof check>>) =>
+    report.errors.filter((error) => error.source === 'layout').map((error) => `${error.type}: ${error.message}`)
+
+  it('계약을 지킨 뷰는 오류 0 · 경고 0 — 레이아웃을 선언하지 않은 테마는 틀을 안 본다', async () => {
+    const ok = await check(subpageView())
+    expect(ok.errors).toEqual([])
+    expect(ok.undeclaredRegions).toEqual([])
+    expect(formatCheckReport(ok).ok).toBe(true)
+    const none = await checkTheme(files(BASE))
+    expect(none.undeclaredRegions).toEqual([])
+    expect(none.errors).toEqual([])
+  })
+
+  it('내용(children)을 안 두는 뷰는 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'none' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 페이지 내용(children)을 두지 않았습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('내용을 두 번 두는 뷰는 오류다', async () => {
+    expect(layoutErrors(await check(subpageView({ content: 'twice' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 페이지 내용(children)을 2 번 두었습니다 — 정확히 한 번 둡니다',
+    ])
+  })
+
+  it('선언한 끌 수 있는 영역을 LayoutRegion 없이 그린 뷰는 오류다 — 끌 수 없는 영역(toggle: false)은 안 본다', async () => {
+    expect(layoutErrors(await check(subpageView({ gnb: 'plain' })))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 선언한 영역 gnb 을 LayoutRegion 으로 그리지 않았습니다 — 호스트가 그 영역을 끄지 못합니다',
+    ])
+  })
+
+  it('선언한 영역을 SDK 기본 뷰(내용만)로 두면 끌 수 있는 영역마다 오류다', async () => {
+    expect(layoutErrors(await check(null))).toEqual(
+      ['gnb', 'title'].map(
+        (id) =>
+          `layout:subpage: subpage 레이아웃 뷰가 선언한 영역 ${id} 을 LayoutRegion 으로 그리지 않았습니다 — 호스트가 그 영역을 끄지 못합니다`,
+      ),
+    )
+  })
+
+  it('끈 영역을 그대로 그리는 뷰(속성만 흉내 낸 요소)는 오류다', async () => {
+    const fake = `(props) => h('div', null, h('nav', { 'data-wb-layout-region': 'gnb' }, 'GNB'), h(rt.sdk.LayoutRegion, { id: 'title' }, props.title), props.children)`
+    expect(layoutErrors(await check(fake))).toEqual([
+      'layout:subpage: subpage 레이아웃 뷰가 끈 영역 gnb 을 그렸습니다 — 끌 수 있는 영역은 SDK 의 LayoutRegion 으로 감쌉니다',
+    ])
+  })
+
+  it('선언 밖 영역은 경고다 — ok 에 안 든다', async () => {
+    const report = await check(subpageView({ extra: true }))
+    expect(report.errors).toEqual([])
+    expect(report.undeclaredRegions).toEqual([{ layout: 'subpage', id: 'promo' }])
+    const formatted = formatCheckReport(report)
+    expect(formatted.ok).toBe(true)
+    expect(formatted.lines.filter((line) => line.startsWith('⚠ 선언 밖 영역'))).toEqual([
+      '⚠ 선언 밖 영역 subpage · promo — manifest 의 layouts.subpage.regions 에 없어 «보기» 메뉴가 끄지 못합니다',
+    ])
+  })
+
+  it('던지는 레이아웃 뷰는 오류다', async () => {
+    const report = await check(`() => { throw new Error('틀이 터졌다') }`)
+    expect(layoutErrors(report)).toEqual(['layout:subpage: 테마 레이아웃 뷰가 던졌습니다: 틀이 터졌다'])
+  })
+})

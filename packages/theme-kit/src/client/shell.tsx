@@ -83,9 +83,11 @@ function Shell(): ReactElement {
   /** 예제의 장 목록 — 프레임이 준비 신호에 싣는다(`FrameReady` 머리말). 첫 장이 처음 장이다. */
   const [pages, setPages] = useState<FrameReady['pages']>([])
   const [page, setPage] = useState<ExamplePageId>('dashboard')
+  /** 예제 틀에서 끈 영역 — 작성자가 «보기» 메뉴로 끈 판을 본다(에디터 편집 모드와 같은 켬/끔). */
+  const [hiddenRegions, setHiddenRegions] = useState<string[]>([])
   const frame = useRef<HTMLIFrameElement>(null)
-  const latest = useRef<Omit<FrameState, 'type'>>({ tokens: values, overlay, view, page })
-  latest.current = { tokens: values, overlay, view, page }
+  const latest = useRef<Omit<FrameState, 'type'>>({ tokens: values, overlay, view, page, hiddenRegions })
+  latest.current = { tokens: values, overlay, view, page, hiddenRegions }
 
   const send = useCallback(() => {
     frame.current?.contentWindow?.postMessage({ type: 'wb-state', ...latest.current } satisfies FrameState, '*')
@@ -117,9 +119,11 @@ function Shell(): ReactElement {
     return () => window.removeEventListener('message', onMessage)
   }, [send])
 
-  useEffect(send, [values, overlay, view, page, send])
+  useEffect(send, [values, overlay, view, page, hiddenRegions, send])
 
   const manifest = project.manifest
+  // 예제 장은 서브페이지다 — 그 레이아웃의 끌 수 있는 영역만 체크로 선다.
+  const toggles = (manifest?.layouts?.subpage?.regions ?? []).filter((region) => region.toggle !== false)
   const items = Object.entries(manifest?.tokens.items ?? {})
   const groups = [...(manifest?.tokens.groups ?? []), { id: '', label: '기타' }]
   const setValue = (name: string, value: string | number | undefined) =>
@@ -167,6 +171,23 @@ function Shell(): ReactElement {
               </button>
             ))}
           </nav>
+        )}
+        {view === 'examples' && toggles.length > 0 && (
+          <span role="group" aria-label="틀 영역" className="regions">
+            {toggles.map((region) => (
+              <label key={region.id}>
+                <input
+                  data-wb-region-toggle={region.id}
+                  type="checkbox"
+                  checked={!hiddenRegions.includes(region.id)}
+                  onChange={(e) =>
+                    setHiddenRegions((prev) => (e.target.checked ? prev.filter((id) => id !== region.id) : [...prev, region.id]))
+                  }
+                />{' '}
+                {region.label}
+              </label>
+            ))}
+          </span>
         )}
       </header>
       <aside>

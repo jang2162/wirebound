@@ -178,6 +178,58 @@ describe.skipIf(typeof launched === 'string')('wb-theme dev (실브라우저)', 
       .toBe('rgb(0, 255, 0)')
   })
 
+  it('레이아웃 영역 — 선언한 끌 수 있는 영역마다 «예제 페이지» 에 체크가 서고, 끄면 프레임의 틀에서 그 영역이 빠진다', async () => {
+    const config = join(root, 'theme.config.ts')
+    writeFileSync(
+      config,
+      readFileSync(config, 'utf8').replace(
+        '  tokens:',
+        "  layouts: { subpage: { regions: [{ id: 'gnb', label: 'GNB' }, { id: 'title', label: '제목' }, { id: 'foot', label: '바닥', toggle: false }] } },\n  tokens:",
+      ),
+    )
+    const entry = join(root, 'src/index.tsx')
+    writeFileSync(
+      entry,
+      readFileSync(entry, 'utf8')
+        .replace(
+          "import { defineTheme, Root, view } from '@wirebound/theme-sdk'",
+          "import { defineTheme, LayoutLink, LayoutRegion, Root, view, type LayoutView } from '@wirebound/theme-sdk'",
+        )
+        .replace(
+          'export default defineTheme({ manifest, views: { Card } })',
+          [
+            'const Subpage: LayoutView = (props) => (',
+            '  <div className="sample-subpage">',
+            '    <LayoutRegion id="gnb" as="nav">{props.gnb.map((item) => <LayoutLink key={item.id} item={item} />)}</LayoutRegion>',
+            '    <LayoutRegion id="title" as="h1">{props.title}</LayoutRegion>',
+            '    {props.children}',
+            '    <LayoutRegion id="foot">바닥</LayoutRegion>',
+            '  </div>',
+            ')',
+            'export default defineTheme({ manifest, views: { Card }, layouts: { subpage: Subpage } })',
+          ].join('\n'),
+        ),
+    )
+    await page.check('[data-wb-view="examples"]')
+    const toggles = () => page.$$eval('[data-wb-region-toggle]', (els) => els.map((el) => el.getAttribute('data-wb-region-toggle')))
+    await expect.poll(toggles, { timeout: 10_000 }).toEqual(['gnb', 'title'])
+    const regions = async () => {
+      const frame = page.frames().find((f) => f.url().endsWith('/frame.html'))
+      return (
+        (await frame
+          ?.evaluate(() => [...document.querySelectorAll('[data-wb-layout-region]')].map((el) => el.getAttribute('data-wb-layout-region')))
+          .catch(() => null)) ?? null
+      )
+    }
+    await expect.poll(regions, { timeout: 10_000 }).toEqual(['gnb', 'title', 'foot'])
+    await page.uncheck('[data-wb-region-toggle="gnb"]')
+    await expect.poll(regions).toEqual(['title', 'foot'])
+    await page.check('[data-wb-region-toggle="gnb"]')
+    await expect.poll(regions).toEqual(['gnb', 'title', 'foot'])
+    await page.check('[data-wb-view="components"]')
+    await galleryFrame()
+  })
+
   it('설정을 틀리면 셸에 이슈가 선다', async () => {
     const file = join(root, 'theme.config.ts')
     writeFileSync(file, readFileSync(file, 'utf8').replace("version: '1.0.0'", "version: '1.0'"))
