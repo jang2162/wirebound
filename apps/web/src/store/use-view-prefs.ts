@@ -8,8 +8,8 @@
  * | 에디터를 열면 | 다 켬 — GET 이 오면 그 값. GET 이 실패하면 다 켠 채다 |
  * | 바꾸면 | **곧바로** 새 값(낙관 반영) — PUT 을 보낸다 |
  * | PUT 이 나가 있는 동안 또 바꾸면 | 화면은 곧바로 바뀌고, 보낼 값은 **마지막 것 하나**만 남긴다 — 앞 답이 온 뒤 그 하나를 보낸다 |
- * | 마지막으로 보낸 PUT 이 실패하면 | 서버가 마지막으로 받아 준 값으로 되돌리고 하단 바에 한 줄(`VIEW_PREFS_FAILED`) |
- * | 바꾼 뒤 GET 의 답이 오면 | 버린다 — 사람이 고른 값이 이긴다(그 값을 PUT 이 나르는 중이다) |
+ * | 마지막으로 보낸 PUT 이 실패하면 | 서버가 마지막으로 확인한 값으로 되돌리고 하단 바에 한 줄(`VIEW_PREFS_FAILED`). GET 의 답이 아직 없고 받아 준 PUT 도 없으면 GET 의 답을 기다려 그 값으로 |
+ * | 바꾼 뒤 GET 의 답이 오면 | 화면에는 안 싣는다 — 사람이 고른 값이 이긴다(그 값을 PUT 이 나르는 중이다). 되돌릴 값으로는 적는다 — 받아 준 PUT 이 이미 있으면 그 값이 더 늦은 판이라 안 적는다 |
  *
  * **PUT 을 겹쳐 보내지 않는다.** 같은 사람의 겹친 PUT 은 서버에서 **커밋 차례로** 선다 — 앞 요청이 늦게 커밋되면 서버 끝 값이 화면 값과 갈린다
  * (리뷰 `docs/superpowers/plans/2026-11-25-rv-vp-report.md` L1). 한 번에 하나만 내보내고 그 사이의 값은 마지막 것으로 접으면 서버가 받는 차례가
@@ -52,8 +52,14 @@ export function ViewPrefsProvider(props: { projectId: string; children: ReactNod
   const store = useEditorStoreInstance()
   const { projectId } = props
   const [hidden, setHidden] = useState<readonly string[]>(NONE)
-  /** 서버가 마지막으로 받아 준(또는 읽어 준) 값 — 실패한 PUT 을 되돌릴 자리. */
+  /** 서버가 마지막으로 받아 준(또는 읽어 준) 값 — 실패한 PUT 을 되돌릴 자리. `known` 이 거짓이면 아직 모른다. */
   const saved = useRef<readonly string[]>(NONE)
+  /** `saved` 가 서버에서 온 값인가 — GET 의 답이나 받아 준 PUT 이 하나라도 왔다. */
+  const known = useRef(false)
+  /** 받아 준 PUT 이 있다 — 그 뒤 온 GET 의 답은 그보다 앞선 판이라 `saved` 에 안 적는다. */
+  const confirmed = useRef(false)
+  /** 모르는 채 실패했다 — GET 의 답이 오면 화면을 그 값으로 맞춘다. */
+  const revertOnRead = useRef(false)
   /** 아직 안 보낸 마지막 값. `null` 이면 보낼 것이 없다. */
   const pending = useRef<readonly string[] | null>(null)
   const inFlight = useRef(false)
@@ -69,16 +75,31 @@ export function ViewPrefsProvider(props: { projectId: string; children: ReactNod
     // 앞 프로젝트에 나가 있던 PUT 의 답은 `alive` 가 버린다 — 새 프로젝트의 줄이 그것을 기다리지 않게 잠금도 푼다.
     inFlight.current = false
     saved.current = NONE
+    known.current = false
+    confirmed.current = false
+    revertOnRead.current = false
     setHidden(NONE)
     const controller = new AbortController()
     api.getViewPrefs(projectId, { cancel: controller.signal }).then(
       (read) => {
-        if (alive.current !== projectId || touched.current) return
-        saved.current = read
-        setHidden(read)
+        if (alive.current !== projectId) return
+        if (!confirmed.current) {
+          saved.current = read
+          known.current = true
+        }
+        if (revertOnRead.current) {
+          revertOnRead.current = false
+          setHidden(read)
+          return
+        }
+        if (!touched.current) setHidden(read)
       },
-      // 읽기 실패는 다 켠 판으로 그린다(머리말의 표) — 말하지 않는다. 캔버스는 그대로 쓸 수 있다.
-      () => {},
+      // 읽기 실패는 다 켠 판으로 그린다(머리말의 표) — 말하지 않는다. 캔버스는 그대로 쓸 수 있다. 모르는 채 실패한 PUT 은 다 켬(처음 값)으로 되돌린다.
+      () => {
+        if (alive.current !== projectId || !revertOnRead.current) return
+        revertOnRead.current = false
+        setHidden(NONE)
+      },
     )
     return () => {
       controller.abort()
@@ -98,6 +119,8 @@ export function ViewPrefsProvider(props: { projectId: string; children: ReactNod
         if (alive.current !== sentFor) return
         inFlight.current = false
         saved.current = stored
+        known.current = true
+        confirmed.current = true
         pump()
       },
       (caught: unknown) => {
@@ -108,7 +131,9 @@ export function ViewPrefsProvider(props: { projectId: string; children: ReactNod
           pump()
           return
         }
-        setHidden(saved.current)
+        // 서버 값을 아직 모르면 GET 의 답을 기다린다 — 처음 값(다 켬)으로 되돌리면 서버 값과 갈린다.
+        if (known.current) setHidden(saved.current)
+        else revertOnRead.current = true
         const failure = toFailure(caught, VIEW_PREFS_FAILED)
         store.setEditFailure(failure.kind === 'signed-out' ? failure : { kind: 'message', message: VIEW_PREFS_FAILED })
       },
@@ -118,6 +143,7 @@ export function ViewPrefsProvider(props: { projectId: string; children: ReactNod
   const set = useCallback(
     (next: readonly string[]): void => {
       touched.current = true
+      revertOnRead.current = false
       const value = [...next]
       setHidden(value)
       pending.current = value
