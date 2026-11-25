@@ -607,6 +607,13 @@ export interface ApiClient {
     projectId: string,
     body: { themeId: string; version: string; tokens: Record<string, string | number>; rev: number },
   ): Promise<ProjectThemeView>
+  /**
+   * **내가 이 프로젝트의 편집 캔버스에서 끈 레이아웃 영역**(`GET …/view-prefs`) — 열쇠 «<레이아웃>.<영역 id>» 의 목록. 안 끈 사람은 `[]` 다.
+   * viewer 도 읽는다. 세션으로만 — 토큰은 403. 지금 테마가 선언하지 않은 열쇠도 실려 온다(그리는 쪽이 선언한 영역에만 적용한다).
+   */
+  getViewPrefs(projectId: string, options?: ReadOptions): Promise<string[]>
+  /** 끈 영역 목록을 통째로 바꾼다(나중 쓰기가 이긴다). 열쇠 꼴 밖 · 33 개 이상 · 겹침은 400. viewer 도 저장한다. */
+  putViewPrefs(projectId: string, hiddenRegions: readonly string[]): Promise<string[]>
   /** 그 판으로 바꾸면 무엇이 달라지나 — 확인 창의 수(viewer 이상). */
   getThemeImpact(projectId: string, ref: ThemeRef, options?: ReadOptions): Promise<ThemeImpact>
   /** 올라온 테마 패키지 목록(로그인한 사람). 숨긴 판은 관리자에게만 실린다. */

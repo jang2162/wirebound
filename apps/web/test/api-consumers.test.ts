@@ -125,6 +125,8 @@ const METHODS = [
   'listAdminProjects',
   'transferProjectOwner',
   'listAudit',
+  'getViewPrefs',
+  'putViewPrefs',
 ] as const
 
 /** 정의하는 쪽. 여기서 이름이 나오는 것은 호출이 아니다. */
@@ -325,6 +327,9 @@ const EXPECTED: Record<(typeof METHODS)[number], string[]> = {
   listAdminProjects: ['../src/admin/projects-section.tsx', '../src/admin/users-section.tsx'],
   transferProjectOwner: ['../src/admin/projects-section.tsx'],
   listAudit: ['../src/admin/audit-section.tsx'],
+  // 표시 옵션 — 에디터 머리의 «보기» 가 부를 자리다(설계 「에디터의 입구 — 머리의 «보기»」). 그 입구가 서기 전이라 부르는 자리가 없다.
+  getViewPrefs: [],
+  putViewPrefs: [],
   // 공통코드 — 셸의 표(`codes/project-codes.tsx`)와 공통코드 화면(`codes/codes-screen.tsx` — 표 · 사용 수 · 사용처 · 쓰기 여섯)이 부른다.
   listCodes: ['../src/codes/project-codes.tsx', '../src/codes/codes-screen.tsx'],
   createCodeGroup: ['../src/codes/codes-screen.tsx'],

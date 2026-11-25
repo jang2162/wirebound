@@ -206,6 +206,13 @@ async function projectState({ projectId, bob }: Pick<Fx, 'projectId' | 'bob'>) {
       .orderBy('code_groups.key')
       .orderBy('code_items.value')
       .execute(),
+    // 표시 옵션 — 사람마다의 행(`routes/view-prefs.ts`). 시각 칸은 뺀다.
+    viewPrefs: await db
+      .selectFrom('project_view_prefs')
+      .select(['user_id', 'hidden_regions'])
+      .where('project_id', '=', projectId)
+      .orderBy('user_id')
+      .execute(),
   }
 }
 
@@ -2483,7 +2490,7 @@ describe('토큰으로 낸 멤버 쓰기 — 자격 행이 owner 행보다 먼�
  * | 메뉴 생성 · 자리 옮기기 · 삭제 · 페이지 생성 · 자리 옮기기 · 삭제 · 가져오기 | 자기의 `lockProjectTree`(프로젝트 행) | 선다 |
  * | 프로젝트 수정 | `UPDATE projects`(프로젝트 행) | 선다 |
  * | 복원 · 프로젝트 삭제 | 자기의 `lockProjectRow`(프로젝트 행 `FOR UPDATE`) | 선다 |
- * | 스냅샷 · 초대 · 모듈 · 토큰 생성 | 자기의 `lockProjectShared`(`INSERT`의 FK 가 부모 행에 거는 `KEY SHARE`와 모드는 같다 — 먼저 잡아 두면 삭제 뒤에 깰 때 500 이 아니라 404 다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
+ * | 스냅샷 · 초대 · 모듈 · 토큰 생성 · 표시 옵션 저장 | 자기의 `lockProjectShared`(`INSERT`의 FK 가 부모 행에 거는 `KEY SHARE`와 모드는 같다 — 먼저 잡아 두면 삭제 뒤에 깰 때 500 이 아니라 404 다) | 안 선다(`KEY SHARE`는 `NO KEY UPDATE`와 안 부딪힌다) |
  * | 코멘트 수정 | 자기의 `lockProjectShared`(프로젝트 행 `KEY SHARE` — 자기 행(코멘트)보다 먼저) | 안 선다 |
  * | 코멘트 삭제 | 자기의 `lockProjectForBurial`(프로젝트 행 `KEY SHARE`) | 안 선다 |
  *
@@ -2771,6 +2778,16 @@ const PROJECT_PROBES: ProjectProbe[] = [
     holders: ['restore'],
     fire: (ctx, fx) => fireRest(ctx, fx, 'POST', `/api/projects/${fx.projectId}/tokens`, { name: '밥의 토큰' }),
     okStatus: 201,
+  },
+  {
+    // 표시 옵션 — 프로젝트 행 `KEY SHARE` → 자기 행 upsert → 재확인(`routes/view-prefs.ts`). 토큰 발급과 같은 차례 · 같은 가드(viewer).
+    route: 'PUT /api/projects/:projectId/view-prefs',
+    label: '표시 옵션 저장 (가드가 viewer — 멤버에서 뺀다)',
+    bobRole: 'editor',
+    demotion: 'member',
+    holders: ['restore'],
+    fire: (ctx, fx) => fireRest(ctx, fx, 'PUT', `/api/projects/${fx.projectId}/view-prefs`, { hiddenRegions: ['subpage.gnb'] }),
+    okStatus: 200,
   },
   {
     route: 'PATCH /api/projects/:projectId/pages/:pageId/comments/:commentId',
