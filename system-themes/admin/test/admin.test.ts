@@ -145,8 +145,8 @@ const refOf = (value: string | number): string | null => /^\{([^{}]+)\}$/.exec(S
 describe('system-admin manifest', () => {
   it('id · 판 · sdk · 이름 · 설명', () => {
     expect(ADMIN_V0.manifest.id).toBe('system-admin')
-    expect(ADMIN_V0.manifest.version).toBe('2.1.0')
-    expect(ADMIN_V0.manifest.sdk).toBe('^1.8.0')
+    expect(ADMIN_V0.manifest.version).toBe('2.2.0')
+    expect(ADMIN_V0.manifest.sdk).toBe('^1.10.0')
     expect(ADMIN_V0.manifest.name).toBe('기본테마')
     expect(ADMIN_V0.manifest.description).toBe('관리자 화면 기본 테마. 회색 선의 표 격자와 파란 주색을 쓴다.')
   })

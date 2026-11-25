@@ -62,6 +62,16 @@ describe('system-admin .wbtheme', () => {
     expect(report.errors).toEqual([])
   })
 
+  /**
+   * 서브페이지 틀 — 빌드한 manifest 가 영역 넷을 싣고, 공용 검사가 레이아웃 판(다 켬 · 하나씩 끔 · 메뉴 밖 페이지 · 빈 내비)마다 내용 한 번 · 끈 영역이
+   * 안 섬을 잰 결과에 오류가 없다(위 «갤러리 칸 전부가 …» 의 `errors` 가 레이아웃 판의 말도 싣는다 — 이 케이스는 판이 섰는지를 본다).
+   */
+  it('서브페이지 틀 — 영역 넷을 싣고 레이아웃 판의 선언 밖 영역이 없다', () => {
+    expect(files!.manifest.layouts?.subpage?.regions.map((region) => region.id)).toEqual(['gnb', 'lnb', 'breadcrumb', 'title'])
+    expect(report.undeclaredRegions).toEqual([])
+    expect(report.errors.filter((issue) => issue.source === 'layout')).toEqual([])
+  })
+
   it('선언한 토큰은 전부 쓰인다', () => {
     expect(report.unusedTokens).toEqual([])
   })
