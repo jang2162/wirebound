@@ -1,6 +1,6 @@
 /**
  * **속성 패널의 «공통코드» 칸**(`src/panels/code-binding.tsx` · 편집 `src/edit/code-ops.ts`) — jsdom. 묶기 · 묶인 동안 잠긴 대표 글 칸 · 사용처
- * 링크 · 이름을 바꾼 뒤 풀면 새 이름 · 선택 위젯의 «표의 항목 중 고르기»(하나만) · 끊긴 참조의 한 줄 · 표에 없는 키를 든 붙여넣기(Review Focus 1).
+ * 링크 · 이름을 바꾼 뒤 풀면 새 이름 · 선택 위젯의 카드(칩 · «고른 값» — 선택지 칸은 숨음) · 끊긴 참조의 한 줄 · 표에 없는 키를 든 붙여넣기(Review Focus 1).
  * 모듈 넣기 · 페이지 JSON 가져오기의 같은 판은 `test/palette/module-tab.test.tsx` · `test/panels/page-json.test.tsx` 의 «공통코드» 절.
  */
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -105,7 +105,7 @@ describe('속성 패널 — 공통코드 칸', () => {
     expect(node.props?.text).toBe('입금 대기')
   })
 
-  it('Select 묶음 — 패널이 «표의 항목 중 고르기» 가 되고 하나만 고른다', async () => {
+  it('Select 묶음 — 카드 하나(칩 · «고른 값» 셀렉트)가 되고 선택지 칸은 숨는다 · 하나만 고른다', async () => {
     const srv = server(
       doc({
         id: 'n-sel',
@@ -116,18 +116,65 @@ describe('속성 패널 — 공통코드 칸', () => {
     )
     await openPage(srv.held(), { apiOverrides: srv.api })
     pick('Select')
-    const picks = await panel().findByRole('group', { name: '표의 항목 중 고르기' })
-    const radios = within(picks).getAllByRole('radio')
-    expect(radios.map((radio) => radio.parentElement?.textContent)).toEqual(['\u2068결제 대기\u2069', '\u2068배송 중\u2069'])
-    fireEvent.click(radios[1]!)
+    const chips = await panel().findByRole('list', { name: '표의 항목' })
+    expect(
+      within(chips)
+        .getAllByRole('listitem')
+        .map((chip) => chip.textContent),
+    ).toEqual(['\u2068결제 대기\u2069', '\u2068배송 중\u2069'])
+    // 같은 목록이 두 번 서지 않는다 — 선택지 칸(잠긴 목록)이 숨는다.
+    expect(panel().queryByText('선택지', { selector: 'label' })).toBeNull()
+    const value = panel().getByRole<HTMLSelectElement>('combobox', { name: '고른 값' })
+    expect(value.value).toBe('')
+    fireEvent.change(value, { target: { value: 'SHIP' } })
     await waitFor(() => expect(srv.calls).toHaveLength(1))
     expect(srv.held().root.children![0]!.code).toEqual({ group: 'ORDER_STATUS', selected: ['SHIP'] })
     expect(srv.held().root.children![0]!.props?.options).toEqual([{ label: '결제 대기' }, { label: '배송 중', selected: true }])
-    // 선택지 목록 칸은 잠긴다 — 표가 정한다(입력이 있고 전부 꺼졌다).
+    // 고른 칩이 강조된다(`aria-current`).
+    await waitFor(() =>
+      expect(
+        within(chips)
+          .getAllByRole('listitem')
+          .map((chip) => chip.getAttribute('aria-current')),
+      ).toEqual([null, 'true']),
+    )
+    fireEvent.change(value, { target: { value: '' } })
+    await waitFor(() => expect(srv.calls).toHaveLength(2))
+    // «— 없음 —» 은 옛 «고름 지우기» 와 같은 편집이다(`pickCodeOps` 에 빈 목록).
+    expect(srv.held().root.children![0]!.code).toEqual({ group: 'ORDER_STATUS', selected: [] })
+  })
+
+  it('CheckboxGroup 묶음 — 칩이 켜고 끄는 단추다(목록 한 번)', async () => {
+    const srv = server(
+      doc({
+        id: 'n-chk',
+        type: 'CheckboxGroup',
+        props: { options: [{ label: '결제 대기' }, { label: '배송 중' }] },
+        code: { group: 'ORDER_STATUS' },
+      }),
+    )
+    await openPage(srv.held(), { apiOverrides: srv.api })
+    pick('CheckboxGroup')
+    const group = await panel().findByRole('group', { name: '고른 값' })
+    const chips = within(group).getAllByRole('button')
+    expect(chips.map((chip) => chip.getAttribute('aria-pressed'))).toEqual(['false', 'false'])
+    fireEvent.click(chips[0]!)
+    await waitFor(() => expect(srv.calls).toHaveLength(1))
+    fireEvent.click(within(group).getAllByRole('button')[1]!)
+    await waitFor(() => expect(srv.calls).toHaveLength(2))
+    expect(srv.held().root.children![0]!.code).toEqual({ group: 'ORDER_STATUS', selected: ['WAIT', 'SHIP'] })
+    expect(panel().queryByText('선택지', { selector: 'label' })).toBeNull()
+  })
+
+  it('끊긴 묶음의 선택 위젯은 잠긴 선택지 칸이 남는다 — 무엇이 들어 있었는지 말하는 자리', async () => {
+    const srv = server(doc({ id: 'n-sel', type: 'Select', props: { options: [{ label: '옛 값' }] }, code: { group: 'GONE_GROUP' } }))
+    await openPage(srv.held(), { apiOverrides: srv.api })
+    pick('Select')
+    await waitFor(() => expect(codeField().textContent).toContain('끊긴 공통코드: GONE_GROUP'))
     const row = panel().getByText('선택지', { selector: 'label' }).closest('.wb-shell-prop')!
     const inputs = [...row.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input, button')]
     expect(inputs.length).toBeGreaterThan(0)
-    expect(inputs.filter((input) => !input.disabled).map((input) => input.outerHTML.slice(0, 60))).toEqual([])
+    expect(inputs.every((input) => input.disabled)).toBe(true)
   })
 
   it('끊긴 노드 — «끊긴 공통코드: ORDER_STATUS › GONE» · 다시 묶기 · 풀기', async () => {

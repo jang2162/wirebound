@@ -45,7 +45,7 @@ import {
 import type { ThemeManifest } from '@wirebound/theme-sdk'
 import { useProjectTheme } from '../theme/project-theme'
 import { useEditCommit, type EditCommit } from '../edit/use-edit-commit'
-import { CodeBindingField, codeLockedProp } from './code-binding'
+import { CodeBindingField, codeHiddenProp, codeLockedProp } from './code-binding'
 import { ancestorsOf, NodeHead } from './node-head'
 import { PropGroups } from './prop-group-box'
 import { propGroupOf, segmentable, type PropGroup } from './prop-groups'
@@ -370,8 +370,10 @@ export function PropertyPanel(props: {
   const fields = visibleFields(def, node, readProps(node), manifest)
   const variantField = variantFieldOf(def, manifest)
 
-  /** 그 묶음의 카탈로그 칸 — 차례는 `editor` 그대로. 규칙에 없는 꼴(`null`)은 표시에 둔다 — 칸을 잃지 않는다(새 꼴은 `prop-groups.test.ts` 가 잡는다). */
-  const grouped = (group: PropGroup): EditorField[] => fields.filter((field) => (propGroupOf(field) ?? 'look') === group)
+  /** 그 묶음의 카탈로그 칸 — 차례는 `editor` 그대로. 공통코드 카드가 같은 목록을 그리는 선택지 칸은 뺀다(`codeHiddenProp`). 규칙에 없는 꼴(`null`)은 표시에 둔다 — 칸을 잃지 않는다(새 꼴은 `prop-groups.test.ts` 가 잡는다). */
+  const hiddenProp = codeHiddenProp(node, codes)
+  const grouped = (group: PropGroup): EditorField[] =>
+    fields.filter((field) => field.prop !== hiddenProp && (propGroupOf(field) ?? 'look') === group)
 
   /** **변형** — 머리 카드 안 별칭 아래. 개별 prop 이 아니라 이 노드가 어떤 표현인가를 정하는 것이라 묶음보다 위다. */
   const variantRow =

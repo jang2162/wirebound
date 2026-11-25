@@ -7144,6 +7144,64 @@
 }
 
 /* 속성 패널의 «공통코드» 칸(`panels/code-binding.tsx`). */
+/* 묶인 선택 위젯의 공통코드 카드(`panels/code-binding.tsx`) — 머리(이름 · 키 · 수) · 항목 칩 · 고른 값 · 단추 줄. */
+.wb-shell-code-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--wb-shell-chrome);
+}
+
+.wb-shell-code-card-key {
+  margin-left: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-code-card-count {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--wb-shell-muted);
+}
+
+.wb-shell-code-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wb-shell-code-chip {
+  appearance: none;
+  border: 1px solid var(--wb-shell-line);
+  border-radius: 999px;
+  padding: 0 7px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--wb-shell-ink);
+}
+
+.wb-shell-code-chip-on {
+  border-color: var(--wb-shell-accent);
+  background: var(--wb-shell-accent);
+  color: #fff;
+}
+
+.wb-shell-code-pick-one {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
 .wb-shell-code-field {
   display: flex;
   flex-direction: column;

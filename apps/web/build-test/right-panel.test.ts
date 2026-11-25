@@ -6,7 +6,7 @@
  * |---|---|
  * | 기본 폭 | 창 1280 · 1440 · 1920 에서 우측 패널이 창의 24% 를 300 ~ 380 으로 자른 폭이 아니다 · 열린 배율이 그 칸에 맞춰지지 않는다 |
  * | 탭 줄이 창 안 | 긴 Select 를 고르고 본문을 끝까지 굴리면 탭 줄이 패널 위 끝 밖으로 나간다 · 탭 줄 밑을 지나는 본문이 탭을 덮는다 |
- * | 칸 배치 | 창 1280(패널 307)에서 라벨 칸이 76px 이 아니다 · 세그먼트 단추 · 값 칸이 패널 안쪽 오른끝을 넘는다(글자 노드의 `Range` 로도 잰다) |
+ * | 칸 배치 | 창 1280(패널 307)에서 라벨 칸이 76px 이 아니다 · 세그먼트 단추 · 값 칸이 패널 안쪽 오른끝을 넘는다(글자 노드의 `Range` 로도 잰다) · 묶인 Select 의 목록이 칩 열 개 한 번이 아니다(선택지 칸이 남는다) |
  *
  * `RP_SHOTS=<디렉터리>` 를 주면 판마다 화면 그림을 그 디렉터리에 남긴다(보고의 후 캡처).
  */
@@ -98,7 +98,8 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
   })
 
   it('긴 Select 를 고르고 본문을 끝까지 굴려도 탭 줄이 패널 위 끝에 남는다', async () => {
-    const { page, close } = await open(1440)
+    // 높이 600 — 묶인 Select 의 본문이 패널보다 길다(카나리아 `room`).
+    const { page, close } = await open(1440, 600)
     try {
       await pickInTree(page, 'n_sel')
       const shot = shotPath('component-scrolled.png')
@@ -171,12 +172,24 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
             ),
             textPast: Math.max(0, textRight - inner),
             scroll: panel.scrollWidth - panel.clientWidth,
+            // 공통코드에 묶인 선택지는 카드의 칩 한 줄에만 선다 — 선택지 칸(잠긴 목록)은 숨는다.
+            chips: panel.querySelectorAll('.wb-shell-code-chip').length,
+            optionsRow: [...panel.querySelectorAll('.wb-shell-prop-label')].some((label) => label.textContent === '선택지'),
           }
         })
       }
       // eslint-disable-next-line no-console
       console.log(`[칸 배치 1280] ${JSON.stringify(seen)}`)
-      const col = seen.n_g1_c1 as { rows: number; segments: number; labels: number[]; past: number; textPast: number; scroll: number }
+      const col = seen.n_g1_c1 as {
+        rows: number
+        segments: number
+        labels: number[]
+        past: number
+        textPast: number
+        scroll: number
+        chips: number
+        optionsRow: boolean
+      }
       const sel = seen.n_sel as typeof col
       // 카나리아 — 칸이 서고 세그먼트가 섰다(GridColumn 의 정렬 · 폭 · 정렬 표시 · 음영 · 번호).
       expect(col.rows).toBeGreaterThan(4)
@@ -187,7 +200,13 @@ describe.skipIf(!전제.ok)('우측 패널 — 실브라우저', () => {
         글넘침: 0,
         가로: 0,
       })
-      expect({ 넘침: sel.past, 글넘침: sel.textPast, 가로: sel.scroll }).toEqual({ 넘침: 0, 글넘침: 0, 가로: 0 })
+      expect({ 넘침: sel.past, 글넘침: sel.textPast, 가로: sel.scroll, 칩: sel.chips, 선택지칸: sel.optionsRow }).toEqual({
+        넘침: 0,
+        글넘침: 0,
+        가로: 0,
+        칩: 10,
+        선택지칸: false,
+      })
     } finally {
       await close()
     }
