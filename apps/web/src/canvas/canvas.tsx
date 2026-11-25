@@ -60,7 +60,7 @@ import {
 import { defaultViewsCss, ThemeProvider, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { tokensCss, tokenValues } from '@wirebound/themes'
 import { createPortal } from 'react-dom'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 import { KeepDropPlace } from './keep-drop-place'
 import { projectAssetUrl } from '../api/asset-url'
 import { useApi } from '../api/context'
@@ -230,17 +230,28 @@ export function Canvas(props: {
    * **레이아웃 틀**(설계 `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「캔버스」) — 문서를 렌더러의 `LayoutFrame` 으로 감싼다. 내비는 트리
    * 칸이 그린 메뉴 트리로 짓고(`./layout-menu.tsx`), 끈 영역은 **편집 모드에만** 적용한다(뷰 모드는 늘 다 켬 — 설계 «정해진 것» 3). 뷰 모드의 틀
    * 링크는 그 페이지를 연다(메뉴 트리 칸의 링크와 같은 주소 — `panels/menu-tree.tsx`) · 편집 모드는 아무 일도 없다(`LayoutLink` 가 기본 동작을 막는다).
+   * 이력도 메뉴 트리 칸의 `<Link>` 와 같다 — 갈 주소가 지금 주소(질의 · 조각까지)와 같으면 쌓지 않고 바꾼다(react-router `<Link>` 의 기본값).
    */
   const menu = useLayoutMenu()
   const prefs = useViewPrefs()
   const navigateTo = useNavigate()
+  const location = useLocation()
+  /** 지금 주소 — 틀 이동이 같은 주소인지 볼 때 읽는다(이동 처리기를 주소마다 새로 짓지 않게 ref 로). */
+  const here = useRef('')
+  here.current = `${location.pathname}${location.search}${location.hash}`
   const layout = layoutOf(doc)
   const nav = useMemo(() => layoutNav(menu, props.pageId), [menu, props.pageId])
   const hiddenKey = mode === 'edit' ? hiddenIn(prefs.hidden, layout).join('\n') : ''
   const hiddenRegions = useMemo(() => (hiddenKey === '' ? NO_IDS : hiddenKey.split('\n')), [hiddenKey])
   const projectId = props.projectId
   const frameNavigate = useMemo(
-    () => (mode === 'view' ? (pageId: string) => navigateTo(`/projects/${projectId}/pages/${pageId}`) : undefined),
+    () =>
+      mode === 'view'
+        ? (pageId: string) => {
+            const path = `/projects/${projectId}/pages/${pageId}`
+            navigateTo(path, { replace: path === here.current })
+          }
+        : undefined,
     [mode, navigateTo, projectId],
   )
   /**
