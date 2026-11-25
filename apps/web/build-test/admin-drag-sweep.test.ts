@@ -12,8 +12,9 @@
  * 판 — 구역 안에 글 · 카드(글 · 폼 표 · 그리드 · 조회 폼 · 글) · 탭 패널(같은 꼴) · 테두리 없는 카드 · 폼 표만 든 카드 · 글 셋, 팝업 페이지 몸통에 글 ·
  * 폼 표 · 글 · 그리드 · 글, 서브페이지 레이아웃 페이지(빈 레이아웃 화면과 같은 노드 — 틀은 기본테마의 레이아웃 뷰가 그린다).
  *
- * **서브페이지 판은 캔버스가 틀(`LayoutFrame`)을 그릴 때 틀 규칙(`theme.css` «서브페이지 틀»)을 지난다** — 캔버스가 아직 틀 없이 문서 뿌리만 그리는
- * 판에서는 빈 레이아웃 화면과 같은 판이다. 캔버스에 틀이 서는지(`[data-wb-layout="subpage"]`)는 이 파일이 세지 않는다. 끄는 것은 팔레트 카드(`Button` · `Text` — 카드를 쥐고 위로 200px 끈 뒤)와 캔버스 손잡이(구조 트리 줄을 눌러 고른 글).
+ * **서브페이지 판은 캔버스가 그린 틀(`LayoutFrame`)의 규칙(`theme.css` «서브페이지 틀»)을 지난다** — 카나리아로 그 판의 캔버스에 틀
+ * (`[data-wb-layout="subpage"]`)이 하나 서고 영역(`[data-wb-layout-region]`)이 하나 넘게 섰는지, 다른 판에는 틀이 없는지를 센다(틀이 안 서면 빈 레이아웃
+ * 화면과 같은 판이라 틀 규칙을 안 잰다). 끄는 것은 팔레트 카드(`Button` · `Text` — 카드를 쥐고 위로 200px 끈 뒤)와 캔버스 손잡이(구조 트리 줄을 눌러 고른 글).
  *
  * 점 — 끌기를 세우고 배치가 선 뒤(`dragLayoutSettled`) 잰 노드마다 x = 왼끝 + min(폭/2, 120), y = 위끝 −1 · +1 · 아래끝 −1 · +1 · 다음 형제와의 틈
  * 가운데(마지막이면 아래끝 +4 · +12). 캔버스 칸(`.wb-shell-canvas`) 안 점만. 점마다 steps 4 로 옮긴 뒤 60ms × 6 번 «surface 의 `data-wb-preview` |
@@ -163,6 +164,8 @@ const STATE = `(() => {
 })()`
 
 interface Sweep {
+  /** 끌기 전 캔버스 문서의 서브페이지 틀 수 · 영역 수. */
+  frame: { frames: number; regions: number }
   points: number
   flips: string[]
   dead: string[]
@@ -260,10 +263,18 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
     const flips: string[] = []
     const dead: string[] = []
     let total = 0
+    let frame = { frames: -1, regions: -1 }
     try {
       await page.goto(url)
       await page.frameLocator('iframe.wb-shell-canvas-iframe').locator(`[data-wb-id="${ids[0]}"]`).waitFor({ state: 'attached' })
       await page.waitForTimeout(500)
+      frame = await page
+        .frameLocator('iframe.wb-shell-canvas-iframe')
+        .locator('html')
+        .evaluate(() => ({
+          frames: document.querySelectorAll('[data-wb-layout="subpage"]').length,
+          regions: document.querySelectorAll('[data-wb-layout-region]').length,
+        }))
       await grab(page)
       await dragLayoutSettled(page)
       const pts = await points(page, ids)
@@ -287,7 +298,7 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
     } finally {
       await context.close()
     }
-    return { points: total, flips, dead, depthErrors: errors.filter((e) => /Maximum update depth/.test(e)).length }
+    return { frame, points: total, flips, dead, depthErrors: errors.filter((e) => /Maximum update depth/.test(e)).length }
   }
 
   async function grabCard(page: Page, type: string): Promise<void> {
@@ -334,7 +345,9 @@ describe.skipIf(!전제.ok)('기본테마 — 끄는 동안 캔버스가 안 멈
       const got = await sweep(url(), ids, grab)
       // eslint-disable-next-line no-console
       console.log(`[훑기] ${label} ${JSON.stringify(got)}`)
-      // 카나리아 — 캔버스 칸 안의 점을 그만큼 겨눴다(죽은 판은 그 점에서 멈추므로 죽음을 먼저 본다).
+      // 카나리아 — 서브페이지 판에만 틀과 영역이 섰다 · 캔버스 칸 안의 점을 그만큼 겨눴다(죽은 판은 그 점에서 멈추므로 죽음을 먼저 본다).
+      const subpage = url() === subpageUrl
+      expect({ frames: got.frame.frames, regions: got.frame.regions > 0 }).toEqual({ frames: subpage ? 1 : 0, regions: subpage })
       expect({ dead: got.dead, depthErrors: got.depthErrors, flips: got.flips }).toEqual({ dead: [], depthErrors: 0, flips: [] })
       expect(got.points).toBeGreaterThan(least)
     },
