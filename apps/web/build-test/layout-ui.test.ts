@@ -189,7 +189,7 @@ describe.skipIf(!전제.ok)('페이지 레이아웃의 에디터 입구 — 실�
         async () => count.cutPuts,
         (n) => n > 0,
       )
-      const read = page.waitForResponse((response) => response.request().method() === 'GET' && /\/view-prefs$/.test(response.url()))
+      const read = page.waitForResponse((response) => response.request().method() === 'GET' && response.url().endsWith('/view-prefs'))
       if (order === 'fail-then-read') {
         releasePut()
         await page.getByText(VIEW_PREFS_FAILED, { exact: false }).first().waitFor()
