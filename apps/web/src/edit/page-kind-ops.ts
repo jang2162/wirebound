@@ -13,13 +13,11 @@
  * (`layout-root-mismatch`) 하나만 바꾸면 저장 경계가 거절한다. 뿌리를 고치는 편집이라 남이 뿌리를 쥐었으면 잠금이 막는다
  * (`EditorStore.editBlockedBy` — 화면은 그 단추를 끈다).
  */
-import { BODY_ZONE, PAGE_LAYOUTS, zoneList, type PageDocument, type PageLayout, type PatchOp } from '@wirebound/schema'
+import { BODY_ZONE, pageLayoutOf, zoneList, type PageDocument, type PageLayout, type PatchOp } from '@wirebound/schema'
 
-/** 문서의 레이아웃 — 판 7 문서에는 늘 있다. 없으면(검증 전 문서) 뿌리 타입으로 판 6 → 7 단계와 같은 값을 읽는다. */
+/** 문서의 레이아웃 — 판 7 문서에는 늘 있다. 없으면(검증 전 문서) 판 6 → 7 단계와 같은 값이다(`pageLayoutOf` — 판정을 두 벌로 짓지 않는다). */
 export function documentLayout(document: PageDocument): PageLayout {
-  const value = (document as { layout?: unknown }).layout
-  if (PAGE_LAYOUTS.includes(value as PageLayout)) return value as PageLayout
-  return document.root?.type === 'Popup' ? 'popup' : 'blank'
+  return pageLayoutOf(document)
 }
 
 /** 두 레이아웃 사이의 바꿈이 팝업 경계를 넘는가 — 넘으면 뿌리도 바꾼다(머리말의 표). */
