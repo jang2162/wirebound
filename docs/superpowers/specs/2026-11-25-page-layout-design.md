@@ -107,7 +107,7 @@ API 의 기본값을 `blank` 로 두는 까닭: 픽스처 · 에이전트가 만
 | `modules.nodes` · `personal_modules.nodes` | 노드 묶음이라 옮길 것이 없다 |
 | `layouts.schema` | 옮기지 않는다 — 같은 차례에서 표를 걷는다(「겹치는 기존 장치」) |
 
-`down` 은 `layout` 을 지우고 판 6 으로 내린다(뿌리가 짝이라 잃는 값이 `blank` · `subpage` 의 구별뿐이다 — 내린 `subpage` 는 판 6 에 없는 값이라 버린다).
+`down` 은 `layout` 을 지우고 판 6 으로 내린다(뿌리가 짝이라 잃는 값이 `blank` · `subpage` 의 구별뿐이다 — 내린 `subpage` 는 판 6 에 없는 값이라 버린다). 편집 이력(`revisions`)의 `ops` · `inverse` 에서도 `/layout` 연산을 걷는다 — 내린 판의 `PatchPath` 가 모르는 경로라 남기면 그 되돌리기가 400 이다. 둘 다 빈 revision(레이아웃만 바꾼 편집)은 지운다 — 판 6 에서는 아무것도 안 바꾼 편집이고, 지운 번호는 구멍으로 남는다(이력은 `seq < 커서` 로 읽는다).
 
 **«남은 옛 판 0» 셈은 문서가 사는 자리 전부를 센다** — `pages` 와 스냅샷 payload 의 `pages[]` 둘이다(지침 「수를 셀 때는 두 번 세고」 덧붙임의 마이그레이션 항목).
 

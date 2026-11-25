@@ -97,7 +97,8 @@ pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # �
 
 **`0037-page-layout` 은 문서를 판 7 로 올린다.** 페이지 문서에 레이아웃(`layout`)을 채운다 — 뿌리 `Popup` 이면 `popup`, 그 밖은 `blank`(판 6 의
 화면 그대로). 규칙은 `@wirebound/schema` 의 `migrate-page-layout.ts` 가 갖고 런타임 사슬에도 있다. 옮기는 자리는 `pages` 와 `snapshots.payload` 의
-`pages[]` 다. 있던 경로가 안 바뀌어 `head_seq` 를 안 올린다. 내리기는 `layout` 을 지우고 판 6 으로 — 빈 · 서브페이지의 구별을 잃는다.
+`pages[]` 다. 있던 경로가 안 바뀌어 `head_seq` 를 안 올린다. 내리기는 `layout` 을 지우고 판 6 으로 — 빈 · 서브페이지의 구별을 잃는다. 편집 이력(`revisions`)의 `ops` · `inverse` 에서도
+`/layout` 연산을 걷고(내린 판의 경로 검사가 모른다), 둘 다 빈 revision 은 지운다.
 
 **`0038-drop-layouts` 는 레이아웃 표를 걷는다.** `projects.default_layout_id` 와 `layouts` 를 걷고 판 4 이하 스냅샷 payload 의 `layouts` 키를 뺀다 — 판 숫자는 그대로다(복원이 판 숫자로
 테마 바인딩 · 공통코드 표의 갈래를 가른다 — `services/restore-plan.ts` 11 · 12단계). 내리기는 표 · 칼럼을 빈 채로 다시 세우고 판 5 payload 를 판 4 로

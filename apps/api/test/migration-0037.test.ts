@@ -6,7 +6,8 @@
  *
  * 잰 성질: 페이지 문서가 사는 자리 전부(페이지 · 스냅샷의 `pages[]`)에서 판 6 문서가 0 이 된다 · 뿌리 `Popup` 은 `popup`, 그 밖은 `blank` · 옮긴
  * 문서가 판 7 검증(오류)을 지난다 · `head_seq` · `structure_seq` 가 안 오른다 — 판 6 바탕(옮기기 전 `head_seq`)의 편집이 옮긴 뒤 그대로 적용된다 ·
- * `down` 은 `layout` 을 지우고 판 6 으로 돌아간다.
+ * `down` 은 `layout` 을 지우고 판 6 으로 돌아간다 · `down` 은 편집 이력(`revisions`)의 `ops` · `inverse` 에서 `/layout` 연산을 걷고, 둘 다 빈 revision
+ * (레이아웃만 바꾼 편집 — 판 6 에서는 아무것도 안 바꾼다)은 지운다. 남기면 내린 판의 `PatchPath` 가 모르는 경로라 그 되돌리기가 400 이다.
  */
 import { randomUUID } from 'node:crypto'
 import { installCatalog, partitionIssues, validatePage, type PageDocument } from '@wirebound/schema'
@@ -142,6 +143,12 @@ async function pageRow(id: string): Promise<{ schema: PageDocument; schema_versi
   return rows[0]!
 }
 
+let seededShared: Seeded | undefined
+function seeded0037(): Seeded {
+  if (seededShared === undefined) throw new Error('앞 describe 가 판을 세우지 않았다')
+  return seededShared
+}
+
 describe('0037 — 페이지 레이아웃 · 판 6 → 7', () => {
   let seeded: Seeded
   let before: string[]
@@ -150,6 +157,7 @@ describe('0037 — 페이지 레이아웃 · 판 6 → 7', () => {
     await must(NO_MIGRATIONS)
     await must('0036-common-codes')
     seeded = await seed()
+    seededShared = seeded
     before = await bodies()
     // 카나리아 — 옛 판이 있었다: 페이지 2 · 스냅샷 페이지 2(레이아웃 문서는 세지 않는다).
     expect(before.flatMap((body) => pageDocsIn(JSON.parse(body)))).toEqual([
@@ -214,6 +222,48 @@ describe('0037 — 페이지 레이아웃 · 판 6 → 7', () => {
       actor: { type: 'user', id: seeded.userId, label: '앨리스' },
     })
     expect(outcome.ok ? { seq: outcome.seq, layout: outcome.schema.layout } : outcome).toEqual({ seq: 8, layout: 'blank' })
+  })
+})
+
+interface RevisionRow {
+  seq: string
+  ops: { op: string; path: string; from?: string }[]
+  inverse: { op: string; path: string; from?: string }[]
+}
+
+async function revisionsOf(pageId: string): Promise<RevisionRow[]> {
+  return (await sql<RevisionRow>`select seq, ops, inverse from revisions where page_id = ${pageId} order by seq`.execute(db)).rows
+}
+
+describe('0037 down — 편집 이력의 /layout 연산', () => {
+  it('ops · inverse 에서 /layout 을 걷고, 레이아웃만 바꾼 revision 은 지운다 — 나머지 연산 · revision 은 그대로', async () => {
+    // 앞 describe 의 끝 판(최신 · 화면 페이지 head_seq 8)에서 잇는다.
+    const actor = { type: 'user' as const, id: seeded0037().userId, label: '앨리스' }
+    const { projectId, screen } = seeded0037()
+    const edit = async (baseSeq: number, ops: { op: 'replace'; path: string; value: unknown }[]) => {
+      const outcome = await applyEdit(db, { projectId, pageId: screen, baseSeq, ops, actor })
+      if (!outcome.ok) throw new Error(JSON.stringify(outcome))
+      return outcome.seq
+    }
+    expect(await edit(8, [{ op: 'replace', path: '/layout', value: 'subpage' }])).toBe(9)
+    expect(
+      await edit(9, [
+        { op: 'replace', path: '/layout', value: 'blank' },
+        { op: 'replace', path: '/root/children/0/props/content', value: '둘째 글' },
+      ]),
+    ).toBe(10)
+    const touches = (rows: RevisionRow[]) =>
+      rows.flatMap((row) => [...row.ops, ...row.inverse]).filter((op) => op.path === '/layout' || op.from === '/layout').length
+    // 카나리아 — 내리기 전에는 /layout 연산이 넷(두 편집의 ops · inverse)이다.
+    expect(touches(await revisionsOf(screen))).toBe(4)
+
+    await must('0036-common-codes')
+    const rows = await revisionsOf(screen)
+    expect(touches(rows)).toBe(0)
+    expect(rows.map((row) => [Number(row.seq), row.ops.map((op) => op.path), row.inverse.map((op) => op.path)])).toEqual([
+      [8, ['/root/children/0/props/content'], ['/root/children/0/props/content']],
+      [10, ['/root/children/0/props/content'], ['/root/children/0/props/content']],
+    ])
   })
 })
 

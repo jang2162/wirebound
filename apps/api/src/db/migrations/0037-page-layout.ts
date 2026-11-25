@@ -19,6 +19,10 @@ import { liftPageLayout } from '@wirebound/schema'
  * 그대로 적용된다.
  *
  * **`down` 은 `layout` 을 지우고 판 6 으로 내린다.** 뿌리가 짝이라 잃는 것은 빈 · 서브페이지의 구별뿐이다(판 6 에 `subpage` 의 뜻이 없다).
+ * 편집 이력(`revisions`)의 `ops` · `inverse` 에서도 `/layout` 연산을 걷는다 — 내린 판의 `PatchPath`(`http/patch-ops.ts`)가 모르는 경로라, 남기면 그
+ * revision 의 되돌리기가 400 이다. 걷고 나서 둘 다 빈 revision(레이아웃만 바꾼 편집 — 판 6 에서는 아무것도 안 바꾼다)은 지운다 — 빈 묶음을 되돌리기
+ * 항목으로 남기지 않는다. 지운 번호는 구멍으로 남는다(이력은 `seq < 커서` 로 읽어 구멍에 막히지 않는다 — `0031-entry-form-table` 과 같다). 올리기는
+ * 이력을 안 옮긴다(위 표 밖 — 판 6 의 연산에는 `/layout` 이 없다).
  *
  * **이 파일은 판 6 → 7 의 뜻으로 얼어 있다 — 고치지 않는다.**
  */
@@ -29,7 +33,36 @@ export const migration: Migration = {
 
   async down(db: Kysely<unknown>): Promise<void> {
     await rewrite(db, 7, 6, ({ layout: _layout, ...rest }) => rest)
+    await dropLayoutOps(db)
   },
+}
+
+interface RawOp {
+  path?: unknown
+  from?: unknown
+}
+
+const touchesLayout = (op: RawOp): boolean => op.path === '/layout' || op.from === '/layout'
+
+/** `revisions` 의 `ops` · `inverse` 에서 `/layout` 연산을 걷는다. 둘 다 비면 그 행을 지운다(위 머리말 `down`). */
+async function dropLayoutOps(db: Kysely<unknown>): Promise<void> {
+  const rows = await sql<{ id: string; ops: RawOp[]; inverse: RawOp[] }>`
+    select id, ops, inverse from revisions
+    where jsonb_path_exists(ops, '$[*] ? (@.path == "/layout" || @.from == "/layout")')
+       or jsonb_path_exists(inverse, '$[*] ? (@.path == "/layout" || @.from == "/layout")')
+    order by id
+  `.execute(db)
+  for (const row of rows.rows) {
+    const ops = row.ops.filter((op) => !touchesLayout(op))
+    const inverse = row.inverse.filter((op) => !touchesLayout(op))
+    if (ops.length === 0 && inverse.length === 0) {
+      await sql`delete from revisions where id = ${row.id}`.execute(db)
+    } else {
+      await sql`update revisions set ops = ${JSON.stringify(ops)}::jsonb, inverse = ${JSON.stringify(inverse)}::jsonb where id = ${row.id}`.execute(
+        db,
+      )
+    }
+  }
 }
 
 interface Raw {
