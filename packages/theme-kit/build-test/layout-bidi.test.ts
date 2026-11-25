@@ -105,7 +105,7 @@ async function glyphs(markup: string): Promise<Record<string, { ch: string; x: n
 
 /** 이름(`name` 의 보이는 글자 — 글자 노드 차례) 뒤의 글자들이 왼쪽 → 오른쪽 차례로 · 이름 오른쪽에 서는가. */
 function after(row: { ch: string; x: number }[], name: string): { ok: boolean; seen: string } {
-  const visible = [...name].filter((c) => !/[\s‮]/u.test(c))
+  const visible = [...name].filter((c) => !/[\s\u202e]/u.test(c))
   const start = row.findIndex((g, at) => visible.every((c, k) => row[at + k]?.ch === c))
   if (start < 0) return { ok: false, seen: `이름을 못 찾음: ${row.map((g) => g.ch).join('')}` }
   const nameRight = Math.max(...row.slice(start, start + visible.length).map((g) => g.x))
@@ -137,7 +137,7 @@ describe.skipIf(launched.browser === null)('레이아웃 틀 — 이름의 방�
 
   it('방향 제어 글자가 없는 이름은 그대로 — 글자가 한 글자도 안 바뀐다', () => {
     const markup = html('주문 관리', '주문 목록')
-    expect(markup).not.toMatch(/[⁦-⁩]/u)
+    expect(markup).not.toMatch(/[\u2066-\u2069]/u)
     expect(markup).toContain('주문 관리 &gt; 주문 목록')
   })
 })
