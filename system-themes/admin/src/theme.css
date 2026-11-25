@@ -999,8 +999,12 @@
 [data-wb-component="Select"][data-wb-size="long"] {
   width: min(24em, 100%);
 }
+/* 숫자 값은 오른쪽이다. 안내 글(값 없음 — `data-wb-placeholder`)은 왼쪽 — 오른쪽에 붙으면 «예) 2026» 이 값처럼 읽힌다. */
 [data-wb-component="Input"][data-wb-kind="number"] {
   justify-content: flex-end;
+}
+[data-wb-component="Input"][data-wb-kind="number"] > [data-wb-placeholder] {
+  margin-right: auto;
 }
 /* 날짜 · 시간은 글자 수가 정해진 고정 폭이다 — 여백 · 표지 · 틈을 뺀 글 칸이 제 기본 안내(«YYYY-MM-DD» 7.6em · «00:00» 2.6em)보다 넓다. */
 [data-wb-component="DateInput"],
