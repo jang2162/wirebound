@@ -565,7 +565,6 @@ const ENDPOINTS: Array<{
     body: null,
     call: (c) => c.deleteModule('p1', 'm1'),
   },
-  // **공통코드 아홉.** 키 · 값은 경로 조각이라 감싼다(`encodeURIComponent` — 코드값에 `/` · 한글이 든다).
   // 표시 옵션 둘 — 봉투 `{ hiddenRegions }`.
   {
     client: 'getViewPrefs',
@@ -581,6 +580,7 @@ const ENDPOINTS: Array<{
     body: { hiddenRegions: ['subpage.gnb'] },
     call: (c) => c.putViewPrefs('p1', ['subpage.gnb']),
   },
+  // **공통코드 아홉.** 키 · 값은 경로 조각이라 감싼다(`encodeURIComponent` — 코드값에 `/` · 한글이 든다).
   { client: 'listCodes', url: '/api/projects/p1/codes', method: 'GET', body: { groups: [CODE_GROUP] }, call: (c) => c.listCodes('p1') },
   {
     client: 'createCodeGroup',

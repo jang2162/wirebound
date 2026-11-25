@@ -767,9 +767,9 @@ const SHAPES = {
     ),
   /** `{ modules }` — 프로젝트 모듈 목록. */
   moduleListEnvelope: (value) => isRecord(value) && isArrayOf(value['modules'], isModule),
-  /** 공통코드 표 — 화면이 키 · 이름 · 항목을 그린다. 모양이 틀리면 표를 못 푼다. */
   /** 표시 옵션 — 끈 영역 열쇠 목록. 화면이 열쇠를 `Set` 으로 견주므로 글자가 아닌 항목은 막는다(객체면 늘 «켜짐» 으로 읽혀 조용히 틀린다). */
   viewPrefs: (value) => isRecord(value) && isArrayOf(value['hiddenRegions'], (item) => typeof item === 'string'),
+  /** 공통코드 표 — 화면이 키 · 이름 · 항목을 그린다. 모양이 틀리면 표를 못 푼다. */
   codeTable: (value) => isRecord(value) && isArrayOf(value['groups'], isCodeGroup),
   codeGroupEnvelope: (value) => isRecord(value) && isCodeGroup(value['group']),
   codeItemEnvelope: (value) => isRecord(value) && isCodeItem(value['item']),

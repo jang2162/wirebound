@@ -63,8 +63,10 @@ export function viewPrefRoutes() {
       const user = requireSessionUser(request, SESSION_ONLY)
       const body = parseBody(ViewPrefsBody, request.body)
       const hiddenRegions = await withTransaction(app.db, async (trx) => {
-        // **프로젝트 행이 먼저다**(`routes/tokens.ts` 의 발급과 같은 차례). 처음 쓰는 판의 삽입은 FK 로 같은 `KEY SHARE` 를 걸지만
-        // 프로젝트 삭제 뒤에 깨면 23503 — 봉투 없는 500 이다. 먼저 잡으면 0 행 → 404. 행이 이미 있는 판도 같은 자리에 서게 한다.
+        // **프로젝트 행이 먼저다**(`routes/tokens.ts` 의 발급과 같은 차례). 404 꾸밈이 아니다 — **행이 이미 있으면 upsert 가 FK 검사를
+        // 안 돌아, 이 잠금만이 프로젝트 삭제와 차례를 정한다.** 떼면 삭제가 CASCADE 에서 이 행에 서고 재확인이 삭제가 지운 멤버 행에
+        // 서서 교착이다(삭제 500 · `view-prefs-delete-order.test.ts`). 처음 쓰는 판은 FK 가 같은 `KEY SHARE` 를 걸지만 삭제 뒤에
+        // 깨면 23503(봉투 없는 500)이라, 먼저 잡아 0 행 → 404 로 끊는다.
         await lockProjectShared(trx, projectId)
         const saved = await upsertHiddenRegions(trx, user.id, projectId, body.hiddenRegions)
         // 커밋 순간의 권한 — 복원 · 프로젝트 삭제를 기다리는 사이 멤버에서 빠졌으면 404 로 되돌린다(`guard-in-lock.test.ts`).
