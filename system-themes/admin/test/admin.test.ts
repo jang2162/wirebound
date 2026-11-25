@@ -556,9 +556,9 @@ describe('system-admin CSS', () => {
 
   /**
    * 페이지 뿌리에 곧바로 든 노드(조회 폼 · 그리드 · 등록 폼을 카드 없이 쌓은 화면)도 구역 안처럼 자기 아래 8px 이다 — 끝 노드도 같다(형제 구조로
-   * 안 가른다). 뿌리의 구역은 안 받는다 — 바탕을 칠하는 띠 사이에 흰 틈이 선다.
+   * 안 가른다). 뿌리의 구역 · 글은 안 받는다 — 바탕을 칠하는 띠 사이에 흰 틈이 서고, 글은 제 문단 여백으로 쌓인다.
    */
-  it('페이지 뿌리에 곧바로 든 노드는 자기 아래 8px · 위 0 — 끝 노드도 같고 구역은 안 받는다', () => {
+  it('페이지 뿌리에 곧바로 든 노드는 자기 아래 8px · 위 0 — 끝 노드도 같고 구역 · 글은 안 받는다', () => {
     const bottomOf = (el: Element) =>
       rules()
         .filter(
@@ -568,7 +568,7 @@ describe('system-admin CSS', () => {
     const got = tree(
       `<div data-wb-component="Page" data-wb-structure="default">
          <form data-wb-component="SearchForm" data-test="x"></form><div data-wb-component="DataGrid" data-test="x"></div>
-         <div data-wb-component="Section" data-test="x"></div><form data-wb-component="EntryForm" data-test="x"></form></div>`,
+         <div data-wb-component="Section" data-test="x"></div><p data-wb-component="Text" data-test="x"></p><form data-wb-component="EntryForm" data-test="x"></form></div>`,
       (root) =>
         Array.from(root.querySelectorAll('[data-test="x"]')).map(
           (el) => `${el.getAttribute('data-wb-component')}: ${bottomOf(el).join(' · ') || '없음'}`,
@@ -578,6 +578,7 @@ describe('system-admin CSS', () => {
       'SearchForm: 0 / var(--wb-space-2)',
       'DataGrid: 0 / var(--wb-space-2)',
       'Section: 없음',
+      'Text: 없음',
       'EntryForm: 0 / var(--wb-space-2)',
     ])
   })
