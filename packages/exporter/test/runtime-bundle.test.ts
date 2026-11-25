@@ -255,11 +255,14 @@ function expected(overlay: InteractionOverlay): string {
   return html
 }
 
-/** 지금 캔버스에 그려진 문서. 겹layer(마커)는 셸의 것이라 뺀다. */
+/**
+ * 지금 캔버스에 그려진 문서 — 틀(`LayoutFrame` — 이 픽스처는 빈 레이아웃이라 내용만이다)의 내용 상자 안. 겹layer(마커)는 셸의 것이라 틀 밖이다. 틀은
+ * `bundle-layout.test.tsx` 가 잰다.
+ */
 function drawn(): string {
-  const copy = canvas().cloneNode(true) as Element
-  copy.querySelector('.wb-export-markers')?.remove()
-  return copy.innerHTML
+  const content = canvas().querySelector('[data-wb-layout="blank"] > [data-wb-layout-content]')
+  if (content === null) throw new Error('빈 레이아웃 틀이 서지 않았다')
+  return content.innerHTML
 }
 
 beforeEach(() => {

@@ -143,6 +143,8 @@ describe('셸 CSS — 감싸는 상자에 상속되는 속성을 걸지 않는�
     'overflow',
     'position',
     'inset',
+    // 상속되지만 문서를 꾸미지 않는다 — 레이아웃 틀이 `var()` 로 읽는 계약 값이다(`shell-css.ts` 의 `.wb-export-canvas` 머리말).
+    '--wb-frame-min-height',
   ])
 
   it('감싸는 상자를 실제로 찾는다', () => {

@@ -182,6 +182,8 @@ function reads(role: ProjectRole): Record<string, unknown> {
     [`${project}/codes`]: { groups: [] },
     // 코멘트 번호 색인 — 셸이 열 때 읽는다(`comments/comment-index.tsx`).
     [`${project}/comments/index`]: { pages: [], markers: [] },
+    // 내가 끈 레이아웃 영역 — 셸이 열 때 읽는다(`store/use-view-prefs.ts`).
+    [`${project}/view-prefs`]: { hiddenRegions: [] },
     // 개인 모듈(`/api/me/modules`) — 하단 판은 넣을 수 없는 판에도 서서 이 목록을 읽는다.
     '/api/me/modules': { modules: [] },
     [`${project}/snapshots`]: SNAPSHOTS,

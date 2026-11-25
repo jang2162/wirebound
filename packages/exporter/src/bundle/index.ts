@@ -8,6 +8,7 @@
  *   assets/shell.css      뷰어 셸의 CSS
  *   assets/views.css      SDK 기본 뷰 CSS(`defaultViewsCss()`)
  *   assets/runtime.js     내보내기 런타임 — 목업을 브라우저에서 그린다(`src/browser/`)
+ *   assets/nav.js         내비 한 벌 — 서브페이지 틀(GNB · LNB · 브레드크럼브)이 읽는 메뉴 트리 · 페이지 경로(`ExportNav`)
  *   assets/theme/**       프로젝트 테마 패키지의 파일 그대로(theme.js · theme.css · assets/**) — 테마가 있을 때
  *   assets/tokens.css     프로젝트 토큰 값 → CSS 변수(`tokensCss`) — 테마가 있을 때
  *   assets/images/<id>.<ext>  페이지가 든 그림(자리표시자의 `image`) — 호출자가 그 프로젝트가 가진 것만 넘긴다
@@ -52,13 +53,24 @@ import {
   type CodeTable,
   type CommentTokenContext,
   type CommentTokenTarget,
+  type LayoutNavMenu,
   type PageDocument,
 } from '@wirebound/schema'
 import { defaultViewsCss, type ThemeManifest } from '@wirebound/theme-sdk'
 import { tokensCss } from '@wirebound/themes'
 import { eachNode } from '../nodes'
 import { DEFAULT_LANG, renderHtmlDocument } from '../page'
-import { IMAGES_DIRECTORY, RUNTIME_JS_PATH, THEME_DIRECTORY, type ExportMarker, type ExportPageData, type ExportPopup } from '../page-data'
+import {
+  EXPORT_NAV_GLOBAL,
+  IMAGES_DIRECTORY,
+  NAV_JS_PATH,
+  RUNTIME_JS_PATH,
+  THEME_DIRECTORY,
+  type ExportMarker,
+  type ExportNav,
+  type ExportPageData,
+  type ExportPopup,
+} from '../page-data'
 import { scriptJson } from '../script-json'
 import { codeAnchor, commentEntries, exportTokenBase, markerAnchor, type BundleComment } from './comments'
 import { bundleHref, pageFileNames } from './filename'
@@ -78,7 +90,7 @@ export interface BundlePage {
   pageTitle?: string
   /** `<title>`·좌측 트리의 이름이자 **파일 이름의 재료**다. */
   title: string
-  /** 그릴 문서. 페이지 문서다 — 레이아웃을 합성하지 않는다(캔버스가 그리는 것과 같다). */
+  /** 그릴 문서. 런타임이 문서의 `layout` 으로 틀(`LayoutFrame`)을 감싸 그린다 — 영역은 늘 다 켠다(표시 옵션은 내보내기에 안 든다). */
   document: PageDocument
   /**
    * 설계서 「페이지 JSON」 봉투의 `page.description`. 우측 *"페이지 설명"* 탭이 그린다.
@@ -140,6 +152,12 @@ export interface ExportBundleOptions {
    * `codes.html` 에 «공통코드» 장(그룹마다 항목 표 + 쓰는 페이지)이 서며 좌측 트리가 그 장을 가리킨다. 비었거나 없으면 셋 다 없다.
    */
   codes?: CodeTable
+  /**
+   * 프로젝트의 메뉴 트리(`buildLayoutNav` 의 입력 — 페이지마다 `layout`). 서브페이지 틀의 GNB · LNB · 브레드크럼브가 이것으로 선다. 번들에 한 벌
+   * (`assets/nav.js`)만 싣는다 — 장은 제 페이지 id 만 든다. 트리의 페이지 가운데 번들에 실린 것(`BundlePage.id`)만 링크가 된다. 없으면 빈 트리다
+   * (틀의 내비는 지금 페이지 하나짜리 브레드크럼브).
+   */
+  menu?: readonly LayoutNavMenu[]
 }
 
 /** 번들에 실을 그림 하나. */
@@ -232,11 +250,24 @@ export function exportBundle(options: ExportBundleOptions): ExportedBundle {
     { path: SHELL_CSS_PATH, content: SHELL_CSS },
     { path: VIEWS_CSS_PATH, content: defaultViewsCss() },
     { path: RUNTIME_JS_PATH, content: options.runtimeJs },
+    { path: NAV_JS_PATH, content: navJs(options, paths) },
     ...themeFiles(options.theme ?? null),
     ...(options.images ?? []).map((image) => ({ path: imagePath(image), content: image.bytes })),
   ]
 
   return { files, errors, pagePaths: paths }
+}
+
+/**
+ * `assets/nav.js` — 내비 한 벌을 전역에 세운다(`ExportNav`). 경로는 번들 안 경로이고 장이 제 자리에서 본 상대 경로로 바꾼다. id 가 없는 페이지는 경로가
+ * 없다(트리에 있어도 링크가 안 된다). JSON 리터럴은 스크립트의 식으로도 그대로 읽힌다(U+2028 · U+2029 도 ES2019 부터 글자 리터럴 안에 선다).
+ */
+function navJs(options: ExportBundleOptions, paths: readonly string[]): string {
+  const nav: ExportNav = { menu: [...(options.menu ?? [])], paths: {} }
+  for (const [index, page] of options.pages.entries()) {
+    if (page.id !== undefined && !(page.id in nav.paths)) nav.paths[page.id] = paths[index]!
+  }
+  return `globalThis[${JSON.stringify(EXPORT_NAV_GLOBAL)}] = ${JSON.stringify(nav)}\n`
 }
 
 function imagePath(image: BundleImage): string {
@@ -377,6 +408,9 @@ function pageHtml(
   const data: ExportPageData = {
     document: page.document,
     title: page.title,
+    pageId: page.id ?? null,
+    pageTitle: page.pageTitle ?? page.title,
+    path: at,
     target: page.target ?? null,
     themeRef: theme === null ? null : { themeId: theme.ref.themeId, version: theme.ref.version },
     manifest: theme === null ? null : theme.manifest,
@@ -408,6 +442,7 @@ function pageHtml(
       scripts: shellScripts({
         dataJson: scriptJson(data),
         runtimeHref: bundleHref(at, RUNTIME_JS_PATH),
+        navHref: bundleHref(at, NAV_JS_PATH),
         themeHref: theme === null ? null : bundleHref(at, THEME_JS_PATH),
       }),
     }),

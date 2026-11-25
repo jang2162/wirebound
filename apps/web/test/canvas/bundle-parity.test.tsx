@@ -47,7 +47,7 @@ function canvasDocumentRoot(): Element {
   return root
 }
 
-/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의 · 같은 토큰(없음)으로 번들의 목업 자리에 그린다. 마커가 없어 첫 원소가 뿌리다. */
+/** 번들이 그린 문서 뿌리 — 캔버스와 같은 테마 정의 · 같은 토큰(없음)으로 번들의 목업 자리에 그린다. 틀(`data-wb-layout`)은 노드가 아니라 `data-wb-id` 가 없다 — 첫 노드가 뿌리다. */
 function bundleDocumentRoot(document_: PageDocument): Element {
   const canvas = document.createElement('div')
   canvas.className = 'wb-export-canvas'
@@ -64,7 +64,7 @@ function bundleDocumentRoot(document_: PageDocument): Element {
       codes: indexCodes(FIXTURE_CODES),
     })
   })
-  const root = canvas.firstElementChild
+  const root = canvas.querySelector('[data-wb-id]')
   if (root === null) throw new Error('번들에 문서가 없습니다')
   return root
 }
@@ -112,19 +112,25 @@ describe('진짜 캔버스와 번들이 같은 DOM을 낸다', () => {
   })
 
   /**
-   * **문서 뿌리가 iframe 문서 `body` 의 **직계 자식**이다 — 아무것도 그것을 감싸지 않는다.**
+   * **문서 뿌리 위에는 렌더러의 레이아웃 틀 한 겹만 있다** — 빈 레이아웃(`blank`)의 문서는 `body > [data-wb-layout="blank"] > [data-wb-layout-content] >
+   * 뿌리` 다(`packages/renderer/src/layout-frame.tsx` — 기본 레이아웃 뷰는 내용만 그리고 내용 상자는 `display: contents`). 셸이 문서를 한 겹 더
+   * 감싸면 여기서 죽는다.
    *
-   * **이 케이스가 없으면 위 견주기가 감싸개를 못 본다.** 견주기는 뿌리 **아래**만 재므로
-   * 캔버스가 문서를 한 겹 감싸도 두 목록이 같다 — 변이 *"캔버스가 트리를 한 겹 감싼다"*를
-   * 심으면 견주기는 아무것도 안 죽고, 여기가 그 축을 든다.
+   * **이 케이스가 없으면 위 견주기가 감싸개를 못 본다.** 견주기는 뿌리 **아래**만 재므로 캔버스가 문서를 한 겹 감싸도 두 목록이 같다 — 변이
+   * *"캔버스가 트리를 한 겹 감싼다"*를 심으면 견주기는 아무것도 안 죽고, 여기가 그 축을 든다.
    *
-   * 셸의 장치들(런타임 알림 · 선택 아웃라인 · 번호 마커)은 호스트 문서에 있어 iframe 안에 없다. 지키는 것은
-   * *"문서 위에 한 겹이 끼지 않는다"*이다 — 테마 CSS 의 `body > …` 가 문서 뿌리를 겨냥할 수 있어야 한다.
+   * 셸의 장치들(런타임 알림 · 선택 아웃라인 · 번호 마커)은 호스트 문서에 있어 iframe 안에 없다. 다른 realm 의 요소라 요소째 견주지 않고 꼴 글자로
+   * 견준다(실패할 때 chai 가 iframe 요소를 찍다 던진다).
    */
-  it('문서 뿌리를 아무것도 감싸지 않는다', async () => {
+  it('문서 뿌리 위에는 레이아웃 틀 한 겹만 있다', async () => {
     await openPage(broadFixture())
 
-    expect(canvasDocumentRoot().parentElement).toBe(canvasDocument().body)
+    const chain: string[] = []
+    for (let at = canvasDocumentRoot().parentElement; at !== null; at = at.parentElement) {
+      const layout = at.getAttribute('data-wb-layout')
+      chain.push(at.hasAttribute('data-wb-layout-content') ? 'content' : layout !== null ? `layout:${layout}` : at.tagName.toLowerCase())
+    }
+    expect(chain).toEqual(['content', 'layout:blank', 'body', 'html'])
   })
 
   /**

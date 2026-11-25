@@ -43,6 +43,7 @@ import {
 } from '@wirebound/schema'
 import type { DbHandle } from '../db/tx'
 import { readExportRuntime } from './export-runtime'
+import { buildMenuTree } from './menu-tree'
 import { assembleExportSource, readExportRows, type ExportRows, type ExportSource } from './export-source'
 
 /**
@@ -160,7 +161,31 @@ export function projectBundle(rows: ExportRows, source: ExportSource): ExportedB
     target: page.target,
   }))
 
-  return exportBundle({ pages: bundlePages, runtimeJs: readExportRuntime(), theme: rows.theme, images: rows.images, codes: rows.codes })
+  return exportBundle({
+    pages: bundlePages,
+    runtimeJs: readExportRuntime(),
+    theme: rows.theme,
+    images: rows.images,
+    codes: rows.codes,
+    menu: exportMenu(rows, documentById),
+  })
+}
+
+/**
+ * 서브페이지 틀의 내비가 읽는 메뉴 트리 — 트리 응답과 같은 조립(`buildMenuTree`)에 페이지마다 **올린 문서의** 레이아웃을 싣는다(팝업은 내비에 안
+ * 선다). 사람의 표시 옵션(`project_view_prefs`)은 안 읽는다 — 번들 · PPTX 는 늘 다 켠다(설계 `2026-11-25-page-layout-design.md` 「HTML 번들」).
+ */
+function exportMenu(rows: ExportRows, documents: ReadonlyMap<string, PageDocument>) {
+  return buildMenuTree(
+    rows.menu,
+    rows.pages.map((page) => ({
+      id: page.id,
+      menu_node_id: page.menuNodeId,
+      title: page.title,
+      sort_order: page.sortOrder,
+      layout: documents.get(page.id)?.layout ?? null,
+    })),
+  )
 }
 
 /**

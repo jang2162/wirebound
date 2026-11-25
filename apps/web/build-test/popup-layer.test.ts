@@ -15,7 +15,7 @@
  * | 뷰 모드 — 더블클릭 | 여는 단추 더블클릭은 한 겹 · 팝업 안에서 다른 대상을 더블클릭해도 한 겹 더 · 닫은 뒤 다시 열면 연다 |
  * | 번들 — 열기 · 목차 | 페이지를 안 옮기고 상자가 선다 · ✖ 로 닫으면 포커스 · 목차의 팝업 줄 «팝업» 표지 |
  * | 번들 — 좁은 창 · 넓은 창 | 390: 상자 폭 ≤ 창 − 48 · 가로 넘침 0 · ✖ 가 창 안 · 몸통 끝과 바닥 단추가 창 안. 1280: 가운데 · 덮개가 창 전체 |
- * | 번들 — 페이지로 연 팝업 | 390 · 720 · 1000 · 1280 화면 모드: 상자 폭 = min(크기, 창) · 상자 밖 글 0 · 넘친 요소 0. 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS` — PPTX)은 큰 팝업이 960 그대로이고 문서 안이다 |
+ * | 번들 — 페이지로 연 팝업 | 390 · 720 · 1000 · 1280 화면 모드: 상자 폭 = min(크기, 창 − 48)(팝업 레이아웃의 틀 — 여백 24px) · 상자 밖 글 0 · 넘친 요소 0. 찍는 판(720 · `data-wb-capture` + `CAPTURE_CSS` — PPTX)은 큰 팝업이 960 그대로이고 문서 안이다 |
  * | 번들 — 팝업 안 폼 표 | 1280 · 1000 에서 보통 팝업 안 2열 폼 표는 한 줄에 쌍 하나 · 큰 팝업은 2열 그대로 |
  *
  * 번들은 저장소 빌드의 산출물(api 가 `packages/*\/dist` 를 읽는다)로 그린다 — `pnpm build` 가 먼저다.
@@ -395,7 +395,7 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
     }
 
     for (const width of [390, 720, 1000, 1280]) {
-      it(`페이지로 연 팝업 — 화면 모드 창 ${width}: 상자 폭 = min(크기, 창) · 상자 밖 글 · 넘친 요소 0`, async () => {
+      it(`페이지로 연 팝업 — 화면 모드 창 ${width}: 상자 폭 = min(크기, 창 − 48) · 상자 밖 글 · 넘친 요소 0`, async () => {
         for (const name of ['관리자-등록', '관리자-보통', '관리자-넓은']) {
           const { context, page } = await openBundlePage(stack, bundle.pages[name]!, { viewport: { width, height: 800 }, screen: true })
           try {
@@ -415,8 +415,9 @@ describe.skipIf(!전제.ok)('팝업 덮개 층 — 실브라우저', () => {
             })
             expect(seen.texts, name).toBeGreaterThan(0)
             expect([name, seen.past, seen.over], name).toEqual([name, 0, 0])
-            // 페이지로 연 판은 창보다 넓지 않다(SDK 기본 CSS 의 `max-width: 100%`) — 크기(넓은 960 · 보통 · 등록 720)와 창 가운데 작은 쪽이다.
-            expect([name, seen.width]).toEqual([name, Math.min(name === '관리자-넓은' ? 960 : 720, width)])
+            // 페이지로 연 판은 팝업 레이아웃의 틀(막 · 여백 24px — SDK 기본 CSS 의 `[data-wb-layout="popup"]`) 안이라 창 − 2 × 여백보다 넓지 않다(상자의
+            // `max-width: 100%`) — 크기(넓은 960 · 보통 · 등록 720)와 창 − 48 가운데 작은 쪽이다.
+            expect([name, seen.width]).toEqual([name, Math.min(name === '관리자-넓은' ? 960 : 720, width - 48)])
           } finally {
             await context.close()
           }

@@ -1645,14 +1645,16 @@
  * 영역의 자리를 형제 셀렉터로 메우면 끄는 동안의 숨긴 미리보기가 그 셈에 들어 캔버스가 멈춘다(위 «형제 구조로 가르지 않는다» ·
  * `test/layout-subpage.test.ts`).
  *
- * **틀은 그리는 판의 높이(`100vh`)까지 선다** — 짧은 페이지에서도 LNB · 본문 바탕이 창 끝까지 간다. 높이가 내용을 따르는 판은 그 높이를 안 키운다: 캔버스 ·
- * 미리보기 iframe 은 최소 높이로 줄여 내용을 재고(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight`), PPTX 캡처는 뷰포트가 이미 최소 높이다.
+ * **틀은 그리는 판의 높이까지 선다** — 짧은 페이지에서도 LNB · 본문 바탕이 창 끝까지 간다. 판의 높이는 호스트가 준 `--wb-frame-min-height` 이고 없으면
+ * `100vh` 다 — 번들 뷰어 셸은 장이 셸 안에 서서 칸 높이를 준다(`packages/exporter/src/bundle/shell-css.ts` 의 `.wb-export-canvas`). 높이가 내용을 따르는
+ * 판은 그 높이를 안 키운다: 캔버스 · 미리보기 iframe 은 최소 높이로 줄여 내용을 재고(`apps/web/src/canvas/canvas-iframe.tsx` 의 `naturalHeight`), PPTX
+ * 캡처는 뷰포트가 이미 최소 높이다.
  */
 [data-wb-layout="subpage"] > [data-wb-part="frame"] {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100vh;
+  min-height: var(--wb-frame-min-height, 100vh);
   font-family: var(--wb-font-body);
   color: var(--wb-semantic-text);
   font-size: var(--wb-typography-body-fontSize);

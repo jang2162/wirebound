@@ -60,8 +60,8 @@
  * **견주는 자(`describeTree`) 자신이 무디면 이 파일이 공허하게 통과한다.** 그래서 자를
  * 먼저 잰다 — 알려진 차이 아홉을 실제로 갈라내는지 본다.
  */
-import { NO_THEME, renderDocument } from '@wirebound/renderer'
-import { CATALOG_TYPES, installCatalog, validatePage, type PageDocument } from '@wirebound/schema'
+import { LayoutFrame, NO_THEME, renderDocument } from '@wirebound/renderer'
+import { buildLayoutNav, CATALOG_TYPES, installCatalog, pageLayoutOf, validatePage, type PageDocument } from '@wirebound/schema'
 import { defineTheme, Root, view, type ThemeDefinition } from '@wirebound/theme-sdk'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -81,22 +81,32 @@ beforeAll(() => {
 /* ------------------------------------------------------------------ 두 경로 */
 
 /**
- * 화면 경로 — 캔버스가 하는 것과 같다(`apps/web/src/canvas/canvas.tsx`). 테마를 안 받은 판은 `NO_THEME` 으로 그린다 —
- * 번들이 테마 없이 불렸을 때 쓰는 값이다(`browser/boot.tsx`).
+ * 화면 경로 — 캔버스가 하는 것과 같다(`apps/web/src/canvas/canvas.tsx`): 문서를 레이아웃 틀(`LayoutFrame`)로 감싸 그린다(설계
+ * `docs/superpowers/specs/2026-11-25-page-layout-design.md` 「캔버스」). 테마를 안 받은 판은 `NO_THEME` 으로 그린다 — 번들이 테마 없이 불렸을 때
+ * 쓰는 값이다(`browser/boot.tsx`). 내비는 번들 경로가 받은 것과 같은 빈 트리다(아래 `bundleTree` 는 내비 · 페이지 id 를 안 넘긴다).
  */
 function screenTree(document_: PageDocument, theme: ThemeDefinition | undefined): Element {
   const container = window.document.createElement('div')
   window.document.body.append(container)
   const root = createRoot(container)
+  const definition = theme ?? NO_THEME
   act(() => {
-    root.render(renderDocument(document_, { theme: theme ?? NO_THEME }))
+    root.render(
+      createElement(LayoutFrame, {
+        theme: definition,
+        layout: pageLayoutOf(document_),
+        title: '',
+        nav: buildLayoutNav([], { id: '', title: '' }),
+        children: renderDocument(document_, { theme: definition }),
+      }),
+    )
   })
   const rendered = container.firstElementChild
   expect(rendered, '화면 경로가 아무것도 그리지 않았다').not.toBeNull()
   return rendered!
 }
 
-/** 번들 경로 — 번들 런타임의 진입이 목업 자리(`.wb-export-canvas`)에 그린 것. 마커가 없는 판이라 첫 원소가 문서 뿌리다. */
+/** 번들 경로 — 번들 런타임의 진입이 목업 자리(`.wb-export-canvas`)에 그린 것. 마커가 없는 판이라 첫 원소가 틀(`data-wb-layout`)이다. */
 function bundleTree(document_: PageDocument, theme: ThemeDefinition | undefined): Element {
   const canvas = window.document.createElement('div')
   canvas.className = 'wb-export-canvas'

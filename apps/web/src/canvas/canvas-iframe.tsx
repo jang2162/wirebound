@@ -37,8 +37,8 @@ const HOLD_CSS = '@layer wb-hold { *, *::before, *::after { transition: none !im
 /** 문서마다 아직 안 실린 link 시트. */
 const pendingLinks = new WeakMap<Document, Set<HTMLLinkElement>>()
 
-/** 문서가 비었을 때의 높이. 빈 캔버스도 누를 자리가 있어야 선택을 풀 수 있다. */
-const MIN_HEIGHT = 320
+/** 문서가 비었을 때의 높이. 빈 캔버스도 누를 자리가 있어야 선택을 풀 수 있다. iframe 은 이 값과 문서 높이의 큰 쪽이다. */
+export const MIN_HEIGHT = 320
 
 export function CanvasIframe(props: {
   /**
@@ -128,7 +128,10 @@ export function CanvasIframe(props: {
       setHeight(Math.max(MIN_HEIGHT, naturalHeight(frame, iframe)))
       onResize?.()
       // `body` 가 뷰포트 단위 최소 높이를 가지면 내용이 줄어도 `body` 크기가 안 변해 관찰자가 안 깬다 — 그 안의 문서 뿌리도 함께 본다(이미 보는 요소는 그대로다).
+      // 레이아웃 틀(`data-wb-layout`)이 뷰포트 단위 높이를 가지면(기본테마 서브페이지 틀의 `min-height: 100vh`) 틀 상자도 iframe 높이에 묶이므로
+      // 틀 안 내용 상자의 자식(문서 뿌리)까지 본다 — 내용 상자는 `display: contents` 라 제 상자가 없다(`build-test/subpage-frame-height.test.ts`).
       for (const child of Array.from(frame.document.body.children)) observer?.observe(child)
+      for (const root of Array.from(frame.document.querySelectorAll('[data-wb-layout-content] > *'))) observer?.observe(root)
     }
     observer = Observer ? new Observer(measure) : null
     measure()
@@ -161,8 +164,9 @@ export function CanvasIframe(props: {
  * 서고, 남이 노드를 지워도 · 늦게 실린 테마 시트가 처음 그린 문서를 줄여도 안 준다.
  *
  * `html` 의 상자 높이는 내용(겹친 바깥 여백 포함)만큼이고, `body` 의 `scrollHeight` 는 상자 밖으로 넘친 자손까지 센다 — 둘의 큰 쪽이다. 테마가
- * 뿌리 · `body` 에 뷰포트 단위 높이(`min-height: 100vh` 등)를 걸면 이 값도 iframe 높이에 묶여 다시 줄지 않는다 — 시스템 테마에는 그런 규칙이
- * 없다(`build-test/canvas-preview.test.ts` 「iframe 은 끌기 뒤 끌기 전 높이로」).
+ * 뿌리 · `body` · 레이아웃 틀에 뷰포트 단위 높이(`min-height: 100vh` 등)를 걸면 이 값도 iframe 높이에 묶여 다시 줄지 않는다 — 그래서 높이는
+ * `naturalHeight` 로 잰다(기본테마의 서브페이지 틀이 `100vh` 다 — `build-test/subpage-frame-height.test.ts` · 틀 없는 판은
+ * `build-test/canvas-preview.test.ts` 「iframe 은 끌기 뒤 끌기 전 높이로」).
  */
 function contentHeight(frame: CanvasFrame): number {
   const { document: doc, window: win } = frame

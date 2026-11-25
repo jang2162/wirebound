@@ -541,6 +541,7 @@ wirebound-export-<슬러그>/
   assets/shell.css      뷰어 셸의 CSS
   assets/views.css      SDK 기본 뷰의 CSS
   assets/runtime.js     내보내기 런타임 — 목업을 브라우저에서 그린다(`@wirebound/exporter` 의 `dist/runtime.js`)
+  assets/nav.js         내비 한 벌 — 서브페이지 틀(GNB · LNB · 브레드크럼브)이 읽는 메뉴 트리 · 페이지 경로
   assets/theme/…        프로젝트가 고정한 테마 패키지의 파일 그대로(theme.js · theme.css · assets/**)
   assets/tokens.css     그 테마의 manifest + 프로젝트 토큰 → CSS 변수
 ```
@@ -551,6 +552,11 @@ wirebound-export-<슬러그>/
 먼저» 를 말한다(`services/export-runtime.ts`). 쥔 것을 다시 읽지 않으므로 런타임 소스(`packages/exporter/src/browser/`)를 고쳤으면
 `pnpm --filter @wirebound/exporter build:runtime` 뒤 api 를 다시 띄운다 — `tsx watch` 는 `dist` 의 바뀜을 보지 않는다. 테마를 못 쓴 페이지(번들이 등록하지 않음 · 다른 판을 등록함 · 뷰가 던짐)는 기본 뷰로
 그리고 그 페이지의 상태 줄에 까닭을 적는다.
+
+**장마다 레이아웃 틀(서브페이지의 GNB · LNB · 브레드크럼브 · 팝업의 막)을 다 켠 채로 그린다** — 사람의 표시 옵션(`view-prefs`)은
+내보내기 행(`services/export-source.ts` 의 `ExportRows`)에 안 들어 번들 · PPTX 에 안 닿는다. 틀의 메뉴 트리는 트리 응답과 같은 조립
+(`services/menu-tree.ts` 의 `buildMenuTree` — 페이지마다 올린 문서의 `layout`)으로 지어 `assets/nav.js` 에 한 벌 싣는다
+(`services/export-bundle.ts` 의 `exportMenu`). 설계는 설계서 「HTML 정적 번들」 의 «레이아웃 틀».
 
 **페이지의 이름에 조상 메뉴가 붙는다.** `<title>`·좌측 트리의
 이름·파일 이름 셋이 전부 `조상 메뉴들 + 페이지 제목`이고, 그래서 「HTML 정적 번들」의 예시 파일 이름
@@ -636,7 +642,7 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 브라우저를 넣는 법 | `apps/api`에서 `node node_modules/playwright-core/cli.js install chromium`(저장소 루트에서 부르는 경로는 최상위 README 「넣는 법」 절) — **`playwright` 패키지를 안 들여도 된다.** `--only-shell`이면 headless shell만, `--with-deps`가 시스템 라이브러리를 함께 넣는다 |
 | 어디서 | `apps/api`. **`@wirebound/exporter`는 브라우저를 모른다** — 그 패키지는 이미지를 **인자로** 받는다 |
 | 채우는 자리 | **`main.ts` 하나다.** `buildApp`에 `screenRenderer`를 안 주면 안 그린다(`pnpm test`가 브라우저를 안 띄우는 이유) |
-| 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다** |
+| 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다**. 서브페이지 장도 같은 폭이다 — 레이아웃 틀(GNB · LNB · 브레드크럼브 · 제목)이 다 켠 채 함께 찍혀 높이만 그만큼 늘고 내용 칸은 LNB 를 뺀 좁은 꼴이다. 팝업 장은 막 없이 상자만이다(SDK `CAPTURE_CSS`). 실브라우저 판은 `build-test/screen-layout.test.ts` |
 | 상한 | 페이지 **200장**. 넘은 장은 실패가 되고 **이유가 분모를 함께 말한다**. 한 장의 **넓이**도 묶는다 — 뷰포트 폭 × 8192(CSS px², `SCREEN_DEFAULTS.maxArea`). 넘은 장은 찍지 않고 실패가 되며 이유가 크기와 상한을 말한다(`페이지가 너무 커 화면을 그리지 않았습니다 — 720×145577px(상한 720×8192px 넓이)`). **재는 상태와 찍는 상태가 같다** — 테마의 전이 · 애니메이션을 끄고(`FREEZE_MOTION`) 글꼴을 기다린 뒤 재고, 잰 크기로 묶어 찍는다. 찍는 사이에 커진 장은 위쪽만 내지 않고 실패가 된다(`페이지가 그리는 동안 커져 화면을 그리지 않았습니다 — …`). **준비를 기다리는 것도 한 장의 한도(`SCREEN_DEFAULTS.timeoutMs`) 안이다** — 테마 적재 · 글꼴 · 첫 렌더가 여기 든다. 넘은 장은 실패가 된다(`한 장의 한도 안에 준비되지 않았습니다 — 10000ms`). 번들 런타임이 테마를 못 쓴 장(`data-wb-failed`)도 찍지 않고 그 까닭이 실패 이유가 된다(`테마 번들이 등록하지 않았습니다(id@판)` · `테마 번들이 다른 테마를 등록했습니다(…)` · `테마 뷰가 던졌습니다: <노드 id>`) |
 | 동시성·타임아웃 | 동시 **4장** · 한 장 **10초**. 브라우저는 내보내기 **한 번의 수명**이다 |
 | **요청끼리는 둘까지** | 위의 4장은 **한 번의 내보내기 안**이다. 요청끼리는 `services/export-worker.ts`의 풀이 가른다 — **그리기 칸**(env `EXPORT_RENDER_LIMIT` — 비우면 2)이 따로 있어 **동시에 뜨는 브라우저는 그 수까지**이고, 넘은 pptx 는 **조립 전에** 줄을 선다(워커도 CPU 칸도 안 쥔다). **그리는 동안은 CPU 칸을 내놓는다** — pptx 가 몇이 그리거나 기다리든 다른 내보내기(html 미리보기 포함)는 CPU 칸(`EXPORT_WORKER_LIMIT` — 2, 코어가 둘 이하면 1)만 기다린다(그 파일 머리말 «칸이 둘이다»). 줄의 길이는 위 «떠 있는 내보내기» 한도가 묶는다 |

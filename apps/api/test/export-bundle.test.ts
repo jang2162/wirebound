@@ -269,6 +269,7 @@ describe('exportProjectBundle', () => {
         'assets/shell.css',
         'assets/views.css',
         'assets/runtime.js',
+        'assets/nav.js',
         'assets/theme/theme.js',
         'assets/theme/theme.css',
         'assets/tokens.css',

@@ -502,4 +502,17 @@ body {
 .wb-export-token-note {
   font-size: 0.75rem;
 }
+
+/* **레이아웃 틀이 서는 판의 높이**(설계서 §6.0 「레이아웃 틀」) — 틀은 \`var(--wb-frame-min-height, 100vh)\`까지 선다. 장은 iframe 이
+   아니라 목업 칸 안에 서서 \`100vh\`가 칸보다 길다 — 목업 여백(1.5rem × 2)과 장 상자 여백(1.25rem × 2)을 뺀 칸 높이를 준다(빼지 않으면
+   짧은 장에서 목업이 그 88px 만큼 구른다). 사용자 정의 속성은 상속되지만 문서를 꾸미지 않는다 — 틀이 \`var()\`로 읽을 때만 값이 된다.
+   화면 모드는 셸이 없어 창 높이다. 옛 글자 뒤에 붙인다 — 상태 없는 페이지의 셸 바이트를 재는 자(\`test/bundle-stateless-bytes.test.ts\`)가
+   그 앞을 해시로 잠근다. */
+.wb-export-canvas {
+  --wb-frame-min-height: calc(100vh - 5.5rem);
+}
+
+.wb-export-screen .wb-export-canvas {
+  --wb-frame-min-height: 100vh;
+}
 `
