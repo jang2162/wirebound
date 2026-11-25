@@ -296,6 +296,16 @@ export interface PersonalModulesTable {
 }
 
 /**
+ * 사람 × 프로젝트의 표시 옵션(`0039-view-prefs`). 행이 없으면 다 켠 것이다. `hidden_regions` 는 끈 영역의 열쇠 목록이다.
+ */
+export interface ProjectViewPrefsTable {
+  user_id: string
+  project_id: string
+  hidden_regions: JSONColumnType<string[]>
+  updated_at: Generated<Date>
+}
+
+/**
  * API 토큰(`0011-api-tokens`). 설계서 「권한 모델」의 *"발급자의 권한을 상속 … 스코프는 프로젝트 단위"*.
  *
  * **`token_hash`가 원문의 sha256 hex다 — 원문은 어디에도 저장되지 않는다**(`sessions.id`와
@@ -429,4 +439,5 @@ export interface Database {
   invites: InvitesTable
   password_resets: PasswordResetsTable
   admin_audit: AdminAuditTable
+  project_view_prefs: ProjectViewPrefsTable
 }

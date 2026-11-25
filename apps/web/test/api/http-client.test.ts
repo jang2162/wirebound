@@ -566,6 +566,21 @@ const ENDPOINTS: Array<{
     call: (c) => c.deleteModule('p1', 'm1'),
   },
   // **공통코드 아홉.** 키 · 값은 경로 조각이라 감싼다(`encodeURIComponent` — 코드값에 `/` · 한글이 든다).
+  // 표시 옵션 둘 — 봉투 `{ hiddenRegions }`.
+  {
+    client: 'getViewPrefs',
+    url: '/api/projects/p1/view-prefs',
+    method: 'GET',
+    body: { hiddenRegions: [] },
+    call: (c) => c.getViewPrefs('p1'),
+  },
+  {
+    client: 'putViewPrefs',
+    url: '/api/projects/p1/view-prefs',
+    method: 'PUT',
+    body: { hiddenRegions: ['subpage.gnb'] },
+    call: (c) => c.putViewPrefs('p1', ['subpage.gnb']),
+  },
   { client: 'listCodes', url: '/api/projects/p1/codes', method: 'GET', body: { groups: [CODE_GROUP] }, call: (c) => c.listCodes('p1') },
   {
     client: 'createCodeGroup',
@@ -1029,6 +1044,13 @@ const SHAPE_CASES: Array<{
     call: (c) => c.claimMyAssets(['b'.repeat(64)], 'p2'),
   },
   // --- 공통코드. 표를 못 풀면 묶인 노드가 대체 글로 서므로 모양이 틀린 답은 실패로 낸다. ---
+  // --- 표시 옵션. 글자가 아닌 열쇠는 화면의 `Set` 견줌에서 늘 «켜짐» 으로 읽혀 조용히 틀리므로 막는다. ---
+  {
+    shape: 'viewPrefs',
+    broken: { hiddenRegions: ['subpage.gnb', { id: 'lnb' }] },
+    ok: { hiddenRegions: ['subpage.gnb'] },
+    call: (c) => c.getViewPrefs('p1'),
+  },
   {
     shape: 'codeTable',
     broken: { groups: [{ ...CODE_GROUP, items: [{ value: 'A' }] }] },
@@ -3261,4 +3283,31 @@ describe('uploadAsset — XMLHttpRequest', () => {
     await expect(pending).rejects.toBeInstanceOf(ApiError)
     vi.unstubAllGlobals()
   })
+})
+
+describe('표시 옵션 — getViewPrefs · putViewPrefs', () => {
+  it('봉투를 벗겨 열쇠 목록을 낸다 · PUT 은 그 목록 하나만 싣는다', async () => {
+    const stub = stubFetch(
+      jsonResponse(200, { hiddenRegions: ['subpage.gnb'] }),
+      jsonResponse(200, { hiddenRegions: ['subpage.lnb', 'subpage.gnb'] }),
+    )
+    const client = createHttpClient(stub.fetchImpl)
+
+    await expect(client.getViewPrefs('p1')).resolves.toEqual(['subpage.gnb'])
+    await expect(client.putViewPrefs('p1', ['subpage.lnb', 'subpage.gnb'])).resolves.toEqual(['subpage.lnb', 'subpage.gnb'])
+    expect(JSON.parse(String(stub.calls[1]?.init?.body))).toEqual({ hiddenRegions: ['subpage.lnb', 'subpage.gnb'] })
+  })
+
+  // `SHAPE_CASES` 의 `viewPrefs` 줄(글자가 아닌 항목)과 다른 갈래 — 봉투 자체가 틀린 답.
+  for (const broken of [{}, { hiddenRegions: 'subpage.gnb' }, ['subpage.gnb'], { hiddenRegions: null }]) {
+    it(`틀린 봉투 ${JSON.stringify(broken)} 는 ApiError 로 끊는다`, async () => {
+      const stub = stubFetch(jsonResponse(200, broken))
+      const error = asApiError(
+        await createHttpClient(stub.fetchImpl)
+          .getViewPrefs('p1')
+          .catch((e: unknown) => e),
+      )
+      expect(error.message).toBe('서버 응답을 이해할 수 없습니다')
+    })
+  }
 })

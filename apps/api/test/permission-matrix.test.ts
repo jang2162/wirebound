@@ -685,6 +685,20 @@ const CASES: Case[] = [
     allowed: ['owner', 'editor', 'viewer'],
     setup: 토큰하나,
   },
+  {
+    // **표시 옵션은 viewer다** — 읽기 도구의 설정이고 다루는 것은 자기 행뿐이다(`routes/view-prefs.ts` 머리말).
+    label: '표시 옵션 읽기',
+    method: 'GET',
+    url: '/api/projects/:projectId/view-prefs',
+    allowed: ['owner', 'editor', 'viewer'],
+  },
+  {
+    label: '표시 옵션 저장',
+    method: 'PUT',
+    url: '/api/projects/:projectId/view-prefs',
+    payload: { hiddenRegions: ['subpage.gnb'] },
+    allowed: ['owner', 'editor', 'viewer'],
+  },
 ]
 
 /**
