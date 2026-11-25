@@ -606,7 +606,7 @@ describe('system-admin CSS', () => {
       '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns]:last-child',
       '[data-wb-component="SearchForm"] > [data-wb-part="fields"][data-wb-columns] + [data-wb-part="actions"]',
       '[data-wb-component="DataGrid"] [data-wb-part="table"] > * > tr > [data-wb-part]:last-child',
-      '[data-wb-component="Card"]:not([data-wb-variant="borderless"]) > [data-wb-part="body"] > [data-wb-component="DataGrid"] [data-wb-part="table"] > tbody:last-child > tr:last-child > [data-wb-part]',
+      '[data-wb-component="DataGrid"] [data-wb-part="table"] > tbody:last-child > tr:last-child > [data-wb-part]',
       // 칸이 하나도 없는 폼 표의 칸 선 1px — 빈 표에 숨긴 미리보기가 서면 선이 선다(`docs/superpowers/plans/2026-11-13-rv-sk-report.md` «촘촘한 판» 이
       // 그 자리를 0.5px 걸음으로 훑어 뒤집힘 0).
       '[data-wb-component="FormTable"] > [data-wb-part="cells"]:not(:has(> *))',
@@ -653,24 +653,30 @@ describe('system-admin CSS', () => {
     )
   })
 
-  /** 카드에 붙은 그리드는 표의 바깥 선을 걷는다 — 카드 테두리와 겹쳐 두 줄이 된다(형제가 있어도). 카드 밖 그리드는 제 바깥 선을 지킨다. */
-  it('카드 몸통에 든 그리드는 표의 바깥 선을 걷는다 · 카드 밖 그리드는 지킨다', () => {
+  /**
+   * 그리드의 바깥 선은 하나다 — 표는 제 선을 안 긋고(머리줄 밑선 · 바닥 윗선과 겹쳐 두 줄이 된다) 그리드 뿌리가 긋는다. 카드에 붙은 그리드는 뿌리 선도
+   * 걷는다(카드 테두리와 겹친다 — 형제가 있어도). 카드 밖 그리드는 뿌리가 선을 지킨다.
+   */
+  it('그리드의 바깥 선은 뿌리 하나 — 표는 선을 안 긋고 카드에 붙으면 뿌리 선도 걷는다', () => {
     const grid =
       '<div data-wb-component="DataGrid" data-wb-structure="default"><div data-wb-part="scroll"><table data-wb-part="table"></table></div></div>'
-    const borderless = (table: Element) =>
-      rules().some(
-        (rule) =>
-          rule.media === null &&
-          Number.parseFloat(rule.style.getPropertyValue('border-width')) === 0 &&
-          matching(table).includes(rule.selector),
-      )
+    /** 요소에 맞는 규칙(`@media` 밖)이 거는 바깥 선 굵기들 — `border` 의 굵기(첫 낱말) · `border-width`. */
+    const widths = (el: Element) =>
+      rules()
+        .filter((rule) => rule.media === null && matching(el).includes(rule.selector))
+        .map((rule) => rule.style.getPropertyValue('border-width').trim() || rule.style.getPropertyValue('border').trim().split(' ')[0]!)
+        .filter((value) => value !== '')
     const got = tree(
       `<div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="default"><div data-wb-part="body">${grid}</div></div>
        <div data-wb-component="Card" data-wb-structure="plain" data-wb-variant="default"><div data-wb-part="body">${grid}<p></p></div></div>
        <div data-wb-component="Section"><div data-wb-part="inner">${grid}</div></div>`,
-      (root) => Array.from(root.querySelectorAll('table')).map(borderless),
+      (root) =>
+        Array.from(root.querySelectorAll('[data-wb-component="DataGrid"]')).map(
+          (el) => `${widths(el).join(' → ')} · 표 ${widths(el.querySelector('table')!).join(' → ')}`,
+        ),
     )
-    expect(got).toEqual([true, true, false])
+    // 카드에 붙은 판은 카드 규칙(뒤 · 더 구체적)이 뿌리 선을 0 으로 덮는다.
+    expect(got).toEqual(['1px → 0 · 표 0', '1px → 0 · 표 0', '1px · 표 0'])
   })
 
   /** 잠금 사다리의 두 단을 규칙이 실제로 칠한다 — 변수만 있고 칠하는 규칙이 없으면 읽기 전용 · 비활성 칸이 편집 칸과 같은 흰 면이다. */
