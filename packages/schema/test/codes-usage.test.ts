@@ -72,6 +72,48 @@ describe('codeUsage', () => {
     expect(hit.nodes[0]!.name).toContain('사이 글자')
   })
 
+  it('노드마다 타입과 조상 이름(trail)을 싣는다 — 페이지 뿌리는 빼고 뿌리 쪽부터 · 구역 안도 그 부모가 조상이다', () => {
+    const at = (group: string, item?: string) =>
+      codeUsage(sources, group, item).flatMap((hit) => hit.nodes.map((node) => [node.nodeId, node.type, node.trail]))
+    expect(at('ORDER_STATUS', 'WAIT')).toEqual([
+      ['n_a', 'Affix', []],
+      ['n_hidden', 'Affix', []],
+      ['n_sel', 'Select', []],
+      ['n_l', 'Affix', []],
+      // 모듈의 뿌리는 `Page` 가 아니다 — 그 자신이 내용이라 그 아래 노드의 조상으로 선다(여기는 뿌리 자신이라 조상이 없다).
+      ['n_m', 'Affix', []],
+    ])
+    expect(at('ORDER_STATUS', 'DONE')).toEqual([['n_inzone', 'Affix', ['카드']]])
+  })
+
+  /** 같은 이름의 노드 둘이 부모로 갈린다 — 공통코드 화면 «쓰는 곳» 이 이 `trail` 로 줄을 가른다. */
+  it('같은 표시 이름의 둘은 trail 로 갈린다', () => {
+    const select = (id: string): WbNode => ({ id, type: 'Select', code: { group: 'SUBJECT' } })
+    const field = (id: string, label: string, child: WbNode): WbNode => ({ id, type: 'Field', props: { label }, children: [child] })
+    const page: UsageSource = {
+      kind: 'page',
+      id: 'p',
+      title: '과목관리',
+      nodes: [
+        {
+          id: 'n_root',
+          type: 'Page',
+          children: [
+            { id: 'n_form', type: 'SearchForm', children: [field('n_f1', '과목분류', select('n_s1'))] },
+            field('n_f2', '교수법', select('n_s2')),
+          ],
+        },
+      ],
+    }
+    const nodes = codeUsage([page], 'SUBJECT')[0]!.nodes
+    expect(nodes.map((node) => node.name)).toEqual([nodes[0]!.name, nodes[0]!.name])
+    expect(nodes.map((node) => node.trail.join(' › '))).toEqual([`${nodes[0]!.trail[0]} › ${nodes[0]!.trail[1]}`, nodes[1]!.trail[0]])
+    expect(nodes[0]!.trail).toHaveLength(2)
+    expect(nodes[0]!.trail[1]).toContain('과목분류')
+    expect(nodes[1]!.trail).toHaveLength(1)
+    expect(nodes[1]!.trail[0]).toContain('교수법')
+  })
+
   it('없는 그룹은 빈 목록', () => {
     expect(codeUsage(sources, 'NOPE')).toEqual([])
   })

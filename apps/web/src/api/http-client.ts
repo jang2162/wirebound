@@ -764,7 +764,15 @@ const SHAPES = {
         (hit['kind'] === 'page' || hit['kind'] === 'layout' || hit['kind'] === 'module') &&
         typeof hit['id'] === 'string' &&
         typeof hit['title'] === 'string' &&
-        isArrayOf(hit['nodes'], (node) => isRecord(node) && typeof node['nodeId'] === 'string' && typeof node['name'] === 'string'),
+        isArrayOf(
+          hit['nodes'],
+          (node) =>
+            isRecord(node) &&
+            typeof node['nodeId'] === 'string' &&
+            typeof node['name'] === 'string' &&
+            typeof node['type'] === 'string' &&
+            isArrayOf(node['trail'], (name) => typeof name === 'string'),
+        ),
     ),
   codeUsageCounts: (value) =>
     isRecord(value) &&

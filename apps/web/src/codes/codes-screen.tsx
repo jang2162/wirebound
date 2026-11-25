@@ -1,6 +1,7 @@
 /**
  * **공통코드 화면의 몸**(`routes/codes.tsx`) — 왼쪽 그룹 목록(이름 · 키 · 항목 수 · 사용 수), 오른쪽 고른 그룹의 항목 표(차례 · 코드값 · 이름 ·
- * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 › 노드 이름 — 누르면 에디터가 그 페이지를 열고 그 노드를 고른다).
+ * 사용 여부 · 사용 수 · 줄 «…»)와 그 아래 사용처(페이지 · 레이아웃 · 모듈마다 접는 묶음 — 줄은 타입 · 노드 이름 · 조상 이름, 누르면 에디터가 그
+ * 페이지를 열고 그 노드를 고른다).
  *
  * - **주소가 고른 것을 든다** — `?group=<키>`(없거나 모르는 키면 첫 그룹) · `?item=<코드값>`(사용처를 그 항목으로 좁힌다). 바꿀 때는 `replace`.
  * - **키 · 코드값은 만든 뒤 못 바꾼다**(서버가 받지 않는다) — 표의 코드값 칸은 글이고, 줄 «…» 에 «이름 바꾸기» 만 있다. 바꾸려면 새 항목을
@@ -16,7 +17,7 @@
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactElement } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { CODE_NAME_MAX, CODE_VALUE_MAX, type CodeGroup, type CodeItem, type UsageHit } from '@wirebound/schema'
+import { CODE_NAME_MAX, CODE_VALUE_MAX, type CodeGroup, type CodeItem, type UsageHit, type UsageNode } from '@wirebound/schema'
 import { useApi } from '../api/context'
 import type { CodeUsageCounts } from '../api/client'
 import { SignedOut, toFailure, type Failure } from '../api/failure'
@@ -58,6 +59,23 @@ type NameTarget =
   | { kind: 'create-item'; group: CodeGroup }
   | { kind: 'rename-group'; group: CodeGroup }
   | { kind: 'rename-item'; group: CodeGroup; item: CodeItem }
+
+/** 줄에 보이는 조상 이름 — 노드에 가까운 둘까지, 더 깊으면 앞을 «…» 로 줄인다. 같은 이름의 노드를 가르는 단서다(내부 id 는 안 보인다). */
+export const TRAIL_SHOWN = 2
+
+export function trailText(node: UsageNode): string {
+  const near = node.trail.slice(-TRAIL_SHOWN).map((name) => isolate(name))
+  return [...(node.trail.length > TRAIL_SHOWN ? ['…'] : []), ...near].join(' › ')
+}
+
+/** 사용처 머리의 요약 — «페이지 N · 레이아웃 N · 모듈 N · 노드 M»(없는 종류는 뺀다). */
+export function usageSummary(hits: readonly UsageHit[]): string {
+  const kinds = (['page', 'layout', 'module'] as const)
+    .map((kind) => [kind, hits.filter((hit) => hit.kind === kind).length] as const)
+    .filter(([, count]) => count > 0)
+    .map(([kind, count]) => `${KIND_TEXT[kind]} ${count}`)
+  return [...kinds, `노드 ${hits.reduce((sum, hit) => sum + hit.nodes.length, 0)}`].join(' · ')
+}
 
 /** 찾기 글이 그 그룹에 맞나 — 이름 · 키의 부분 일치(대소문자 무시). 빈 글(공백만)은 다 맞다. */
 export function groupMatches(group: CodeGroup, find: string): boolean {
@@ -475,11 +493,12 @@ function UsageList(props: {
     useCallback(() => api.codeUsage(projectId, group.key, item?.value), [api, projectId, group.key, item?.value, revision]),
     USAGE_FAILURE,
   )
-  const title = item === undefined ? `«${isolate(group.name)}» 을(를) 쓰는 곳` : `«${isolate(item.name)}» 을(를) 쓰는 곳`
+  const scope = `«${isolate(item === undefined ? group.name : item.name)}»`
   return (
     <section className="wb-shell-codes-group" aria-label="사용처">
       <div className="wb-shell-admin-bar">
-        <h3 className="wb-shell-codes-subtitle">{title}</h3>
+        <h3 className="wb-shell-codes-subtitle">쓰는 곳</h3>
+        <span className="wb-shell-codes-key">{list.status === 'ready' ? `${scope} · ${usageSummary(list.value)}` : scope}</span>
         {item !== undefined && (
           <button className="wb-shell-project-action" type="button" onClick={props.onAll}>
             그룹 전체 보기
@@ -498,24 +517,41 @@ function UsageList(props: {
       )}
       {list.status === 'ready' && list.value.length === 0 && <p className="wb-shell-project-notice">{NO_USAGE}</p>}
       {list.status === 'ready' && list.value.length > 0 && (
-        <ul className="wb-shell-codes-usage" aria-label="사용처 목록">
-          {list.value.flatMap((hit) =>
-            hit.nodes.map((node) => {
-              const href = usageHref(projectId, hit, node.nodeId)
-              const text = `${KIND_TEXT[hit.kind]} ${isolate(hit.title)} › ${isolate(node.name)}`
-              return (
-                <li className="wb-shell-codes-usage-item" key={`${hit.kind}\n${hit.id}\n${node.nodeId}`}>
-                  {href === null ? (
-                    text
-                  ) : (
-                    <Link className="wb-shell-codes-usage-link" to={href}>
-                      {text}
-                    </Link>
-                  )}
-                </li>
-              )
-            }),
-          )}
+        <ul className="wb-shell-codes-usage-hits" aria-label="사용처 목록">
+          {list.value.map((hit) => (
+            <li className="wb-shell-codes-usage-hit" key={`${hit.kind}\n${hit.id}`}>
+              {/* 묶음 — 페이지(· 레이아웃 · 모듈) 이름과 노드 수. 처음에는 펴 둔다 — 접는 것은 훑는 사람의 몫이다. */}
+              <details className="wb-shell-codes-usage-fold" open>
+                <summary className="wb-shell-codes-usage-summary">
+                  {`${KIND_TEXT[hit.kind]} ${isolate(hit.title)}`}
+                  <span className="wb-shell-codes-usage-count">{hit.nodes.length}</span>
+                </summary>
+                <ul className="wb-shell-codes-usage-nodes">
+                  {hit.nodes.map((node) => {
+                    const href = usageHref(projectId, hit, node.nodeId)
+                    const line = (
+                      <>
+                        <span className="wb-shell-codes-usage-type">{node.type}</span>
+                        <span className="wb-shell-codes-usage-name">{isolate(node.name)}</span>
+                        {node.trail.length > 0 && <span className="wb-shell-codes-usage-trail">{trailText(node)}</span>}
+                      </>
+                    )
+                    return (
+                      <li className="wb-shell-codes-usage-node" key={node.nodeId}>
+                        {href === null ? (
+                          <span className="wb-shell-codes-usage-line">{line}</span>
+                        ) : (
+                          <Link className="wb-shell-codes-usage-link" to={href}>
+                            {line}
+                          </Link>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </details>
+            </li>
+          ))}
         </ul>
       )}
     </section>

@@ -24,7 +24,8 @@ export interface CodeUsageHit {
   kind: 'page' | 'layout' | 'module'
   id: string
   title: string
-  nodes: { nodeId: string; name: string }[]
+  /** `type` · `trail`(조상의 표시 이름)은 같은 이름의 노드를 가르는 단서다 — 서버 계약 그대로(`UsageNode`). */
+  nodes: { nodeId: string; name: string; type: string; trail: string[] }[]
 }
 
 /** 쓰기 하나. MCP `edit_codes` 의 `ops[]` 원소와 같은 꼴이다. */
