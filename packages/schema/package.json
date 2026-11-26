@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/schema",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "wirebound 설계서 스키마 — 노드 타입 · 컴포넌트 카탈로그 · 검증 · JSON Patch",
   "keywords": [
     "wirebound",

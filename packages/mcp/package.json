@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "wirebound 설계서를 에이전트에게 여는 MCP 서버 wireb-mcp (stdio)",
   "keywords": [
     "wirebound",

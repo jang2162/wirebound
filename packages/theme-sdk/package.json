@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/theme-sdk",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "wirebound 테마 뷰 계약(view · Root · Focus · useToken)과 SDK 기본 뷰",
   "keywords": [
     "wirebound",
