@@ -287,7 +287,7 @@ apps/api/.env 에서 포트를 한 수로 맞춘다. 자기 Postgres 를 쓰면 
 `POSTGRES_PORT` 를 따라간다** — 즉 **자기 컨테이너의** `wirebound_test` 다.
 **워크트리에 `apps/api/.env` 가 아예 없으면 `pnpm test` 가 돌지 않고 멈춘다** — 그때 기본값은 compose 기본
 포트, 곧 **최상위 체크아웃의 컨테이너**를 가리켜 그 `wirebound_test` 를 지우기 때문이다. 멈추는 문장이 이 절을
-가리킨다. DB 가 필요 없으면 `pnpm test --project '!api'` 로 돈다. 셸에 `TEST_DATABASE_URL` 을 주면(CI) 이 검사를 지난다.
+가리킨다. DB 가 필요 없으면 `pnpm exec vitest run --project unit --project web` 으로 돈다 — `pnpm test --project '!api'` 는 스크립트의 `--project '!build'` 와 부정 패턴 둘이 되어 api 까지 돈다. 셸에 `TEST_DATABASE_URL` 을 주면(CI) 이 검사를 지난다.
 
 3·5번을 빼먹으면 **먼저 6번이 죽는다.** 둘이 죽는 모양이 다르다(이 기계에서 쟀다):
 

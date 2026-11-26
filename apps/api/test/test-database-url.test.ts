@@ -153,7 +153,7 @@ describe('워크트리에서 테스트 DB 가 최상위 컨테이너로 떨어�
     const envFile = checkout('main/.worktrees/wt-a', 'worktree')
     expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/apps\/api\/\.env 가 없습니다/)
     expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/docs\/guides\/development\.md 「워크트리를 여럿 띄울 때」/)
-    expect(worktreeEnvError(envFile, {})).toContain("pnpm test --project '!api'")
+    expect(worktreeEnvError(envFile, {})).toContain('pnpm exec vitest run --project unit --project web')
   })
 
   it.each([

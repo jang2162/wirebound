@@ -136,7 +136,7 @@ export function worktreeEnvError(envFilePath: string, shellEnv: Record<string, s
   if (!isInsideGitWorktree(dirname(envFilePath))) return undefined
   const escape = [
     'docs/guides/development.md 「워크트리를 여럿 띄울 때」 절대로 이 워크트리의 컨테이너를 띄우고 apps/api/.env 에 그 값(POSTGRES_PORT · TEST_DATABASE_URL · …)을 적는다.',
-    "DB 가 필요 없으면 api 프로젝트를 빼고 돌린다: pnpm test --project '!api'",
+    'DB 가 필요 없으면 api 프로젝트를 빼고 돌린다: pnpm exec vitest run --project unit --project web',
   ]
   if (!existsSync(envFilePath)) {
     return [
