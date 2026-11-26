@@ -1,7 +1,23 @@
 {
   "name": "@wirebound/schema",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "wirebound 설계서 스키마 — 노드 타입 · 컴포넌트 카탈로그 · 검증 · JSON Patch",
+  "keywords": [
+    "wirebound",
+    "wireframe",
+    "schema",
+    "json-patch"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jang2162/wirebound/tree/main/packages/schema#readme",
+  "bugs": {
+    "url": "https://github.com/jang2162/wirebound/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jang2162/wirebound.git",
+    "directory": "packages/schema"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"
@@ -27,5 +46,15 @@
     "@types/node": "^26.1.2",
     "fast-check": "^3.23.0",
     "tsdown": "^0.22.14"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }
