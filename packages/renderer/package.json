@@ -1,7 +1,23 @@
 {
   "name": "@wirebound/renderer",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "wirebound 설계서를 React 로 그리는 렌더러 — 노드마다 테마 뷰 → SDK 기본 뷰",
+  "keywords": [
+    "wirebound",
+    "wireframe",
+    "react",
+    "renderer"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jang2162/wirebound/tree/main/packages/renderer#readme",
+  "bugs": {
+    "url": "https://github.com/jang2162/wirebound/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jang2162/wirebound.git",
+    "directory": "packages/renderer"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"
@@ -33,5 +52,15 @@
     "react-dom": "^19.0.0",
     "@wirebound/test-support": "workspace:*",
     "tsdown": "^0.22.14"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

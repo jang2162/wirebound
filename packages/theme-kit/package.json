@@ -1,7 +1,23 @@
 {
   "name": "@wirebound/theme-kit",
   "version": "0.1.0",
-  "private": true,
+  "description": "wirebound 테마 작성 도구 wb-theme — dev 갤러리 · build(.wbtheme) · check · shots",
+  "keywords": [
+    "wirebound",
+    "theme",
+    "cli",
+    "wb-theme"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jang2162/wirebound/tree/main/packages/theme-kit#readme",
+  "bugs": {
+    "url": "https://github.com/jang2162/wirebound/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jang2162/wirebound.git",
+    "directory": "packages/theme-kit"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,20 +32,14 @@
       "default": "./dist/index.js"
     }
   },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "import": "./dist/index.js",
-        "default": "./dist/index.js"
-      }
-    }
-  },
   "files": [
     "bin",
     "dist",
     "template"
   ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "build": "tsdown && vite build -c vite.client.config.ts",
     "build:watch": "tsdown --watch"
@@ -61,5 +71,15 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsdown": "^0.22.14"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

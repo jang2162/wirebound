@@ -1,7 +1,23 @@
 {
   "name": "@wirebound/themes",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "wirebound 테마 패키지(.wbtheme) — manifest 검증 · 토큰 CSS · 읽기 · 쓰기 · 설계 lint",
+  "keywords": [
+    "wirebound",
+    "theme",
+    "wbtheme",
+    "lint"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jang2162/wirebound/tree/main/packages/themes#readme",
+  "bugs": {
+    "url": "https://github.com/jang2162/wirebound/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jang2162/wirebound.git",
+    "directory": "packages/themes"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"
@@ -28,5 +47,15 @@
   },
   "devDependencies": {
     "tsdown": "^0.22.14"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

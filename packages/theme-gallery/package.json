@@ -1,7 +1,23 @@
 {
   "name": "@wirebound/theme-gallery",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "wirebound 컴포넌트 카탈로그 × variant 표본 갤러리와 이어진 예제 페이지",
+  "keywords": [
+    "wirebound",
+    "theme",
+    "gallery",
+    "react"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/jang2162/wirebound/tree/main/packages/theme-gallery#readme",
+  "bugs": {
+    "url": "https://github.com/jang2162/wirebound/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jang2162/wirebound.git",
+    "directory": "packages/theme-gallery"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +32,9 @@
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch"
@@ -36,5 +55,15 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tsdown": "^0.22.14"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

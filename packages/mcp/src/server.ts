@@ -31,7 +31,8 @@ import { TOOLS, findTool, type ToolArgSchema, type ToolSpec } from './tools'
 
 /** 호스트에게 보이는 이름. `packages/mcp/package.json`의 `bin` 이름과 같다. */
 export const SERVER_NAME = 'wirebound'
-export const SERVER_VERSION = '0.0.0'
+/** 호스트에게 보이는 판. `packages/mcp/package.json`의 `version` 과 같다(`test/server-version.test.ts` 가 견준다). */
+export const SERVER_VERSION = '0.1.0'
 
 /**
  * 도구 하나를 부른다. **프로토콜을 모른다** — 낸 것은 글자와 `isError`뿐이다.
