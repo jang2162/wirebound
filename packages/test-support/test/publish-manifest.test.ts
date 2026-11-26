@@ -74,6 +74,7 @@ describe('낼 패키지마다', () => {
     expect(manifest.description?.length).toBeGreaterThan(0)
     expect(manifest.keywords?.length).toBeGreaterThan(0)
     expect(manifest.engines?.node).toBe(rootManifest.engines?.node)
+    expect(existsSync(join(ROOT, dir, 'README.md'))).toBe(true)
     expect(manifest.publishConfig?.access).toBe('public')
   })
 

@@ -364,12 +364,22 @@ wireb lint [경로] [--fail-on warning]        설계서의 결함 검사 (결�
 wireb page get <경로> [--json]               페이지 하나를 스키마·코멘트·상호작용 문장으로
 ```
 
-### 5.1 부르는 길이 둘이고, **`pnpm install`만으로는 둘 다 안 생긴다**
+### 5.1 부르는 길이 셋이고, **`pnpm install`만으로는 하나도 안 생긴다**
 
-**`wireb`·`wireb-mcp`는 `node_modules/.bin`에 들어오지 않는다.** 두 패키지가 `private`이라
-npm 에 안 나가고, 루트 `package.json`이 그것들을 의존으로 갖지 않기 때문이다. (이 기계에서
+**`wireb`·`wireb-mcp`는 저장소의 `node_modules/.bin`에 들어오지 않는다.** 루트 `package.json`이
+`@wirebound/cli` · `@wirebound/mcp` 를 의존으로 갖지 않기 때문이다. (이 기계에서
 쟀다 — 설치 뒤 루트 `.bin`에 있는 것은 루트 `devDependencies` 의 도구(`lefthook`·`oxfmt`·`oxlint`·`ruler`·`tsc`·`tsserver`·`vitest`)뿐이고, `pnpm exec wireb`
 는 `Command "wireb" not found`다.)
+
+**길 ㉰ — npm 으로 설치 (저장소가 없는 기계)**
+
+```bash
+npm install -g @wirebound/cli @wirebound/mcp     # wireb · wireb-mcp
+npm install -D @wirebound/theme-kit              # 테마 프로젝트에서 — wb-theme
+```
+
+낸 패키지와 그 README 는 `packages/*` 가운데 `private` 이 아닌 것이다(`packages/test-support/test/publish-manifest.test.ts` 가 집합을 잠근다).
+저장소를 고치며 쓸 때는 아래 ㉮ · ㉯ 로 지금 소스의 빌드를 부른다.
 
 **길 ㉮ — 저장소 안에서 (설치할 것이 없다)**
 
@@ -503,7 +513,7 @@ that were ignored: esbuild, lefthook`. `WARN`이 아니고 **정상이다**(pnpm
 게이트 넷과 Git 훅(`lefthook`)이 그것을 증명한다.
 
 **조치.** 없다 — `pnpm build`가 그 파일을 만든다. **다만 링크는 그때 안 생긴다**(pnpm 이
-설치를 다시 돌지 않는다). `wireb`를 이름으로 부르려면 「부르는 길이 둘이고」 절의 ㉮·㉯를 쓴다.
+설치를 다시 돌지 않는다). `wireb`를 이름으로 부르려면 「부르는 길이 셋이고」 절의 ㉮·㉯·㉰를 쓴다.
 
 ### 6.3 컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다 / 빈 DB 가 떴다
 
@@ -953,7 +963,7 @@ approve)``를 낸다.
 { "mcpServers": { "wirebound": { "command": "wireb-mcp", "args": [] } } }
 ```
 
-`wireb-mcp`를 전역에 안 걸었으면(「부르는 길이 둘이고」 절의 ㉯) 명령을 절대경로로 준다:
+`wireb-mcp`를 전역에 안 걸었으면(「부르는 길이 셋이고」 절의 ㉯ · ㉰) 명령을 절대경로로 준다:
 
 ```jsonc
 { "mcpServers": { "wirebound": {
@@ -1264,7 +1274,7 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 |---|---|
 | **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 VM 의 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
 | **배포** | `docs/guides/deploy-docker.md` 「이 문서가 안 잰 것」 |
-| **npm 배포** | 패키지가 전부 `private`이다. `npm i -g wirebound` 같은 길은 **없다** — 「부르는 길이 둘이고」 절이 그래서 두 길을 든다 |
+| **npm 레지스트리에서 받기** | 「부르는 길이 셋이고」 절의 ㉰ 는 `pnpm pack` 으로 지은 tarball 을 저장소 밖에서 `npm install` 해 쟀다(`docs/superpowers/plans/2026-11-26-np-report.md`). 레지스트리에 낸 뒤 그 이름으로 받는 판은 안 쟀다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
