@@ -5,14 +5,14 @@
 # 그 스크립트가 `docker compose --project-directory . -f docker/dev/compose.yaml --env-file apps/api/.env` 다. 셋 다 뜻이 있다:
 #
 # - **`--project-directory .` — 프로젝트 이름이 체크아웃 디렉터리 이름이다.** 그것이 워크트리마다 컨테이너 · 볼륨을 가르는 기전이다
-#   (`<프로젝트>-postgres-1` · `<프로젝트>_wirebound-pgdata` — README 「워크트리를 여럿 띄울 때」). 빼면 이 파일의 디렉터리 이름 `dev` 가
+#   (`<프로젝트>-postgres-1` · `<프로젝트>_wirebound-pgdata` — docs/guides/development.md 「워크트리를 여럿 띄울 때」). 빼면 이 파일의 디렉터리 이름 `dev` 가
 #   모든 체크아웃의 프로젝트 이름이 되어 한 컨테이너 · 한 볼륨을 나눠 쓴다 — 그래서 아래 `x-run-via` 가 스크립트 밖의 호출을 멈춘다.
 #   상대 경로(아래 init 스크립트)도 그 디렉터리 기준이다.
 # - **`--env-file apps/api/.env` — 호스트 포트만 그 파일에서 온다.** 뿌리의 `.env`(배포 값)는 안 읽는다 — `--env-file` 을 주면
 #   compose 는 프로젝트 디렉터리의 `.env` 를 보지 않는다.
 #
 # **컨테이너 이름을 고정하지 않는다** — 고정하면 워크트리 둘째가 이름 충돌로 안 뜬다. 컨테이너는 이름이 아니라 `pnpm db …` 로
-# 찾는다(README 「컨테이너를 못 찾는다」 절).
+# 찾는다(docs/guides/development.md 「컨테이너를 못 찾는다」 절).
 x-run-via: ${WIREBOUND_DEV_DB:?docker/dev/compose.yaml 은 저장소 뿌리에서 pnpm db 로 부른다 — 프로젝트 이름이 체크아웃 디렉터리를 따라야 한다}
 
 services:
@@ -27,7 +27,7 @@ services:
       # 돈다. 이 기본값이 바뀌면 `apps/api/test/port-agreement.test.ts` 가 죽는다.
       #
       # **이 포트를 다른 컨테이너가 쥐고 있으면 첫 `up` 은 죽고, 다시 치면 포트 없이 `healthy` 로 뜬다**(종료 0).
-      # 이 파일로는 못 막는다 — `up` 뒤에 `pnpm db port postgres 5432` 가 종료 1 이면 그 판이다(README
+      # 이 파일로는 못 막는다 — `up` 뒤에 `pnpm db port postgres 5432` 가 종료 1 이면 그 판이다(docs/guides/development.md
       # 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 ⓑ).
       - '${POSTGRES_PORT:-5433}:5432'
     volumes:

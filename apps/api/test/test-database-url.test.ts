@@ -149,10 +149,10 @@ describe('워크트리에서 테스트 DB 가 최상위 컨테이너로 떨어�
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('.env 가 없으면 던지고, README 의 절 이름과 DB 없이 도는 길을 말한다 — 기본 포트로 떨어지지 않는다', () => {
+  it('.env 가 없으면 던지고, 개발 안내의 절 이름과 DB 없이 도는 길을 말한다 — 기본 포트로 떨어지지 않는다', () => {
     const envFile = checkout('main/.worktrees/wt-a', 'worktree')
     expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/apps\/api\/\.env 가 없습니다/)
-    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/README\.md 「워크트리를 여럿 띄울 때」/)
+    expect(() => resolveTestDatabaseUrlFrom({}, envFile)).toThrow(/docs\/guides\/development\.md 「워크트리를 여럿 띄울 때」/)
     expect(worktreeEnvError(envFile, {})).toContain("pnpm test --project '!api'")
   })
 

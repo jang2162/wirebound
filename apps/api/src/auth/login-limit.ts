@@ -86,7 +86,7 @@
  *
  * **주소는 `request.ip` 다** — `TRUST_PROXY` 가 비면 소켓 주소, 차면 그 앞단이 적은 `X-Forwarded-For` 를 따른다(`config.ts` 의
  * `trustProxy`). 앞단이 적은 글자가 IP 가 아니면 소켓 주소로 센다(`requestAddressKey`). 앞단 뒤에서 그것을 안 채우면 모든 요청이 앞단 하나의 주소라 **주소 키가 서버 전체의 한도가 된다** — 아무나 틀린
- * 로그인 `perAddress` 번으로 창 동안 모두의 새 로그인을 막는다(최상위 `README.md` 「앞단(리버스 프록시)이 지킬 조건」).
+ * 로그인 `perAddress` 번으로 창 동안 모두의 새 로그인을 막는다(`docs/guides/development.md` 「앞단(리버스 프록시)이 지킬 조건」).
  */
 import { createHash } from 'node:crypto'
 import { isIPv4 } from 'node:net'

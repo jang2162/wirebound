@@ -39,7 +39,7 @@ export interface ApiConfig {
   trustProxy: string[]
   /**
    * **동시에 뜨는 화면 그리기 브라우저 수** — 내보내기 풀의 그리기 칸(`services/export-worker.ts` 의 «칸이 둘이다»). 브라우저 하나가
-   * 수백 MB 를 먹어 이 수가 곧 그리기의 메모리 상한이다 — 값을 고르는 법은 최상위 README 「배포하려면」의 「화면 그리기 상한」.
+   * 수백 MB 를 먹어 이 수가 곧 그리기의 메모리 상한이다 — 값을 고르는 법은 docs/guides/development.md 「배포하려면」의 「화면 그리기 상한」.
    */
   exportRenderLimit: number
   /**

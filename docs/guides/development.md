@@ -1,13 +1,11 @@
-# wirebound
+# wirebound 개발 안내
 
-웹 화면 설계 도구. 관리자 화면을 시작점으로 하되 마케팅·포털·커머스 등 다양한 형태의 웹
-설계서를 같은 도구로 작성한다. 설계서를 브라우저에서 편집하고, HTML 정적 번들과 PPTX로
-내보내고, `wireb`(CLI)와 MCP 서버로 구현 리포에서 그 설계서를 읽는다.
+wirebound 를 **소스에서 세우고 고치는 사람**의 길이다 — 저장소를 받아 개발 DB 를 띄우고, 에디터와 API 를 소스로 띄우고,
+`wireb` · MCP 를 지금 소스의 빌드로 부르고, 게이트를 돌린다. 끝나면 웹 화면이 뜨고, `wireb`가 붙고, MCP가 등록되고, pptx가 나온다.
 
-**이 문서는 저장소를 처음 받은 사람이 처음부터 끝까지 따라가는 길이다.** 끝나면 웹 화면이
-뜨고, `wireb`가 붙고, MCP가 등록되고, pptx가 나온다.
-
-- **API 서버의 계약**(엔드포인트 표·에러 형식·권한·내보내기 응답 형태)은 [`apps/api/README.md`](apps/api/README.md)에 있다. 이 문서는 그것을 **가리키고 옮기지 않는다.**
+- **설계서를 쓰는 사람 · 서버를 올리는 사람의 안내는 사용자 문서다** — 최상위 [`README.md`](../../README.md) 와 [`docs/manual/`](../manual/README.md)(영어 원본 · 한국어 번역).
+  기여 절차의 영어 요약은 [`CONTRIBUTING.md`](../../CONTRIBUTING.md). 이 문서는 한국어로만 둔다.
+- **API 서버의 계약**(엔드포인트 표·에러 형식·권한·내보내기 응답 형태)은 [`apps/api/README.md`](../../apps/api/README.md)에 있다. 이 문서는 그것을 **가리키고 옮기지 않는다.**
 - 설계 문서: `docs/superpowers/specs/2026-08-03-wirebound-design.md`
 - 구현 계획·이월: `docs/superpowers/plans/`
 
@@ -347,7 +345,7 @@ curl -b /tmp/wb.txt -X POST $B/api/projects -H 'content-type: application/json' 
 않는다 — 설계서 「권한 모델」). 계정을 만든 적이 없으면 「세우기」 절 5번을 먼저 돌린다.
 
 두 번째 응답의 `id`가 **프로젝트 id**이고, 그것이 「`wireb` — CLI 를 부르는 길」 절 `wireb init`의 `--project` 인자다.
-나머지 엔드포인트는 [`apps/api/README.md`의 엔드포인트 표](apps/api/README.md#엔드포인트)에 있다.
+나머지 엔드포인트는 [`apps/api/README.md`의 엔드포인트 표](../../apps/api/README.md#엔드포인트)에 있다.
 
 ---
 
@@ -924,7 +922,7 @@ CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다.
 ### 6.8 카드를 캔버스로 끌어도 안 놓인다
 
 에디터 주소 끝에 `?debugDrag=1` 을 붙여 다시 열고 카드를 한 번 끌어 놓은 뒤, 브라우저 콘솔의 `[wb-drag]` 줄을 전부 복사한다 — 어느 단계에서 멈췄는지(누름이
-카드에 닿았나 · 끌기가 섰나 · 놓을 자리가 왜 없나)가 그 줄에 든다. 켜는 법 · 줄 읽는 법 · 끄는 법은 [`docs/guides/drag-debug.md`](docs/guides/drag-debug.md).
+카드에 닿았나 · 끌기가 섰나 · 놓을 자리가 왜 없나)가 그 줄에 든다. 켜는 법 · 줄 읽는 법 · 끄는 법은 [`docs/guides/drag-debug.md`](drag-debug.md).
 
 ---
 
@@ -978,7 +976,7 @@ Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.**
 
 ### 7.3 에이전트에게 무엇을 가르치나
 
-[`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md)가 그 문서다 — 도구 여덟의
+[`packages/mcp/skill/SKILL.md`](../../packages/mcp/skill/SKILL.md)가 그 문서다 — 도구 여덟의
 인자, 경로 다루는 법, `patch_page`의 `baseSeq`·`stale`·`locked` 갈래, `validate`의
 `notes`·`outsideErrors`를 왜 함께 읽어야 하는지가 있다. **호스트에 스킬로 설치하거나
 에이전트 지침에 그대로 실어라.**
@@ -1074,7 +1072,7 @@ SCREEN_CHROMIUM_PATH=/usr/bin/chromium
 - **한글 글꼴이 없으면 한 장도 안 그린다.** 두부를 내보내지 않는 판정이고, 미리보기의 `fontWarning`이 그 사실을 낸다. 리눅스 컨테이너에는 보통 없다 — `fonts-noto-cjk` 를 넣는다(리눅스 컨테이너에서 쟀다 — 「배포하려면」 절).
 - **바깥으로 나가는 요청을 끊는다.** 테마의 `@font-face`·`url()`은 사용자가 적은 문자열이라 서버가 그것을 가져가면 안 된다. 테마 코드가 그리는 브라우저에서 돌므로 소켓(WebSocket · WebRTC)도 막는다(`apps/api/README.md` 「화면 이미지를 그리는 조건」의 «바깥 요청»). **대가:** 원격 웹폰트를 든 테마는 에디터 캔버스와 다르게 그려진다.
 - **긴 페이지는 실오라기가 된다.** 화면 전체를 찍으므로 높이가 내용을 따라가고, 슬라이드 위에서 폭이 줄어든다. 한 장의 넓이가 상한(뷰포트 폭 × 8192 CSS px)을 넘으면 그 장은 안 그리고 이유를 말한다 — 긴 페이지 한 장이 서버 메모리를 수 GB 먹어서다(「배포하려면」의 「화면 그리기 상한」).
-- 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 상한)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
+- 자세한 값(화소·동시성·타임아웃·상한·요청끼리의 상한)은 [`apps/api/README.md`의 *"화면 이미지를 그리는 조건"*](../../apps/api/README.md#화면-이미지를-그리는-조건)에 있다.
 
 ---
 
@@ -1141,7 +1139,7 @@ pnpm test:browser  # 그 가운데 에디터를 실브라우저로 모는 판만
 
 **배포 대상은 리눅스 서버 한 대 · docker compose 다** — 뿌리의 `compose.yaml` 이 **앱만** 올린다(Postgres · 마이그레이션 · api · 입구 `web`).
 입구는 HTTP 포트 하나를 열고, TLS · 도메인은 그 서버의 프록시가 맡는다 — 프록시에 맞춘 차이는 서버마다 쓰는 `compose.override.yaml` 이 갖는다.
-**올리는 절차 · 환경 변수 · override 예 · 운영 명령 · 잰 값 · Komodo 설정은 [`docs/guides/deploy-docker.md`](docs/guides/deploy-docker.md) 가 갖는다.**
+**올리는 절차 · 환경 변수 · override 예 · 운영 명령 · 잰 값 · Komodo 설정은 [`docs/guides/deploy-docker.md`](deploy-docker.md) 가 갖는다.**
 이 절은 이미지 없이 띄우는 사람도 지킬 조건만 갖는다.
 
 ### 10.1 올리기
@@ -1287,9 +1285,9 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 
 | 하려는 일 | 어디 |
 |---|---|
-| **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](apps/api/README.md) |
-| **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md) |
-| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](.ruler/) — 에이전트 지침의 소스. `AGENTS.md` 는 `pnpm exec guideline apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.guideline/`, 이 프로젝트 바꿈은 `.guideline/overrides/`). 설정은 `.ruler/ruler.project.toml` |
+| **API 를 부른다** — 엔드포인트·에러 형식·권한·응답 형태 | [`apps/api/README.md`](../../apps/api/README.md) |
+| **에이전트에게 설계서를 읽힌다** | [`packages/mcp/skill/SKILL.md`](../../packages/mcp/skill/SKILL.md) |
+| **저장소 규칙**(워크트리·커밋·병렬 작업) | [`.ruler/`](../../.ruler/) — 에이전트 지침의 소스. `AGENTS.md` 는 `pnpm exec guideline apply` 가 만드는 생성물이고, 공용 지침은 `guideline` CLI 가 받는다(`.guideline/`, 이 프로젝트 바꿈은 `.guideline/overrides/`). 설정은 `.ruler/ruler.project.toml` |
 | **무엇이 왜 그렇게 서 있나** | `docs/superpowers/plans/` — 계획과 이월 장부. **시점 기록이다** — 지금 참인 규칙은 이 문서들과 설계 규격이 말한다 |
 | **설계 규격** | `docs/superpowers/specs/2026-08-03-wirebound-design.md` |
 

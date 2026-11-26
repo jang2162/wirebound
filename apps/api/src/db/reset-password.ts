@@ -6,7 +6,7 @@
  * ```
  *
  * 화면에도 API 에도 비밀번호를 바꾸는 길이 없고, 시딩(`db/seed-user.ts`)은 이미 있는 이메일의 비밀번호를
- * 덮어쓰지 않는다. 그래서 잊은 비밀번호를 되찾는 길은 이 명령 하나다(최상위 README 「비밀번호를 잊었다」).
+ * 덮어쓰지 않는다. 그래서 잊은 비밀번호를 되찾는 길은 이 명령 하나다(docs/guides/development.md 「비밀번호를 잊었다」).
  *
  * **서버와 같은 함수를 부른다** — 규칙은 `auth/credentials.ts` 의 `NormalizedEmail` · `NewPassword`(NFC 판을 세고 낸다),
  * 해시는 `auth/password.ts` 의 `hashPassword`(비용은 서버와 같은 `PASSWORD_SCRYPT_N`), 세션 삭제는 `auth/session.ts` 의
@@ -109,7 +109,7 @@ export function checkPassword(password: string): string {
  * (`routes/tokens.ts`) 발급자의 역할을 그대로 가지므로, 옛 비밀번호를 쥔 사람이 세션 하나로 멤버인 프로젝트마다 토큰을
  * 남겼을 수 있다. 이 명령은 두 갈래를 가를 수 없어 **남은 토큰을 프로젝트별로 말하고** 거두는 것은 사람이 한다 — 새
  * 비밀번호로 에디터에 로그인해 «API 토큰» 화면(`apps/web/src/routes/tokens.tsx`)에서. 그 화면은 그 계정의 토큰을 프로젝트를
- * 가리지 않고(멤버가 아닌 프로젝트의 것까지) 보이고 거둔다(최상위 README 「비밀번호를 잊었다」).
+ * 가리지 않고(멤버가 아닌 프로젝트의 것까지) 보이고 거둔다(docs/guides/development.md 「비밀번호를 잊었다」).
  *
  * **«토큰도 지운다» 갈래(`--revoke-tokens`)를 두지 않는다.** ① 닿는 범위가 화면과 같다 — 화면이 멤버가 아닌 프로젝트의
  * 토큰까지 거두므로 이 명령만 닿는 토큰이 없다. ② «새었는가»를 아는 것은 그 사람이다 — 명령을 치는 사람은 서버에 손이 닿는

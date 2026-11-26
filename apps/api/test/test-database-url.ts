@@ -118,7 +118,7 @@ export function isInsideGitWorktree(dir: string): boolean {
 /**
  * **워크트리 안인데 테스트가 최상위 체크아웃의 컨테이너로 떨어지면 무엇을 하라고 말한다.** 문제가 없으면 `undefined`.
  *
- * 왜 멈추나: 워크트리는 저마다 자기 컨테이너를 띄우는데(README 「워크트리를 여럿 띄울 때」) 그 포트는 `.env` 의
+ * 왜 멈추나: 워크트리는 저마다 자기 컨테이너를 띄우는데(docs/guides/development.md 「워크트리를 여럿 띄울 때」) 그 포트는 `.env` 의
  * `POSTGRES_PORT` 에만 있다. compose 기본 포트(`COMPOSE_DEFAULT_POSTGRES_PORT`)에 떠 있는 것은 **최상위 체크아웃의
  * 컨테이너**다 — 스위트가 그 `wirebound_test` 를 지우며 돈다(`resetRealData`). 붙는 데 성공하므로 아무 에러도 안 난다.
  * 그렇게 떨어지는 길이 둘이다.
@@ -135,7 +135,7 @@ export function worktreeEnvError(envFilePath: string, shellEnv: Record<string, s
   if (pick(shellEnv.TEST_DATABASE_URL) !== undefined) return undefined
   if (!isInsideGitWorktree(dirname(envFilePath))) return undefined
   const escape = [
-    'README.md 「워크트리를 여럿 띄울 때」 절대로 이 워크트리의 컨테이너를 띄우고 apps/api/.env 에 그 값(POSTGRES_PORT · TEST_DATABASE_URL · …)을 적는다.',
+    'docs/guides/development.md 「워크트리를 여럿 띄울 때」 절대로 이 워크트리의 컨테이너를 띄우고 apps/api/.env 에 그 값(POSTGRES_PORT · TEST_DATABASE_URL · …)을 적는다.',
     "DB 가 필요 없으면 api 프로젝트를 빼고 돌린다: pnpm test --project '!api'",
   ]
   if (!existsSync(envFilePath)) {

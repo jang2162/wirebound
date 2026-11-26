@@ -10,7 +10,7 @@
  * - 숨겨 받기는 **묻기 전에 와 있던 입력을 버린다** — 명령과 뒤 줄들을 통째로 붙여 넣은 판이다.
  *
  * **진짜 터미널(pty)에서의 값은 여기서 못 잰다** — 가짜 입력은 원시 모드가 실제로 되비추기를 끄는지 · 붙여 넣은
- * 바이트가 어느 조각으로 오는지를 흉내만 낸다. 그 판은 대화형 셸에 사람처럼 쳐서 잰다(README 「비밀번호를 잊었다」).
+ * 바이트가 어느 조각으로 오는지를 흉내만 낸다. 그 판은 대화형 셸에 사람처럼 쳐서 잰다(docs/guides/development.md 「비밀번호를 잊었다」).
  */
 import { EventEmitter } from 'node:events'
 import { readFileSync } from 'node:fs'
@@ -503,10 +503,10 @@ describe('DB 오류 — 스택 대신 무엇이 됐는지 말한다', () => {
 })
 
 describe('명령 이름', () => {
-  it('`pnpm --filter @wirebound/api reset-password` 가 이 파일을 `.env` 와 함께 부른다 — README 가 그 이름을 든다', () => {
+  it('`pnpm --filter @wirebound/api reset-password` 가 이 파일을 `.env` 와 함께 부른다 — 개발 안내(`docs/guides/development.md`)가 그 이름을 든다', () => {
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { scripts: Record<string, string> }
     expect(pkg.scripts['reset-password']).toBe('tsx --env-file-if-exists=.env src/db/reset-password.ts')
-    expect(readFileSync(new URL('../../../README.md', import.meta.url), 'utf8')).toContain(
+    expect(readFileSync(new URL('../../../docs/guides/development.md', import.meta.url), 'utf8')).toContain(
       'pnpm --filter @wirebound/api reset-password me@example.com',
     )
   })

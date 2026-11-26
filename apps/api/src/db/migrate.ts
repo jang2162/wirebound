@@ -112,7 +112,7 @@ export async function seedAfterMigration(
  * (`main.ts`)와 같은 값이다. **자격 문자열은 안 싣는다** — `describeDatabaseTarget` 이 `호스트:포트/이름`만 낸다.
  *
  * **이 줄이 못 보는 것:** 같은 컨테이너 안에서 두 워크트리의 DB 이름이 겹치는 판 · 에디터의 프록시가 옆 워크트리
- * api 에 붙는 판. 둘 다 이 줄이 «옳은 값»을 찍는 채로 일어나고, 워크트리 둘을 실제로 띄워야 보인다(README
+ * api 에 붙는 판. 둘 다 이 줄이 «옳은 값»을 찍는 채로 일어나고, 워크트리 둘을 실제로 띄워야 보인다(docs/guides/development.md
  * 「워크트리를 여럿 띄울 때」).
  */
 export function migrationTargetLine(direction: MigrateDirection, databaseUrl: string): string {
