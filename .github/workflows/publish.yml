@@ -1,0 +1,61 @@
+# npm 배포 — Trusted Publishing(OIDC). 토큰 비밀을 쓰지 않는다.
+# 사람이 할 일(패키지마다 Trusted Publisher 등록 · 릴리스 절차)은 docs/guides/npm-release.md.
+# 이 파일 이름(publish.yml)이 npmjs.com 의 Trusted Publisher 설정 값이다 — 바꾸면 패키지 8 개의 설정도 바꾼다.
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: npm publish --dry-run 으로만 돌린다
+        type: boolean
+        default: true
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write # npm 이 OIDC 토큰을 받아 배포 자격으로 바꾼다
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    # Trusted Publishing 은 GitHub-hosted runner 만 받는다(self-hosted 는 아직 안 된다).
+    runs-on: ubuntu-latest
+    env:
+      # 수동 실행의 입력만 dry-run 을 켠다 — 태그 push 에는 입력이 없어 실제로 낸다.
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run && 'true' || 'false' }}
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Node 와 pnpm 판은 mise.toml 이 정본이다(package.json 의 packageManager 와 같은 판).
+      - uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+
+      - name: 런타임 판
+        run: |
+          node -v
+          npm -v
+          pnpm -v
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      # 부정 패턴 둘(`pnpm test --project '!api'` = `--project '!build' --project '!api'`)은 서로를 포함해
+      # 아무것도 안 뺀다 — DB 가 필요한 api 와 실브라우저 build 를 빼려고 남길 프로젝트를 적는다.
+      - run: pnpm exec vitest run --project unit --project web
+
+      - name: 낼 판 고르기 · pack
+        run: node scripts/release/publish.mjs pack "$RUNNER_TEMP/npm-pack"
+
+      - name: npm publish
+        run: |
+          if [ "$DRY_RUN" = 'true' ]; then
+            node scripts/release/publish.mjs publish "$RUNNER_TEMP/npm-pack" --dry-run
+          else
+            node scripts/release/publish.mjs publish "$RUNNER_TEMP/npm-pack"
+          fi
