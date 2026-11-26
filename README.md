@@ -930,8 +930,8 @@ CLI 의 토큰도 함께 거두므로 끝나면 `wireb login` 을 다시 한다.
 
 ## 7. MCP 서버 등록
 
-`wireb-mcp`는 **stdio MCP 서버**다. 도구 다섯(`list_pages`·`get_page`·`patch_page`·
-`add_comment`·`validate`)을 낸다. **프로젝트·서버·토큰은 도구의 인자가 아니다** — 리포의
+`wireb-mcp`는 **stdio MCP 서버**다. 도구 여덟(`list_pages`·`get_page`·`patch_page`·
+`add_comment`·`validate`·`list_codes`·`code_usage`·`edit_codes`)을 낸다. **프로젝트·서버·토큰은 도구의 인자가 아니다** — 리포의
 `.wirebound.json`과 `~/.wirebound/credentials.json`이 정한다.
 
 **그러므로 등록할 때 작업 디렉터리가 `.wirebound.json`이 있는 리포여야 한다.** MCP 서버는
@@ -978,7 +978,7 @@ Claude Desktop·Cursor·Zed 등은 **이 문서가 등록해 보지 않았다.**
 
 ### 7.3 에이전트에게 무엇을 가르치나
 
-[`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md)가 그 문서다 — 도구 다섯의
+[`packages/mcp/skill/SKILL.md`](packages/mcp/skill/SKILL.md)가 그 문서다 — 도구 여덟의
 인자, 경로 다루는 법, `patch_page`의 `baseSeq`·`stale`·`locked` 갈래, `validate`의
 `notes`·`outsideErrors`를 왜 함께 읽어야 하는지가 있다. **호스트에 스킬로 설치하거나
 에이전트 지침에 그대로 실어라.**
