@@ -17,7 +17,7 @@ cd <구현 리포>          # .wirebound.json 이 있는 자리
 claude mcp add wirebound -- wireb-mcp
 ```
 
-다른 호스트 · `.mcp.json` 으로 두는 길 · 에이전트에게 가르치는 스킬(이 패키지의 `skill/SKILL.md`)은 저장소 README 의 [「MCP 서버 등록」](https://github.com/jang2162/wirebound#7-mcp-서버-등록) 절이 소유한다.
+다른 호스트 · `.mcp.json` 으로 두는 길 · 에이전트에게 가르치는 스킬(이 패키지의 `skill/SKILL.md`)은 사용자 문서의 [코딩 에이전트 연결하기](https://github.com/jang2162/wirebound/blob/main/docs/manual/ko/how-to/connect-a-coding-agent.md)가 갖는다(영어 원본은 `docs/manual/en/`).
 
 - 저장소: https://github.com/jang2162/wirebound
 - 라이선스: MIT

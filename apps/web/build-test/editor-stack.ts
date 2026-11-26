@@ -130,19 +130,22 @@ export async function editorStackPrerequisite(): Promise<Prerequisite> {
       ok: false,
       reason: `브라우저를 띄우지 못했다 — ${chromeCandidates()
         .map((path) => path ?? 'playwright-core 캐시')
-        .join(' · ')}(README 「넣는 법」 절)`,
+        .join(' · ')}(docs/guides/development.md 「넣는 법」 절)`,
     }
   }
   const databaseUrl = baseDatabaseUrl()
   if (databaseUrl === undefined) {
-    return { ok: false, reason: 'DATABASE_URL 이 없다 — 셸에도 apps/api/.env 에도 없다(README 「세우기 — 다섯 걸음」 절)' }
+    return {
+      ok: false,
+      reason: 'DATABASE_URL 이 없다 — 셸에도 apps/api/.env 에도 없다(docs/guides/development.md 「세우기 — 다섯 걸음」 절)',
+    }
   }
   // **워크트리에서 compose 기본 포트면 멈춘다** — 그 컨테이너는 최상위 체크아웃의 것, 곧 사용자의 설계서가 든 DB 다. 거기에 DB 를
   // 만들고 지우지 않는다. 건너뛰지 않고 던지는 것은 조용히 초록이 되지 않게 하려는 것이다.
   if (insideGitWorktree(API_DIR) && new URL(databaseUrl).port === COMPOSE_DEFAULT_POSTGRES_PORT) {
     throw new Error(
       `이 워크트리의 DATABASE_URL 이 compose 기본 포트(${COMPOSE_DEFAULT_POSTGRES_PORT}) — 최상위 체크아웃의 컨테이너를 가리킨다. ` +
-        'README 「워크트리를 여럿 띄울 때」 절대로 이 워크트리의 컨테이너를 띄우고 apps/api/.env 를 그 값으로 적는다.',
+        'docs/guides/development.md 「워크트리를 여럿 띄울 때」 절대로 이 워크트리의 컨테이너를 띄우고 apps/api/.env 를 그 값으로 적는다.',
     )
   }
   const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 3000 })

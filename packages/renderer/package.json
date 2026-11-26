@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/renderer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "wirebound 설계서를 React 로 그리는 렌더러 — 노드마다 테마 뷰 → SDK 기본 뷰",
   "keywords": [
     "wirebound",

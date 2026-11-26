@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/themes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "wirebound 테마 패키지(.wbtheme) — manifest 검증 · 토큰 CSS · 읽기 · 쓰기 · 설계 lint",
   "keywords": [
     "wirebound",

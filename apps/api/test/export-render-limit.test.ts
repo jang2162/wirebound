@@ -5,7 +5,7 @@
  * 재는 것은 **env 에서 풀까지의 배선** — 값이 `ApiConfig`에 어떤 모양으로 앉는가와, 앉은 값이 라우트의 풀에 닿는가다. 풀에 안
  * 닿으면 env 를 바꿔도 풀은 기본값 칸으로 돌아 조용히 아무 일도 안 한다.
  *
- * **브라우저를 안 띄운다** — 가짜 그리는 자가 겹친 수를 센다. 진짜 브라우저의 메모리는 최상위 README 「배포하려면」이 갖는다.
+ * **브라우저를 안 띄운다** — 가짜 그리는 자가 겹친 수를 센다. 진짜 브라우저의 메모리는 docs/guides/development.md 「배포하려면」이 갖는다.
  */
 import type { PageDocument } from '@wirebound/schema'
 import { describe, expect, it } from 'vitest'

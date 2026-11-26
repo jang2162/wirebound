@@ -2,11 +2,11 @@
 
 Fastify 5 기반 REST + WebSocket 서버. 설계서 편집을 지원하는 백엔드다.
 
-필요한 것: Docker, Node ≥ 22.18, pnpm(까닭은 최상위 README 「필요한 것」 절).
+필요한 것: Docker, Node ≥ 22.18, pnpm(까닭은 docs/guides/development.md 「필요한 것」 절).
 
 ## 기동 절차
 
-**저장소를 세우는 순서는 최상위 [`README.md`](../../README.md)에 있다** — Postgres·설치·
+**저장소를 세우는 순서는 [`docs/guides/development.md`](../../docs/guides/development.md)에 있다** — Postgres·설치·
 빌드·`.env`·마이그레이션까지 한 자리다. **여기 두 벌로 적지 않는다.** 이 문서가 소유하는
 것은 **이 서버의 계약**(아래 *"API 개요"* 이하)이고, 아래 두 절은 그 계약에 붙는
 서버만의 사정이다.
@@ -15,8 +15,8 @@ Fastify 5 기반 REST + WebSocket 서버. 설계서 편집을 지원하는 백�
 pnpm --filter @wirebound/api dev            # tsx watch 로 띄운다
 pnpm --filter @wirebound/api migrate        # 마이그레이션 최신화 + 계정 시딩 (아래)
 pnpm --filter @wirebound/api migrate:down   # 가장 최근 것 하나만 내린다 (반복하면 0까지)
-pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바꾼다 — 터미널에서 숨겨 묻는다 (최상위 README 「비밀번호를 잊었다」)
-pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 푼다 — 떠 있는 api 에 보낸다 (최상위 README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ)
+pnpm --filter @wirebound/api reset-password <이메일>   # 비밀번호를 바꾼다 — 터미널에서 숨겨 묻는다 (docs/guides/development.md 「비밀번호를 잊었다」)
+pnpm --filter @wirebound/api unlock-login <이메일>     # 로그인 막힘을 푼다 — 떠 있는 api 에 보낸다 (docs/guides/development.md 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ)
 pnpm --filter @wirebound/api admin grant|revoke <이메일> · admin list   # 인스턴스 관리자를 주고 거둔다 (아래 «인스턴스 관리자»)
 ```
 
@@ -210,13 +210,13 @@ sha256 이 macOS 빌드와 같은 `5ff20aed…` 였다(`docs/superpowers/plans/2
 **서버는 뜰 때 자기가 보는 DB와 스키마 상태를 말한다** —
 `이 서버가 보는 DB: 127.0.0.1:5433/wirebound · 마이그레이션 N건`(다 올렸으면 N 은 `ls src/db/migrations/0*.ts | wc -l` 과 같다).
 **빈 DB(0건) · 뒤처진 DB · 순서가 어긋난 DB 면 서버가 안 뜨고 그렇다고 말한다** — 뜨기 전에 코드가 아는 마이그레이션과 견준다(판정의 표는
-`src/db/schema-version.ts`의 머리말 — 코드가 모르는 것이 올라간 DB 는 경고 한 줄 뒤에 뜬다). 절차는 최상위 README 「띄우기」 절이 소유한다.
+`src/db/schema-version.ts`의 머리말 — 코드가 모르는 것이 올라간 DB 는 경고 한 줄 뒤에 뜬다). 절차는 docs/guides/development.md 「띄우기」 절이 소유한다.
 `호스트:포트/이름`뿐이고 **자격 문자열은 안 찍는다**(`src/db/describe-target.ts`). 워크트리를
 여럿 띄운 사람이 터미널을 나란히 놓고 가르는 값이 이것이다.
 
 ### 왜 `pnpm build` 가 이 서버의 전제인가
 
-**최상위 [`README.md`](../../README.md) 「테스트는 통과하는데 서버만 안 뜬다」 절이 그 자리다** — 증상 문장·원인(`tsx`가 `exports`를
+**[`docs/guides/development.md`](../../docs/guides/development.md) 「테스트는 통과하는데 서버만 안 뜬다」 절이 그 자리다** — 증상 문장·원인(`tsx`가 `exports`를
 통해 `dist`를 본다)·조치·*"테스트는 통과하는데 서버만 안 뜬다"*가 값과 함께 한 자리에 있다.
 **여기 두 벌로 적지 않는다.**
 
@@ -247,7 +247,7 @@ Ctrl-C 한 번이 그렇다) 기다림을 끊지 않는다. 판정과 잰 값은
 ## 테스트
 
 api 프로젝트의 vitest 테스트는 실제 Postgres에 붙는다. 컨테이너가 healthy인
-상태에서 돌려야 한다 — 컨테이너를 띄운 뒤(최상위 README 「세우기」 절) `pnpm vitest run --project api`
+상태에서 돌려야 한다 — 컨테이너를 띄운 뒤(docs/guides/development.md 「세우기」 절) `pnpm vitest run --project api`
 (또는 루트의 `pnpm test`)를 실행한다.
 
 테스트 DB(`wirebound_test`)의 마이그레이션은 vitest의 `globalSetup`
@@ -276,7 +276,7 @@ latest 한 사이클을 돌려 `down` 방향까지 검증한다) — 따로 `mig
 > 건다"*. 목록이 필요하면 `grep -rl 'beforeEach(resetRealData)' test/` 다.
 
 **그래서 테스트 DB 는 통째로 이 스위트의 것이다.** 다른 워크트리와 공유하면 서로의 판을
-지운다 — 갈라 두는 절차는 최상위 [`README.md`](../../README.md) 「워크트리를 여럿 띄울 때」 절이 소유한다.
+지운다 — 갈라 두는 절차는 [`docs/guides/development.md`](../../docs/guides/development.md) 「워크트리를 여럿 띄울 때」 절이 소유한다.
 
 새 테스트를 그 형식으로 쓰기 전에 "여러 커넥션이 실제로 커밋해야만 드러나는
 성질인가"를 먼저 확인한다. 아니면 `withApi`를 쓴다.
@@ -364,7 +364,7 @@ id가 존재를 흘리면 안 되기 때문이다. 멤버이지만 역할이 모
 
 > **링크 없이 계정을 만드는 엔드포인트는 없다** — `POST /api/auth/signup` 은 **404** 다
 > (`test/auth-routes.test.ts` 가 그 부재를, `test/user-creation-census.test.ts` 가 다른 이름의 셋째 길을 막는다). 계정은
-> `migrate` 가 마이그레이션을 올린 뒤 환경변수로 만들거나(위 *"기동 절차"*, 최상위 README 「세우기」 절 5번) 관리자가 만든 초대 링크로
+> `migrate` 가 마이그레이션을 올린 뒤 환경변수로 만들거나(위 *"기동 절차"*, docs/guides/development.md 「세우기」 절 5번) 관리자가 만든 초대 링크로
 > 가입해 생긴다(`POST /api/auth/invites/:token/signup`). 그래서 **`POST .../members` 의 *"이미 계정이 있는 사람만"* 은
 > *"이미 가입한 사용자만"* 이라는 뜻이다** — 멤버 초대만으로는 계정이 생기지 않는다(초대 링크는 계정까지만이다).
 
@@ -639,14 +639,14 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 | 무엇 | 값 |
 |---|---|
 | 무엇으로 | `playwright-core` + 기계에 설치된 Chromium. **저장소가 브라우저 바이너리를 안 들고 있다** — 없으면 그리기가 전부 실패하고 pptx는 그림 없이 나온다(던지지 않는다) |
-| 브라우저를 넣는 법 | `apps/api`에서 `node node_modules/playwright-core/cli.js install chromium`(저장소 루트에서 부르는 경로는 최상위 README 「넣는 법」 절) — **`playwright` 패키지를 안 들여도 된다.** `--only-shell`이면 headless shell만, `--with-deps`가 시스템 라이브러리를 함께 넣는다 |
+| 브라우저를 넣는 법 | `apps/api`에서 `node node_modules/playwright-core/cli.js install chromium`(저장소 루트에서 부르는 경로는 docs/guides/development.md 「넣는 법」 절) — **`playwright` 패키지를 안 들여도 된다.** `--only-shell`이면 headless shell만, `--with-deps`가 시스템 라이브러리를 함께 넣는다 |
 | 어디서 | `apps/api`. **`@wirebound/exporter`는 브라우저를 모른다** — 그 패키지는 이미지를 **인자로** 받는다 |
 | 채우는 자리 | **`main.ts` 하나다.** `buildApp`에 `screenRenderer`를 안 주면 안 그린다(`pnpm test`가 브라우저를 안 띄우는 이유) |
 | 화소 | 뷰포트 720×552 · 배율 2배 → **1440×1104**. 페이지가 길면 **전체를 찍으므로 높이가 는다**. 서브페이지 장도 같은 폭이다 — 레이아웃 틀(GNB · LNB · 브레드크럼브 · 제목)이 다 켠 채 함께 찍혀 높이만 그만큼 늘고 내용 칸은 LNB 를 뺀 좁은 꼴이다. 팝업 장은 막 없이 상자만이다(SDK `CAPTURE_CSS`). 실브라우저 판은 `build-test/screen-layout.test.ts` |
 | 상한 | 페이지 **200장**. 넘은 장은 실패가 되고 **이유가 분모를 함께 말한다**. 한 장의 **넓이**도 묶는다 — 뷰포트 폭 × 8192(CSS px², `SCREEN_DEFAULTS.maxArea`). 넘은 장은 찍지 않고 실패가 되며 이유가 크기와 상한을 말한다(`페이지가 너무 커 화면을 그리지 않았습니다 — 720×145577px(상한 720×8192px 넓이)`). **재는 상태와 찍는 상태가 같다** — 테마의 전이 · 애니메이션을 끄고(`FREEZE_MOTION`) 글꼴을 기다린 뒤 재고, 잰 크기로 묶어 찍는다. 찍는 사이에 커진 장은 위쪽만 내지 않고 실패가 된다(`페이지가 그리는 동안 커져 화면을 그리지 않았습니다 — …`). **준비를 기다리는 것도 한 장의 한도(`SCREEN_DEFAULTS.timeoutMs`) 안이다** — 테마 적재 · 글꼴 · 첫 렌더가 여기 든다. 넘은 장은 실패가 된다(`한 장의 한도 안에 준비되지 않았습니다 — 10000ms`). 번들 런타임이 테마를 못 쓴 장(`data-wb-failed`)도 찍지 않고 그 까닭이 실패 이유가 된다(`테마 번들이 등록하지 않았습니다(id@판)` · `테마 번들이 다른 테마를 등록했습니다(…)` · `테마 뷰가 던졌습니다: <노드 id>`) |
 | 동시성·타임아웃 | 동시 **4장** · 한 장 **10초**. 브라우저는 내보내기 **한 번의 수명**이다 |
 | **요청끼리는 둘까지** | 위의 4장은 **한 번의 내보내기 안**이다. 요청끼리는 `services/export-worker.ts`의 풀이 가른다 — **그리기 칸**(env `EXPORT_RENDER_LIMIT` — 비우면 2)이 따로 있어 **동시에 뜨는 브라우저는 그 수까지**이고, 넘은 pptx 는 **조립 전에** 줄을 선다(워커도 CPU 칸도 안 쥔다). **그리는 동안은 CPU 칸을 내놓는다** — pptx 가 몇이 그리거나 기다리든 다른 내보내기(html 미리보기 포함)는 CPU 칸(`EXPORT_WORKER_LIMIT` — 2, 코어가 둘 이하면 1)만 기다린다(그 파일 머리말 «칸이 둘이다»). 줄의 길이는 위 «떠 있는 내보내기» 한도가 묶는다 |
-| **긴 페이지** | 화면 전체를 찍으므로 **높이가 내용을 따라간다.** 200행짜리 페이지는 1440×**16112**가 되고 슬라이드 위에서 폭 **≈37pt**(자리의 7%)로 줄어든다 — 던지지 않고 **조용히 실오라기가 된다.** 그보다 긴 페이지는 위 «상한»의 넓이에 걸려 안 그린다 — 비트맵이 높이만큼 자라 한 장이 수 GB 를 먹는다(잰 값은 `SCREEN_DEFAULTS.maxArea`의 주석). 바이트 상한은 따로 없다 — 장 수 · 넓이 · 그리기 칸이 묶는다(최상위 README 「배포하려면」의 「화면 그리기 상한」) |
+| **긴 페이지** | 화면 전체를 찍으므로 **높이가 내용을 따라간다.** 200행짜리 페이지는 1440×**16112**가 되고 슬라이드 위에서 폭 **≈37pt**(자리의 7%)로 줄어든다 — 던지지 않고 **조용히 실오라기가 된다.** 그보다 긴 페이지는 위 «상한»의 넓이에 걸려 안 그린다 — 비트맵이 높이만큼 자라 한 장이 수 GB 를 먹는다(잰 값은 `SCREEN_DEFAULTS.maxArea`의 주석). 바이트 상한은 따로 없다 — 장 수 · 넓이 · 그리기 칸이 묶는다(docs/guides/development.md 「배포하려면」의 「화면 그리기 상한」) |
 | 무엇을 여나 | **HTML 번들의 그 페이지 그대로.** 번들 파일을 디스크에 쓰지 않고 가짜 origin(`https://export.wirebound.invalid`)에서 메모리로 내준다(번들에 없는 경로는 404). 페이지는 `#wb-screen` 으로 열어 셸을 숨기고 목업만 찍는다. 번들 런타임이 `<html data-wb-ready>` 를 세우기를 기다린다 |
 | 바깥 요청 | **끊는다** — 가짜 origin 밖은 전부. 테마의 코드 · `@font-face` · `url()`은 관리자가 올린 것이라 서버가 그것이 가리키는 곳으로 요청을 보내면 안 된다. `data:`는 네트워크를 안 타므로 그대로 산다. 원격 웹폰트는 대체 글꼴로 그려진다 — 테마는 글꼴을 패키지에 싣는다. **요청 가로채기가 못 보는 소켓(WebSocket · WebRTC · WebTransport · 공유 워커의 요청)도 막는다** — 브라우저를 모든 연결이 막다른 프록시로 가고 이름 풀이가 실패하게 띄우고(주), 문서마다 소켓 생성자를 지운다(보조). 막는 셋과 각각이 못 보는 길은 `src/services/screen-render-chromium.ts` 머리말 「바깥으로 나가는 요청을 막는다」 |
 | 한글 글꼴 | **없으면 한 장도 안 그린다**(두부를 내보내지 않는다). `fontWarning`이 그 사실을 낸다 |
@@ -681,14 +681,14 @@ ppt/notesSlides/notesSlideN.xml   같은 것의 **전문**
 - **본문이 틀린 400 · 사용자 조회가 실패한 500 은 세지 않는다** — 비밀번호를 견주지 않았다.
 - **주소는 `request.ip`다.** `TRUST_PROXY`(`.env.example`)가 비면 소켓 주소이고, 적은 앞단에서 온 요청은 그 앞단이 적은
   `X-Forwarded-For`를 따른다. 앞단 뒤에 두고 안 적으면 모든 요청이 앞단 하나의 주소라 **주소 한도가 서버 전체의 한도가 된다**
-  (최상위 README 「앞단(리버스 프록시)이 지킬 조건」). IPv6 는 /64 로 묶고, IPv4 를 담은 IPv6(매핑 `::ffff:a.b.c.d` · 변환 `::ffff:0:a.b.c.d` · NAT64
+  (docs/guides/development.md 「앞단(리버스 프록시)이 지킬 조건」). IPv6 는 /64 로 묶고, IPv4 를 담은 IPv6(매핑 `::ffff:a.b.c.d` · 변환 `::ffff:0:a.b.c.d` · NAT64
   `64:ff9b::a.b.c.d` · 호환 `::a.b.c.d`)은 그 IPv4 로 읽는다. 앞단이 적은 값이
   IP 가 아니면 소켓 주소(그 앞단)로 센다. 모두를 믿는 값(접두 0 · IPv4 전부를 믿는 IPv6 대역 · 항목을 합치면 IPv4 전부인 목록 —
   Fastify 가 그 값을 읽는 그대로 목록째 잰다)은 기동에서 거절한다.
 - **기록은 이 프로세스의 메모리다** — 재기동하면 비고, 프로세스가 여럿이면 따로 센다. 키는 종류마다 1만 개까지 두고, 넘으면
   창 안의 기록이 가장 적은 키부터 버린다 — 새 키로 채워 막힌 계정의 기록을 씻지 못한다(까닭은 머리말 «키 수에 상한이 있다»).
 - **막힌 키는 서버에 손이 닿는 사람이 명령으로 먼저 푼다** — `pnpm --filter @wirebound/api unlock-login <이메일>` · `--address <주소>`.
-  준 키의 기록만 걷는다(재기동은 모두의 것을 비운다). 치는 절차와 출력은 최상위 README 「에디터가 뜨는데 로그인이 안 된다」 절의
+  준 키의 기록만 걷는다(재기동은 모두의 것을 비운다). 치는 절차와 출력은 docs/guides/development.md 「에디터가 뜨는데 로그인이 안 된다」 절의
   ⓓ, 대가(푼 것이 두드리는 쪽에 보인다 · 두드리는 쪽도 다시 댄다)는 `src/auth/login-limit.ts` 머리말 «막힘을 푸는 명령»이 소유한다.
 - **명령은 api 가 연 유닉스 소켓으로 보낸다** — `<바탕>/wirebound-<uid>/api-<HOST>-<PORT>.sock`(디렉터리 0700 · 소켓 0600). 바탕은
   `XDG_RUNTIME_DIR` 가 있으면 그것, 없으면 `os.tmpdir()`(`TMPDIR` · 없으면 `/tmp` — compose 컨테이너는 대개 이쪽)이고, api 와 명령이
@@ -1874,4 +1874,4 @@ pnpm vitest run --project api                      # api 테스트만 실행 (�
 ```
 
 에디터(`pnpm --filter @wirebound/web dev`)는 `/api`를 이 서버로 프록시하므로 **함께
-띄운다** — 프록시 대상은 `apps/api/.env`의 `PORT`를 따라간다(최상위 README 「띄우기」 절).
+띄운다** — 프록시 대상은 `apps/api/.env`의 `PORT`를 따라간다(docs/guides/development.md 「띄우기」 절).

@@ -1,6 +1,6 @@
 {
   "name": "@wirebound/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "wirebound 설계서를 구현 리포에서 읽고 내보내는 CLI wireb — pull · export · lint · page get",
   "keywords": [
     "wirebound",

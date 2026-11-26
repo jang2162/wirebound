@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # **단일 서버 · docker compose 배포의 이미지 둘** — 뿌리의 `compose.yaml` 이 짓는다. 절차 · 잰 값은 `docs/guides/deploy-docker.md`,
-# 이미지 없이도 지킬 조건은 최상위 README 「배포하려면」 절이 갖는다. 여기는 이미지마다 무엇을 왜 넣었는지만 적는다.
+# 이미지 없이도 지킬 조건은 docs/guides/development.md 「배포하려면」 절이 갖는다. 여기는 이미지마다 무엇을 왜 넣었는지만 적는다.
 #
 #   api  — api 프로세스(마이그레이션 · 시딩 · 비밀번호 재설정도 같은 이미지로 돈다 · 로그인 막힘 풀기는 api 가 든 그 컨테이너에서 친다) · 화면 그리기용 chromium · 한글 글꼴
 #   web  — 앱의 입구(Caddy · HTTP 하나) · 에디터 정적 번들
@@ -33,7 +33,7 @@ COPY --from=build /app/apps/web/dist /srv
 
 # ---------------------------------------------------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS api
-# - chromium: 배포판 브라우저. playwright 캐시(`cli.js install --with-deps --only-shell`)를 고르지 않은 까닭은 README
+# - chromium: 배포판 브라우저. playwright 캐시(`cli.js install --with-deps --only-shell`)를 고르지 않은 까닭은 docs/guides/development.md
 #   「배포하려면」 절 — 보안 갱신이 apt 로 오고, 의존 라이브러리를 패키지 관리자가 맞춘다.
 # - fonts-noto-cjk: 한글 글리프. 없으면 화면을 한 장도 안 그린다(`apps/api/src/services/screen-render.ts` 의 `NO_KOREAN_FONT`).
 #   배포판 chromium 은 한글 글꼴을 안 끌고 온다.
@@ -52,6 +52,6 @@ ENV NODE_ENV=production \
 USER node
 EXPOSE 3001
 ENTRYPOINT ["/usr/bin/tini", "--"]
-# pnpm 을 거치지 않는다 — pnpm 이 PID 1 의 자식이면 SIGTERM 이 서버에 안 닿는다(README 「api 가 필요로 하는 것」).
+# pnpm 을 거치지 않는다 — pnpm 이 PID 1 의 자식이면 SIGTERM 이 서버에 안 닿는다(docs/guides/development.md 「api 가 필요로 하는 것」).
 # tsx CLI 가 아니라 `node --import tsx` 라 부모 감시(`shutdown.ts` 의 `launchedByTsxCli`)는 안 돈다 — 부모가 tini 라 볼 까닭도 없다.
 CMD ["node", "--import", "tsx", "src/main.ts"]

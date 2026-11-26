@@ -24,7 +24,7 @@ import { describeDatabaseTarget } from '../src/db/describe-target'
  * 고르므로 *"옆 워크트리의 DB 를 만들어 놓고 왜 안 되지"* 가 안 생긴다.
  *
  * 그래서 이 줄은 **저장소나 워크트리 루트에서** 쳐야 한다. 컨테이너를 공유하기로 한
- * 사람은 그 컨테이너를 띄운 디렉터리에서 치거나 `docker exec <이름>` 을 쓴다(README.md
+ * 사람은 그 컨테이너를 띄운 디렉터리에서 치거나 `docker exec <이름>` 을 쓴다(docs/guides/development.md
  * 「컨테이너를 못 찾는다 / 포트가 이미 잡혀 있다」 절).
  */
 

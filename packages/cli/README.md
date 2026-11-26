@@ -18,7 +18,7 @@ wireb login --email me@example.com
 wireb pull -o design.json
 ```
 
-명령 · 종료 코드 · 자격이 저장되는 자리는 저장소 README 의 [「`wireb` — CLI 를 부르는 길」](https://github.com/jang2162/wirebound#5-wireb--cli-를-부르는-길) 절이 소유한다.
+명령 · 종료 코드는 사용자 문서의 [레퍼런스](https://github.com/jang2162/wirebound/blob/main/docs/manual/ko/reference.md), 연결 · CI · 자격이 저장되는 자리는 [코드 저장소 연결하기](https://github.com/jang2162/wirebound/blob/main/docs/manual/ko/how-to/connect-a-repository.md)가 갖는다(영어 원본은 `docs/manual/en/`).
 
 - 저장소: https://github.com/jang2162/wirebound
 - 라이선스: MIT

@@ -88,7 +88,7 @@ export default async function setup(): Promise<void> {
     // **DB가 없을 때 고치는 한 줄을 붙인다.** 워크트리마다 테스트 DB가 갈리므로
     // *"없는 DB를 가리킨 채 돌린다"*가 흔한 첫걸음이다.
     // Postgres 원문(`database "…" does not exist`)은 이름은 말하지만 **어떻게 만드는지는
-    // 안 말한다** — 볼륨 초기화 스크립트가 처음에만 도는 함정과 같은 부류다(README.md
+    // 안 말한다** — 볼륨 초기화 스크립트가 처음에만 도는 함정과 같은 부류다(docs/guides/development.md
     // 「테스트가 이유를 알기 어려운 접속 에러로 죽는다」 절).
     //
     // **문구를 만드는 자는 `missing-database-hint.ts`이고 그쪽에 자가 있다.** 이 `catch`는

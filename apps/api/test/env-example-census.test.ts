@@ -2,7 +2,7 @@
  * **`.env.example` 이 드는 키가 실제와 맞는가.**
  *
  * 이 파일이 없으면 `.env.example`에서 `#TEST_DATABASE_URL=` 줄을 지워도 **저장소 어디도 안 운다.**
- * 그런데 `README.md` 「워크트리를 여럿 띄울 때」 절의 절차는 *"주석 처리되어 있다. 주석을 푼다"*라고 **그 줄의 존재를
+ * 그런데 `docs/guides/development.md` 「워크트리를 여럿 띄울 때」 절의 절차는 *"주석 처리되어 있다. 주석을 푼다"*라고 **그 줄의 존재를
  * 전제한다** — 줄이 사라지면 절차가 성립하지 않는데 게이트는 전부 초록이다.
  *
  * **목록을 손으로 적지 않는다.** `src/config.ts`의 `EnvSchema`와 `src/db/seed-user.ts`의
@@ -66,7 +66,7 @@ describe('.env.example 이 무엇을 드나', () => {
 
   it('**시딩 값 셋이 전부 값 없이 들어 있다** — 비밀번호 예시를 커밋하지 않는다 (D5)', () => {
     // 이 파일은 저장소에 있다. 여기 값을 적어 두면 그것이 그대로 운영 비밀번호가 되는
-    // 길이 열린다 — `.env.example` 을 복사해 쓰는 것이 `README.md` 「세우기 — 다섯 걸음」 절의 첫 걸음이기 때문이다.
+    // 길이 열린다 — `.env.example` 을 복사해 쓰는 것이 `docs/guides/development.md` 「세우기 — 다섯 걸음」 절의 첫 걸음이기 때문이다.
     expect(EXAMPLE).toMatch(/^#SEED_USER_EMAIL=$/m)
     expect(EXAMPLE).toMatch(/^#SEED_USER_NAME=$/m)
     expect(EXAMPLE).toMatch(/^#SEED_USER_PASSWORD=$/m)
@@ -74,7 +74,7 @@ describe('.env.example 이 무엇을 드나', () => {
     expect(EXAMPLE).not.toMatch(/^#?SEED_USER_PASSWORD=.+$/m)
   })
 
-  it('워크트리마다 갈라야 하는 값 **넷**이 전부 있다 — README 「워크트리를 여럿 띄울 때」의 절차가 이 줄들을 든다', () => {
+  it('워크트리마다 갈라야 하는 값 **넷**이 전부 있다 — docs/guides/development.md 「워크트리를 여럿 띄울 때」의 절차가 이 줄들을 든다', () => {
     // `POSTGRES_PORT` 가 없으면 워크트리마다 컨테이너를 가르는 길 자체가 없다 — compose 가 읽는 유일한 값이다.
     expect(EXAMPLE).toMatch(/^POSTGRES_PORT=/m)
     expect(EXAMPLE).toMatch(/^DATABASE_URL=/m)

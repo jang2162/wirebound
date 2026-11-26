@@ -254,7 +254,8 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
   const DB_SCRIPT =
     (JSON.parse(readFileSync(new URL('package.json', REPO_ROOT), 'utf8')) as { scripts: Record<string, string> }).scripts.db ?? ''
   const EXAMPLE = readFileSync(new URL('../.env.example', import.meta.url), 'utf8')
-  const README = readFileSync(new URL('README.md', REPO_ROOT), 'utf8')
+  // 개발 DB 를 띄우는 절차의 소유자다 — 최상위 `README.md` 는 사용자 문서(영어)라 이 절차를 안 든다.
+  const DEV_GUIDE = readFileSync(new URL('docs/guides/development.md', REPO_ROOT), 'utf8')
   // 지침의 소스다. `AGENTS.md` 는 `guideline apply` 의 생성물(gitignore)이라 새 체크아웃 · `git archive` 에 없다.
   const CLAUDE = readFileSync(new URL('.ruler/10-worktree.md', REPO_ROOT), 'utf8')
 
@@ -264,7 +265,7 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
     expect(COMPOSE).toContain('services:')
     expect(COMPOSE.length).toBeGreaterThan(200)
     expect(EXAMPLE.length).toBeGreaterThan(200)
-    expect(README).toContain('## 2. 세우기')
+    expect(DEV_GUIDE).toContain('## 2. 세우기')
     expect(CLAUDE).toContain('# 워크트리 작업')
     expect(DB_SCRIPT).toContain('docker compose')
   })
@@ -308,14 +309,14 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
   })
 
   it('**문서가 든 명령과 수도 같은 것을 든다** — 소유자만 안 재는 비대칭을 없앤다', () => {
-    // 이 케이스가 없으면 `README.md` 「세우기 — 다섯 걸음」 절의 `up` 명령을 옛 꼴로 되돌려도, 거기 적힌 기본 포트를 5432 로
-    // 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은 인구조사가 글자까지 지키는데 README 는 그 절차의 **소유자**다 —
-    // *"README 가 소유하고 `.ruler/10-worktree.md` 가 가리킨다"*.
+    // 이 케이스가 없으면 `docs/guides/development.md` 「세우기 — 다섯 걸음」 절의 `up` 명령을 옛 꼴로 되돌려도, 거기 적힌 기본 포트를 5432 로
+    // 바꿔도 **게이트가 전부 초록**이다. `.env.example` 은 인구조사가 글자까지 지키는데 개발 안내는 그 절차의 **소유자**다 —
+    // *"개발 안내가 소유하고 `.ruler/10-worktree.md` 가 가리킨다"*.
     //
     // **재는 것은 산문이 아니라 명령 둘뿐이다**(산문까지 못박으면 문장을 못 고치게 된다) — 개발 DB 를 띄우는 `pnpm db up -d` 가 있고,
     // 옛 명령(뿌리에서 `docker compose --env-file apps/api/.env up -d` — 뿌리에서는 배포 compose 를 읽는다)을 칠 명령으로 들지 않는다.
     for (const [이름, 원문] of [
-      ['README.md', README],
+      ['docs/guides/development.md', DEV_GUIDE],
       ['.ruler/10-worktree.md', CLAUDE],
     ] as const) {
       const 줄 = 원문.split('\n')
@@ -330,10 +331,10 @@ describe('기본값 — 개발 compose 와 .env.example 이 같은 수를 든다
     }
   })
 
-  it('README 가 든 기본 포트가 `COMPOSE_DEFAULT_POSTGRES_PORT` 와 같다', () => {
+  it('개발 안내가 든 기본 포트가 `COMPOSE_DEFAULT_POSTGRES_PORT` 와 같다', () => {
     // 문서의 수가 낡으면 따라 하는 사람이 막힌다. compose·`.env.example`·코드 셋은
-    // 위에서 묶이고 **README 는 이 케이스가 묶는다.**
-    expect(README).toContain(`기본값은 ${COMPOSE_DEFAULT_POSTGRES_PORT}`)
+    // 위에서 묶이고 **개발 안내는 이 케이스가 묶는다.**
+    expect(DEV_GUIDE).toContain(`기본값은 ${COMPOSE_DEFAULT_POSTGRES_PORT}`)
   })
 
   it('초기화 스크립트가 만드는 DB 를 기본 테스트 URL 이 가리킨다 — 손으로 만드는 걸음을 없앤 근거다', () => {

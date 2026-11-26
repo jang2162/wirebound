@@ -4,7 +4,7 @@
 서빙하고, `/api` 와 `/health` 를 api 로 넘긴다. **TLS · 도메인은 각자의 프록시가 맡는다** — 그 프록시에 맞춘 차이(포트를 닫기 · 프록시의
 네트워크에 붙기)는 서버마다 쓰는 `compose.override.yaml` 이 갖는다(아래 「앞에 프록시를 세운다」).
 
-이미지 없이도 지킬 조건(api 가 필요로 하는 것 · 브라우저와 한글 글꼴 · 앞단이 지킬 조건 · 화면 그리기 상한)은 최상위 README 「배포하려면」 절이
+이미지 없이도 지킬 조건(api 가 필요로 하는 것 · 브라우저와 한글 글꼴 · 앞단이 지킬 조건 · 화면 그리기 상한)은 docs/guides/development.md 「배포하려면」 절이
 갖는다. 이 문서의 잰 값은 Colima 의 리눅스 VM(linux/arm64)에서 compose 를 실제로 올려 잰 것이다 — 운영 서버에서 돌려 본 적은 없다(아래
 「이 문서가 안 잰 것」).
 
@@ -35,7 +35,7 @@
 | `SESSION_COOKIE_NAME` | 선택(`wb_session`) | 세션 쿠키 이름 | |
 | `SESSION_TTL_HOURS` | 선택(`720`) | 세션 만료(시간) | |
 | `LOG_LEVEL` | 선택(`info`) | api 로그 수준 | `debug` |
-| `EXPORT_RENDER_LIMIT` | 선택(`2`) | 동시에 뜨는 화면 그리기 브라우저 수 — 서버 메모리로 고른다(README 「화면 그리기 상한」) | `1` |
+| `EXPORT_RENDER_LIMIT` | 선택(`2`) | 동시에 뜨는 화면 그리기 브라우저 수 — 서버 메모리로 고른다(docs/guides/development.md 「화면 그리기 상한」) | `1` |
 | `ASSET_FILE_MAX_BYTES` | 선택(`5242880` — 5 MB) | 그림 파일 하나의 상한(바이트) — 넘으면 413 | `10485760` |
 | `ASSET_PROJECT_MAX_BYTES` | 선택(`209715200` — 200 MB) | 프로젝트 하나가 가진 그림의 합 — 넘으면 409 `asset-quota`. **그림은 DB 에 산다** — 이 값이 DB 볼륨 · 백업이 그림 때문에 자라는 폭을 묶는다 | |
 | `ASSET_PERSONAL_MAX_BYTES` | 선택(`104857600` — 100 MB) | 사람 하나의 개인 몫(개인 모듈이 든 그림)의 합 | |
@@ -193,10 +193,10 @@ docker compose exec -T postgres pg_dump -U wirebound -Fc wirebound > wirebound-$
 # 올리기 — 새 코드를 받은 뒤. migrate 가 먼저 돌고, api 는 도는 요청을 끝까지 답한 뒤 새 것으로 바뀐다
 docker compose up -d --build
 
-# 비밀번호 재설정 — 터미널에서 숨겨 묻는다(README 「비밀번호를 잊었다」)
+# 비밀번호 재설정 — 터미널에서 숨겨 묻는다(docs/guides/development.md 「비밀번호를 잊었다」)
 docker compose exec api node --import tsx src/db/reset-password.ts me@example.com
 
-# 로그인 막힘 풀기 — 떠 있는 api 에 보낸다(README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ · 주소는 --address <주소>)
+# 로그인 막힘 풀기 — 떠 있는 api 에 보낸다(docs/guides/development.md 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ · 주소는 --address <주소>)
 docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.com
 ```
 
@@ -206,7 +206,7 @@ docker compose exec api node --import tsx src/auth/unlock-login.ts me@example.co
 - **사람을 더 만들려면** `docker compose run --rm -e SEED_USER_EMAIL=… -e SEED_USER_PASSWORD=… migrate` — 시딩은 이미 있는 이메일을 그대로 두므로
   값을 바꿔 다시 돌리면 계정이 하나 는다. 비밀번호가 셸 기록에 남는다 — 곧 위 재설정으로 바꾼다. **`run` 도 `pull_policy: build` 라 api 이미지를
   다시 짓는다** — 받아 둔 새 코드가 있으면 `wirebound-api:local` 태그가 새 코드로 바뀐다(떠 있는 api 는 옛 이미지 그대로 · 다음 `up` 이 새 것을 띄운다).
-- **막힘 풀기 · 재설정은 api 가 든 그 컨테이너 · 그 사용자로 친다** — `exec -u root` · `run --rm api …` 로 치면 입구를 못 찾는다(README 「api 가
+- **막힘 풀기 · 재설정은 api 가 든 그 컨테이너 · 그 사용자로 친다** — `exec -u root` · `run --rm api …` 로 치면 입구를 못 찾는다(docs/guides/development.md 「api 가
   필요로 하는 것」).
 - **저장소 밖에서 칠 때**(compose 파일이 없는 자리)는 `-p wirebound-prod` 를 붙인다 — 프로젝트 이름이 고정이라 위치와 상관없이 떠 있는 같은
   컨테이너에 닿는다(`exec` · `logs` · `ps` 부류). `up` · `run --rm … migrate` 처럼 compose 파일이 필요한 명령은 뿌리에서 친다 — `-p` 만 주면

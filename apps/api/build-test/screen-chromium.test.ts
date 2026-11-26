@@ -20,7 +20,7 @@
  * | 무엇 | 누가 잡나 |
  * |---|---|
  * | 브라우저가 없는 기계에서 무슨 일이 나는가 | **여기서 잰다**(아래 *"바이너리가 없으면"*) |
- * | 한글 글꼴이 **없는** 기계 | **여기서 죽는다** — 「한글이 두부가 아니다」와 그린 것을 보는 케이스들(리눅스 컨테이너에서 한글 글리프를 든 글꼴을 걷고 쟀다). 그래서 배포할 이미지 안에서 돌린다(최상위 README 「배포하려면」) |
+ * | 한글 글꼴이 **없는** 기계 | **여기서 죽는다** — 「한글이 두부가 아니다」와 그린 것을 보는 케이스들(리눅스 컨테이너에서 한글 글리프를 든 글꼴을 걷고 쟀다). 그래서 배포할 이미지 안에서 돌린다(docs/guides/development.md 「배포하려면」) |
  * | 받는 쪽(PowerPoint)이 그림을 그리는가 | **사람이 손으로** — `packages/exporter/build-test/dist-pptx.test.ts` 「진짜 자는 PowerPoint다」의 절차 |
  */
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -54,7 +54,7 @@ installCatalog()
  *
  * 안 보면 배포판 chromium 을 쓰는 기계(`SCREEN_CHROMIUM_PATH=/usr/bin/chromium`)에서 캐시가 비었다며 **전부 건너뛰고 초록**이다 —
  * 그 브라우저가 한글 글꼴이 없어 서버가 한 장도 못 그려도 그렇다(`node:22-slim` + `apt-get install chromium` 컨테이너에서
- * 쟀다: 2 통과 · 13 건너뜀). 최상위 README 「배포하려면」이 이 스모크를 배포할 이미지 안에서 돌리라고 든다.
+ * 쟀다: 2 통과 · 13 건너뜀). docs/guides/development.md 「배포하려면」이 이 스모크를 배포할 이미지 안에서 돌리라고 든다.
  */
 function screenChromiumPath(): string | undefined {
   const value = process.env.SCREEN_CHROMIUM_PATH ?? readApiEnvFile().SCREEN_CHROMIUM_PATH
@@ -73,7 +73,7 @@ function renderer(options: Parameters<typeof chromiumScreenRenderer>[0] = {}): R
  * 이 기계에서 렌더러가 띄우는 브라우저가 뜨나. **안 뜨면 건너뛰고 그렇다고 말한다.**
  *
  * **경로가 아니라 실제로 띄워서 본다.** 렌더러는 `chromium.launch()`로 헤드리스 셸(`chromium_headless_shell-<리비전>`)을
- * 띄우는데 `chromium.executablePath()`는 **전체 Chromium** 의 경로다 — 최상위 README 「넣는 법」 절대로 `--only-shell` 만
+ * 띄우는데 `chromium.executablePath()`는 **전체 Chromium** 의 경로다 — docs/guides/development.md 「넣는 법」 절대로 `--only-shell` 만
  * 넣은 기계에서는 그 경로가 없어 브라우저가 뜨는데도 전부 건너뛴다(다시 재는 법: 셸 디렉터리만 든
  * `PLAYWRIGHT_BROWSERS_PATH` 로 이 파일을 돌린다).
  */
@@ -93,8 +93,8 @@ if (!있다) {
   // eslint-disable-next-line no-console
   console.log(
     EXECUTABLE_PATH === undefined
-      ? '[screen-chromium 스모크] Chromium 을 띄우지 못해 건너뛴다 — 넣는 법: `node apps/api/node_modules/playwright-core/cli.js install chromium --only-shell`(최상위 README 「넣는 법」 절)'
-      : `[screen-chromium 스모크] SCREEN_CHROMIUM_PATH(${EXECUTABLE_PATH})를 띄우지 못해 건너뛴다 — 서버도 그 경로로는 못 그린다(최상위 README 「기계에 이미 있는 브라우저를 쓰기」 절)`,
+      ? '[screen-chromium 스모크] Chromium 을 띄우지 못해 건너뛴다 — 넣는 법: `node apps/api/node_modules/playwright-core/cli.js install chromium --only-shell`(docs/guides/development.md 「넣는 법」 절)'
+      : `[screen-chromium 스모크] SCREEN_CHROMIUM_PATH(${EXECUTABLE_PATH})를 띄우지 못해 건너뛴다 — 서버도 그 경로로는 못 그린다(docs/guides/development.md 「기계에 이미 있는 브라우저를 쓰기」 절)`,
   )
 }
 

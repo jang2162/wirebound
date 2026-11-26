@@ -13,9 +13,9 @@
  * - 바꾸지 않는 갈래(인자 · 입구 없음 · api 꺼짐 · 권한 없음 · 거절)는 그렇다고 말하고, 보낸 뒤 답을 잃으면 «모릅니다»다.
  *
  * **«주인이 남»은 root 가 아니면 파일로 못 세운다** — 여기서는 명령이 견줄 uid 를 바꿔 잰다. 남의 uid 가 만든 실물 판(공유 `/tmp` 를
- * 먼저 차지한 다른 사용자)은 여기서 못 잰다 — 재는 법은 README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ 끝 «재는 법».
+ * 먼저 차지한 다른 사용자)은 여기서 못 잰다 — 재는 법은 docs/guides/development.md 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ 끝 «재는 법».
  *
- * **진짜 터미널(pty)에서 사람이 친 판은 여기서 못 잰다** — README 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ 가 그 재는 법을 든다.
+ * **진짜 터미널(pty)에서 사람이 친 판은 여기서 못 잰다** — docs/guides/development.md 「에디터가 뜨는데 로그인이 안 된다」의 ⓓ 가 그 재는 법을 든다.
  */
 import { createServer as createHttpServer } from 'node:http'
 import { connect, createServer as createNetServer } from 'node:net'

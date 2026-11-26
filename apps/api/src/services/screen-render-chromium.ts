@@ -180,7 +180,7 @@ export const SCREEN_DEFAULTS = {
    * 8192 는 200행 남짓이고 장치 화소로 16384(배율 2)다. 그보다 긴 그림은 슬라이드(7.5 × 5.75in)에 1pt 안팎의 글자로 앉는다.
    *
    * **자르지 않는다** — 잘린 목업은 «눈으로는 그럴듯한 한 장»이다(`FULL_PAGE`의 판정과 같다). 넓이로 재는 것은 폭이 뷰포트를
-   * 넘는 페이지도 전체를 찍기 때문이다. 다시 재는 법: 최상위 README 「배포하려면」의 「화면 그리기 상한」.
+   * 넘는 페이지도 전체를 찍기 때문이다. 다시 재는 법: docs/guides/development.md 「배포하려면」의 「화면 그리기 상한」.
    */
   maxArea: 720 * 8192,
 } as const
@@ -507,7 +507,7 @@ async function probeKoreanGlyphs(browser: Browser, timeoutMs: number): Promise<K
  * 4.9배 비트맵을 냈다 — 배포 compose 의 api 컨테이너에서 한 장에 cgroup 최고 2GB 안팎) — 시스템 테마도 단추에 `transition` 을 걸어
  * 그림이 옮겨 가는 중간에 찍혔다. **첫 그림 전에 건다**(초기화 스크립트 · `FREEZE_MOTION_INIT`). 다시 재는 법:
  * `build-test/screen-chromium.test.ts` 「잰 크기와 찍는 크기」(끄기 · 층 · 글꼴 기다림 · 묶어 찍기 · 찍은 뒤 다시 재기를 하나씩 떼면
- * 거기 케이스가 죽는다) · 최상위 README 「화면 그리기 상한」의 잰 값.
+ * 거기 케이스가 죽는다) · docs/guides/development.md 「화면 그리기 상한」의 잰 값.
  *
  * **층(`@layer`)에 둔다** — 층 안의 `!important` 는 층 밖의 `!important` 를 특이도와 상관없이 이긴다. 테마 값은 `!important` 를
  * 실을 수 있고(컴파일이 받는다) 그 셀렉터가 `*` 보다 구체적이라, 층 없이 두면 테마가 이 끄기를 이긴다.
