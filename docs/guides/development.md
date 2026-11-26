@@ -376,7 +376,7 @@ npm install -g @wirebound/cli @wirebound/mcp     # wireb · wireb-mcp
 npm install -D @wirebound/theme-kit              # 테마 프로젝트에서 — wb-theme
 ```
 
-낸 패키지와 그 README 는 `packages/*` 가운데 `private` 이 아닌 것이다(`packages/test-support/test/publish-manifest.test.ts` 가 집합을 잠근다).
+레지스트리의 0.1.0 을 저장소 밖 빈 디렉터리에서 받아 `wireb` · `wireb-mcp` · `wb-theme` 가 도는 것을 쟀다(`docs/superpowers/plans/2026-11-26-pd-report.md`). 낸 패키지와 그 README 는 `packages/*` 가운데 `private` 이 아닌 것이다(`packages/test-support/test/publish-manifest.test.ts` 가 집합을 잠근다).
 저장소를 고치며 쓸 때는 아래 ㉮ · ㉯ 로 지금 소스의 빌드를 부른다.
 
 **길 ㉮ — 저장소 안에서 (설치할 것이 없다)**
@@ -1272,7 +1272,6 @@ pptx 의 화면은 요청마다 브라우저를 띄워 그린다 — **서버 �
 |---|---|
 | **리눅스·Windows** | 이 문서의 값은 **macOS · Apple Silicon** 에서 쟀다 — 「배포하려면」 절만 리눅스 VM 의 컨테이너(arm64)다. `packages/cli`의 경로 처리가 POSIX 문자열 조작만 하므로 **Windows 의 역슬래시 구분자는 다뤄지지 않았다**(`packages/cli/src/paths.ts`가 그렇게 적고 있다) |
 | **배포** | `docs/guides/deploy-docker.md` 「이 문서가 안 잰 것」 |
-| **npm 레지스트리에서 받기** | 「부르는 길이 셋이고」 절의 ㉰ 는 `pnpm pack` 으로 지은 tarball 을 저장소 밖에서 `npm install` 해 쟀다(`docs/superpowers/plans/2026-11-26-np-report.md`). 레지스트리에 낸 뒤 그 이름으로 받는 판은 안 쟀다 |
 | **Claude Code 밖의 MCP 호스트** | 「다른 호스트」 절 |
 | **첫 설치의 내려받기 시간** | 「세우기」 절의 `pnpm install` 값은 **스토어가 따뜻한 기계**의 것이다 |
 | **워크트리 셋 이상** | 「워크트리를 여럿 띄울 때」 절의 값은 전부 **워크트리 둘**로 쟀다 |
